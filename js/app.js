@@ -5,20 +5,18 @@ const PROVIDER_LABELS = { iceye: 'ICEYE', umbra: 'Umbra', capella: 'Capella' };
 
 let allFeatures     = [];
 let activeLayers    = {};
-let aoiLayer        = null;     // current drawn / uploaded AOI
-let aoiBbox         = null;     // [w,s,e,n] from AOI
+let aoiBbox         = null;
 let countryLayer    = null;
 let countriesLoaded = false;
 let countryMode     = false;
 let hoveredCountry  = null;
-let selectedCountry = null;     // { layer, bbox }
+let selectedCountry = null;   // { layer, bbox, name }
 let dateSlider      = null;
 let dateMin = 0, dateMax = 0;
 const providerActive = { iceye: true, umbra: true, capella: true };
 
 // ── Map ────────────────────────────────────────────────────
 const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: true });
-
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
   subdomains: 'abcd', maxZoom: 19,
@@ -34,7 +32,41 @@ const drawControl = new L.Control.Draw({
   edit: { featureGroup: drawnItems, remove: false, edit: false },
 });
 
-// ── Filters ───────────────────────────────────────────────
+// ── Antimeridian helpers (from bboxer) ─────────────────────
+function unwrapAntimeridian(geom) {
+  if (!geom) return;
+  const fixRing = ring => {
+    for (let i = 1; i < ring.length; i++) {
+      const d = ring[i][0] - ring[i-1][0];
+      if (d > 180)  ring[i][0] -= 360;
+      else if (d < -180) ring[i][0] += 360;
+    }
+  };
+  if (geom.type === 'Polygon')      geom.coordinates.forEach(fixRing);
+  else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(p => p.forEach(fixRing));
+}
+
+function flatCoords(geom) {
+  if (!geom) return [];
+  if (geom.type === 'Polygon')      return geom.coordinates.flat();
+  if (geom.type === 'MultiPolygon') return geom.coordinates.flat(2);
+  return [];
+}
+
+function bboxFromGeometry(geom) {
+  const coords = flatCoords(geom);
+  if (!coords.length) return null;
+  const lngs = coords.map(c => c[0]), lats = coords.map(c => c[1]);
+  let minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  if (maxLng - minLng > 180) {
+    const shifted = lngs.map(l => l < 0 ? l + 360 : l);
+    const sMin = Math.min(...shifted), sMax = Math.max(...shifted);
+    if (sMax - sMin < maxLng - minLng) { minLng = sMin; maxLng = sMax; }
+  }
+  return [minLng, Math.min(...lats), maxLng, Math.max(...lats)];
+}
+
+// ── Filters ────────────────────────────────────────────────
 function getFilters() {
   let dateFrom = null, dateTo = null;
   if (dateSlider) {
@@ -42,12 +74,12 @@ function getFilters() {
     dateFrom = tsToDate(+v[0]);
     dateTo   = tsToDate(+v[1]);
   }
-  const activeBbox = (selectedCountry && selectedCountry.bbox) || aoiBbox;
+  const bbox = (selectedCountry && selectedCountry.bbox) || aoiBbox;
   return {
     iceye: providerActive.iceye, umbra: providerActive.umbra, capella: providerActive.capella,
     dateFrom, dateTo,
     mode: document.getElementById('mode-filter').value,
-    bbox: activeBbox,
+    bbox,
   };
 }
 const tsToDate = ts => new Date(ts).toISOString().slice(0, 10);
@@ -71,7 +103,6 @@ function render() {
       const [w, s, e, n] = f.bbox;
       if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return;
     }
-
     const color = PROVIDER_COLORS[p.provider];
     const layer = L.geoJSON(feat, {
       style: { color, weight: 1, opacity: .8, fillColor: color, fillOpacity: .08 },
@@ -86,10 +117,7 @@ function render() {
   });
 
   const total = counts.iceye + counts.umbra + counts.capella;
-  document.getElementById('total-vis').textContent  = total;
-  document.getElementById('tb-iceye').textContent   = counts.iceye;
-  document.getElementById('tb-umbra').textContent   = counts.umbra;
-  document.getElementById('tb-capella').textContent = counts.capella;
+  document.getElementById('total-vis').textContent = total;
   drawHistogram(counts);
 }
 
@@ -103,17 +131,20 @@ function centroid(geom) {
 }
 
 // ── Histogram ──────────────────────────────────────────────
-function drawHistogram(counts) {
+function drawHistogram(counts, label) {
   const canvas = document.getElementById('histogram');
-  const W = canvas.offsetWidth || 240;
-  canvas.width = W; const H = 90;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, W, H);
+  const W = canvas.offsetWidth || 240; canvas.width = W; const H = 90;
+  const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, W, H);
   const providers = ['iceye','umbra','capella'];
   const vals = providers.map(p => counts[p]);
   const max  = Math.max(...vals, 1);
   const barW = Math.floor((W - 32) / 3);
   const gap  = (W - barW * 3) / 4;
+
+  // Update section title
+  const titleEl = document.getElementById('hist-title');
+  titleEl.textContent = label ? `Coverage — ${label}` : 'Scene Coverage';
+
   providers.forEach((pid, i) => {
     const x = gap + i * (barW + gap);
     const barH = Math.max(2, Math.round((vals[i] / max) * (H - 28)));
@@ -139,7 +170,7 @@ function makePopup(p) {
 <div class="popup-mode">⚡ ${p.sensor_mode||'—'}</div>
 <div class="popup-actions">${det}${dl}${pv}</div>`;
 }
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // ── Detail panel ───────────────────────────────────────────
 window.showDetailById = id => {
@@ -148,12 +179,9 @@ window.showDetailById = id => {
 };
 
 function showDetail(p) {
-  let thumbHtml = '';
-  if (p.thumbnail) {
-    thumbHtml = `<img class="detail-thumbnail" src="${p.thumbnail}" referrerpolicy="no-referrer" crossorigin="anonymous" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`;
-  } else {
-    thumbHtml = `<div class="detail-thumb-placeholder">No preview available</div>`;
-  }
+  const thumbHtml = p.thumbnail
+    ? `<img class="detail-thumbnail" src="${p.thumbnail}" referrerpolicy="no-referrer" crossorigin="anonymous" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
+    : `<div class="detail-thumb-placeholder">No preview available</div>`;
 
   const rows = [
     ['Date',        p.date           || '—'],
@@ -174,17 +202,21 @@ function showDetail(p) {
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
 <div class="detail-actions">${dl}${pv}</div>`;
+
   document.getElementById('detail-panel').classList.remove('hidden');
+  document.body.classList.remove('detail-collapsed');
+  document.getElementById('detail-toggle').classList.remove('hidden');
 }
 
-document.getElementById('detail-close').addEventListener('click', () => {
-  document.getElementById('detail-panel').classList.add('hidden');
-});
-
-// ── Sidebar toggle ─────────────────────────────────────────
+// ── Sidebar / detail panel toggles ─────────────────────────
 document.getElementById('sidebar-toggle').addEventListener('click', () => {
   document.body.classList.toggle('sidebar-collapsed');
   setTimeout(() => map.invalidateSize(), 300);
+});
+
+document.getElementById('detail-toggle').addEventListener('click', () => {
+  document.body.classList.toggle('detail-collapsed');
+  setTimeout(() => map.invalidateSize(), 220);
 });
 
 // ── Provider pills ─────────────────────────────────────────
@@ -213,8 +245,12 @@ function initDateSlider(features) {
   if (!ts.length) return;
   dateMin = Math.min(...ts); dateMax = Math.max(...ts);
 
+  // Default start: 2 years back from max, or dateMin if data is shorter
+  const twoYearsBack = dateMax - 2 * 365.25 * 24 * 3600 * 1000;
+  const defaultStart = Math.max(dateMin, twoYearsBack);
+
   dateSlider = noUiSlider.create(document.getElementById('date-slider'), {
-    start: [dateMin, dateMax], connect: true,
+    start: [defaultStart, dateMax], connect: true,
     range: { min: dateMin, max: dateMax },
     tooltips: [
       { to: v => new Date(+v).toISOString().slice(0,7) },
@@ -229,18 +265,15 @@ function initDateSlider(features) {
   };
   dateSlider.on('update', update);
   dateSlider.on('change', () => render());
-  update([dateMin, dateMax]);
+  update([defaultStart, dateMax]);
 }
 
 // ── Country picker ──────────────────────────────────────────
-const tooltip = document.getElementById('country-tooltip');
+const tooltip   = document.getElementById('country-tooltip');
 const hintBanner = document.getElementById('hint-banner');
 
-function showHint(msg) {
-  hintBanner.textContent = msg;
-  hintBanner.classList.add('visible');
-}
-function hideHint() { hintBanner.classList.remove('visible'); }
+function showHint(msg) { hintBanner.textContent = msg; hintBanner.classList.add('visible'); }
+function hideHint()    { hintBanner.classList.remove('visible'); }
 
 function setCountryMode(on) {
   countryMode = on;
@@ -256,24 +289,52 @@ function setCountryMode(on) {
   }
 }
 
-document.getElementById('tb-country').addEventListener('click', () => {
-  setCountryMode(!countryMode);
-});
+document.getElementById('tb-country').addEventListener('click', () => setCountryMode(!countryMode));
+
+// ISO numeric → name (subset of commonly needed countries)
+const ISO_NAMES = {
+  4:'Afghanistan',8:'Albania',12:'Algeria',24:'Angola',32:'Argentina',36:'Australia',
+  40:'Austria',50:'Bangladesh',56:'Belgium',64:'Bhutan',68:'Bolivia',76:'Brazil',
+  100:'Bulgaria',104:'Myanmar',116:'Cambodia',120:'Cameroon',124:'Canada',144:'Sri Lanka',
+  152:'Chile',156:'China',170:'Colombia',178:'Congo',180:'Dem. Rep. Congo',
+  188:'Costa Rica',191:'Croatia',192:'Cuba',196:'Cyprus',203:'Czechia',208:'Denmark',
+  218:'Ecuador',818:'Egypt',231:'Ethiopia',246:'Finland',250:'France',276:'Germany',
+  288:'Ghana',300:'Greece',320:'Guatemala',332:'Haiti',340:'Honduras',356:'India',
+  360:'Indonesia',364:'Iran',368:'Iraq',372:'Ireland',376:'Israel',380:'Italy',
+  388:'Jamaica',392:'Japan',400:'Jordan',398:'Kazakhstan',404:'Kenya',408:'North Korea',
+  410:'South Korea',414:'Kuwait',418:'Laos',422:'Lebanon',504:'Morocco',484:'Mexico',
+  528:'Netherlands',554:'New Zealand',566:'Nigeria',578:'Norway',586:'Pakistan',
+  591:'Panama',604:'Peru',608:'Philippines',616:'Poland',620:'Portugal',634:'Qatar',
+  642:'Romania',643:'Russia',682:'Saudi Arabia',694:'Sierra Leone',705:'Slovenia',
+  706:'Somalia',710:'South Africa',724:'Spain',729:'Sudan',752:'Sweden',756:'Switzerland',
+  760:'Syria',158:'Taiwan',762:'Tajikistan',764:'Thailand',792:'Turkey',800:'Uganda',
+  804:'Ukraine',784:'United Arab Emirates',826:'United Kingdom',840:'United States',
+  858:'Uruguay',860:'Uzbekistan',862:'Venezuela',704:'Vietnam',887:'Yemen',894:'Zambia',716:'Zimbabwe',
+};
 
 async function loadCountries() {
   if (countriesLoaded) return;
   try {
-    const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
-    const topo = await res.json();
+    const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    const topo  = await res.json();
     const geojson = topojson.feature(topo, topo.objects.countries);
+
+    // Assign names + unwrap antimeridian for every feature
+    geojson.features.forEach(f => {
+      f.properties = f.properties || {};
+      if (!f.properties.name) f.properties.name = ISO_NAMES[+f.id] || `Country ${f.id}`;
+      unwrapAntimeridian(f.geometry);
+      f._bbox = bboxFromGeometry(f.geometry); // cache bbox
+    });
+    // Drop Antarctica
+    geojson.features = geojson.features.filter(f => +f.id !== 10);
 
     countryLayer = L.geoJSON(geojson, {
       style: () => ({ color: 'transparent', weight: 0, fillColor: 'transparent', fillOpacity: 0 }),
       onEachFeature(feat, layer) {
         layer.on('mousemove', e => {
           if (!countryMode) return;
-          const name = feat.properties.name || 'Unknown';
-          tooltip.textContent = name;
+          tooltip.textContent = feat.properties.name;
           tooltip.style.display = 'block';
           tooltip.style.left = (e.originalEvent.clientX + 14) + 'px';
           tooltip.style.top  = (e.originalEvent.clientY - 32) + 'px';
@@ -294,18 +355,23 @@ async function loadCountries() {
         });
         layer.on('click', () => {
           if (!countryMode) return;
-          // Deselect old
           if (selectedCountry) {
             selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
           }
-          const b = layer.getBounds();
-          const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-          // Highlight selected
-          layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.12, color: '#d29922', weight: 1.5 });
-          selectedCountry = { layer, bbox };
-          map.fitBounds(b, { padding: [40,40], maxZoom: 8, duration: 700 });
+          const bbox = feat._bbox;
+          layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
+          selectedCountry = { layer, bbox, name: feat.properties.name };
+
+          // Fit bounds using safe leaflet bounds (clamped to ±180)
+          const safeBounds = [
+            [Math.max(-85, bbox[1]), Math.max(-180, bbox[0])],
+            [Math.min(85,  bbox[3]), Math.min(180,  bbox[2])],
+          ];
+          map.fitBounds(safeBounds, { padding: [40,40], maxZoom: 8, duration: 700 });
           setCountryMode(false);
           render();
+          // Update histogram with country label
+          updateCountryHistogram(feat.properties.name, bbox);
         });
       },
     }).addTo(map);
@@ -313,7 +379,24 @@ async function loadCountries() {
   } catch(e) { console.error('Countries failed:', e); }
 }
 
-// ── BBox / Polygon draw ─────────────────────────────────────
+function updateCountryHistogram(name, bbox) {
+  const counts = { iceye: 0, umbra: 0, capella: 0 };
+  const f = getFilters();
+  allFeatures.forEach(feat => {
+    const p = feat.properties;
+    if (!providerActive[p.provider]) return;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
+    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
+    const c = centroid(feat.geometry);
+    if (!c) return;
+    const [w,s,e,n] = bbox;
+    if (c[0] >= w && c[0] <= e && c[1] >= s && c[1] <= n) counts[p.provider]++;
+  });
+  drawHistogram(counts, name);
+}
+
+// ── Draw tools ──────────────────────────────────────────────
 let activeDrawTool = null;
 
 function startDraw(ToolClass, options, btnId) {
@@ -323,56 +406,41 @@ function startDraw(ToolClass, options, btnId) {
   document.body.classList.add('mode-draw');
   showHint('Click to start drawing — double-click to finish');
   const tool = new ToolClass(map, options);
-  tool.enable();
-  activeDrawTool = tool;
+  tool.enable(); activeDrawTool = tool;
   document.getElementById(btnId).classList.add('active');
 }
 
-document.getElementById('tb-bbox').addEventListener('click', () => {
-  startDraw(L.Draw.Rectangle, drawControl.options.draw.rectangle, 'tb-bbox');
-});
-
-document.getElementById('tb-poly').addEventListener('click', () => {
-  startDraw(L.Draw.Polygon, drawControl.options.draw.polygon, 'tb-poly');
-});
+document.getElementById('tb-bbox').addEventListener('click', () => startDraw(L.Draw.Rectangle, drawControl.options.draw.rectangle, 'tb-bbox'));
+document.getElementById('tb-poly').addEventListener('click', () => startDraw(L.Draw.Polygon,   drawControl.options.draw.polygon,   'tb-poly'));
 
 map.on(L.Draw.Event.CREATED, e => {
-  drawnItems.clearLayers();
-  drawnItems.addLayer(e.layer);
+  drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
   const b = e.layer.getBounds();
   aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  aoiLayer = e.layer;
-  // Clear country selection when drawing
   if (selectedCountry) {
     selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
     selectedCountry = null;
+    drawHistogram({ iceye:0, umbra:0, capella:0 });
   }
-  map.removeControl(drawControl);
-  activeDrawTool = null;
+  map.removeControl(drawControl); activeDrawTool = null;
   document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
-  document.body.classList.remove('mode-draw');
-  hideHint();
-  render();
+  document.body.classList.remove('mode-draw'); hideHint(); render();
 });
 
 map.on(L.Draw.Event.DRAWSTOP, () => {
   document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
-  document.body.classList.remove('mode-draw');
-  hideHint();
+  document.body.classList.remove('mode-draw'); hideHint();
 });
 
 // ── Upload GeoJSON ──────────────────────────────────────────
 document.getElementById('tb-upload').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
     try {
       const geojson = JSON.parse(ev.target.result);
       drawnItems.clearLayers();
-      const layer = L.geoJSON(geojson, {
-        style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 },
-      });
+      const layer = L.geoJSON(geojson, { style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } });
       layer.addTo(drawnItems);
       const b = layer.getBounds();
       aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
@@ -380,35 +448,35 @@ document.getElementById('tb-upload').addEventListener('change', e => {
         selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
         selectedCountry = null;
       }
-      map.fitBounds(b, { padding: [40,40] });
-      render();
+      map.fitBounds(b, { padding: [40,40] }); render();
     } catch { alert('Invalid GeoJSON file.'); }
   };
-  reader.readAsText(file);
-  e.target.value = '';
+  reader.readAsText(file); e.target.value = '';
 });
 
 // ── Clear all ───────────────────────────────────────────────
 document.getElementById('tb-clear').addEventListener('click', clearAll);
-
 function clearAll() {
-  drawnItems.clearLayers();
-  aoiBbox = null; aoiLayer = null;
+  drawnItems.clearLayers(); aoiBbox = null;
   if (selectedCountry) {
     selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
     selectedCountry = null;
   }
   setCountryMode(false);
+  drawHistogram({ iceye:0, umbra:0, capella:0 });
   render();
 }
 
-// ── Reset all filters ───────────────────────────────────────
+// ── Reset ───────────────────────────────────────────────────
 document.getElementById('reset-btn').addEventListener('click', () => {
   ['iceye','umbra','capella'].forEach(pid => {
     providerActive[pid] = true;
     document.getElementById(`pill-${pid}`).classList.add('active');
   });
-  if (dateSlider) dateSlider.set([dateMin, dateMax]);
+  if (dateSlider) {
+    const twoYearsBack = Math.max(dateMin, dateMax - 2 * 365.25 * 24 * 3600 * 1000);
+    dateSlider.set([twoYearsBack, dateMax]);
+  }
   document.getElementById('mode-filter').value = '';
   clearAll();
 });
@@ -425,18 +493,17 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
     if (f.bbox) { const c = centroid(feat.geometry); if (!c) return false; const [w,s,e,n]=f.bbox; if(c[0]<w||c[0]>e||c[1]<s||c[1]>n) return false; }
     return true;
   });
-  const collection = {
-    type: 'FeatureCollection', stac_version: '1.0.0',
-    id: 'open-sar-triad-export',
-    description: 'Exported SAR scenes from open-sar-triad',
+  const blob = new Blob([JSON.stringify({
+    type:'FeatureCollection', stac_version:'1.0.0',
+    id:'open-sar-triad-export',
+    description:'Exported SAR scenes from open-sar-triad',
     exported_at: new Date().toISOString(),
-    source: 'https://github.com/Jack-Hayes/commerical-sar-stac',
+    source:'https://github.com/Jack-Hayes/commerical-sar-stac',
     features: visible,
-  };
-  const blob = new Blob([JSON.stringify(collection, null, 2)], { type: 'application/json' });
+  }, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
+  a.href=url; a.download=`open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(url);
 });
 
@@ -445,19 +512,12 @@ fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     allFeatures = geojson.features || [];
-    const totals = { iceye: 0, umbra: 0, capella: 0 };
-    allFeatures.forEach(f => { const p = f.properties.provider; if (p in totals) totals[p]++; });
-
-    document.getElementById('pill-cnt-iceye').textContent   = totals.iceye;
-    document.getElementById('pill-cnt-umbra').textContent   = totals.umbra;
-    document.getElementById('pill-cnt-capella').textContent = totals.capella;
-
     populateModes(allFeatures);
     initDateSlider(allFeatures);
     document.getElementById('loading').classList.add('hidden');
     render();
   })
-  .catch(err => {
+  .catch(() => {
     document.getElementById('loading').innerHTML =
       `<p style="color:#FF6B35">No scene data found.<br>Run <code>scripts/fetch_catalog.py</code> to generate it.</p>`;
   });
