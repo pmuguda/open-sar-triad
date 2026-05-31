@@ -171,6 +171,11 @@ def normalize_row(row, provider_id):
     incidence_angle = safe_float(row.get("view:incidence_angle"))
     off_nadir       = safe_float(row.get("view:off_nadir"))
 
+    # Skip collection footprint entries (not real acquisitions)
+    item_id = str(row.get("id", ""))
+    if "footprint" in item_id.lower() or "collection" in item_id.lower():
+        return None
+
     return {
         "type": "Feature",
         "geometry": geometry,
