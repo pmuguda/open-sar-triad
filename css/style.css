@@ -154,7 +154,7 @@ select#mode-filter:focus { border-color: var(--accent); }
 .kofi-btn {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 8px 12px; border-radius: 8px;
-  background: linear-gradient(135deg, #3fb950, #d29922);
+  background: linear-gradient(135deg, #00FF87 0%, #00C9FF 50%, #FF6B35 100%);
   color: #000 !important; font-size: 12px; font-weight: 700;
   text-decoration: none !important; transition: opacity .15s, transform .1s;
 }
