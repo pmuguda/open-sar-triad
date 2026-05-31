@@ -97,7 +97,7 @@ function render() {
     if (!f[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
+    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
     if (f.bbox) {
       const c = centroid(feat.geometry);
       if (!c) return;
@@ -177,7 +177,7 @@ function drawModeBreakdown() {
     if (!f[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
+    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
     if (f.bbox) {
       const c = centroid(feat.geometry);
       if (!c) return;
@@ -473,7 +473,7 @@ function updateCountryHistogram(name, bbox) {
     if (!providerActive[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
+    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
     const c = centroid(feat.geometry);
     if (!c) return;
     const [w,s,e,n] = bbox;
@@ -575,7 +575,7 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
     if (!f[p.provider]) return false;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
-    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return false;
+    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
     if (f.bbox) { const c = centroid(feat.geometry); if (!c) return false; const [w,s,e,n]=f.bbox; if(c[0]<w||c[0]>e||c[1]<s||c[1]>n) return false; }
     return true;
   });
