@@ -178,9 +178,19 @@ window.showDetailById = id => {
   if (f) showDetail(f.properties);
 };
 
+function proxyThumb(url, provider) {
+  if (!url) return null;
+  // ICEYE S3 has no CORS headers — route through weserv.nl (free CDN proxy)
+  if (provider === 'iceye') {
+    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=600&output=jpg&q=80`;
+  }
+  return url;
+}
+
 function showDetail(p) {
-  const thumbHtml = p.thumbnail
-    ? `<img class="detail-thumbnail" src="${p.thumbnail}" referrerpolicy="no-referrer" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
+  const thumbSrc = proxyThumb(p.thumbnail, p.provider);
+  const thumbHtml = thumbSrc
+    ? `<img class="detail-thumbnail" src="${thumbSrc}" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
     : `<div class="detail-thumb-placeholder">No preview available</div>`;
 
   const rows = [
