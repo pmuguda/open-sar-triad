@@ -1,209 +1,217 @@
 #!/usr/bin/env python3
 """
-Fetches open SAR scene footprints from ICEYE, Umbra, and Capella STAC catalogs.
-Outputs a merged GeoJSON to data/scenes.geojson.
+Fetches open SAR scene metadata from pre-built GeoParquet files maintained by
+Jack-Hayes/commerical-sar-stac (updated weekly). Outputs a merged GeoJSON to
+data/scenes.geojson.
+
+Credit: https://github.com/Jack-Hayes/commerical-sar-stac
 """
 
+import io
 import json
 import sys
 import urllib.request
-import urllib.error
-from pathlib import Path
+import warnings
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+warnings.filterwarnings("ignore")  # suppress numpy version warnings in some envs
+
+try:
+    import pyarrow.parquet as pq
+except ImportError:
+    print("ERROR: pyarrow is required. Install with: pip install pyarrow", file=sys.stderr)
+    sys.exit(1)
 
 OUT_PATH = Path(__file__).parent.parent / "data" / "scenes.geojson"
-MAX_SCENES_PER_PROVIDER = 2000
-WORKERS = 20
 
-PROVIDERS = {
+BASE_URL = "https://raw.githubusercontent.com/Jack-Hayes/commerical-sar-stac/refs/heads/main/parquets/viz"
+
+PROVIDER_META = {
+    "iceye": {
+        "label":        "ICEYE",
+        "color":        "#00FF87",
+        "provider_url": "https://www.iceye.com/open-data-initiative",
+        "parquets":     [f"{BASE_URL}/iceye/iceye.parquet"],
+    },
     "umbra": {
-        "label": "Umbra",
-        "color": "#00C9FF",
-        "catalog_url": "https://s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json",
+        "label":        "Umbra",
+        "color":        "#00C9FF",
         "provider_url": "https://umbra.space/open-data/",
+        "parquets":     [f"{BASE_URL}/umbra/umbra.parquet"],
     },
     "capella": {
-        "label": "Capella",
-        "color": "#FF6B35",
-        "catalog_url": "https://capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json",
+        "label":        "Capella",
+        "color":        "#FF6B35",
         "provider_url": "https://www.capellaspace.com/community/capella-open-data-program/",
-    },
-    "iceye": {
-        "label": "ICEYE",
-        "color": "#00FF87",
-        "catalog_url": "https://iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json",
-        "provider_url": "https://www.iceye.com/open-data-initiative",
+        "parquets": [
+            f"{BASE_URL}/capella/capella_GEC.parquet",
+            f"{BASE_URL}/capella/capella_GEO.parquet",
+            f"{BASE_URL}/capella/capella_SLC.parquet",
+            f"{BASE_URL}/capella/capella_SICD.parquet",
+            f"{BASE_URL}/capella/capella_SIDD.parquet",
+            f"{BASE_URL}/capella/capella_CSI.parquet",
+            f"{BASE_URL}/capella/capella_CPHD.parquet",
+        ],
     },
 }
 
 
-def fetch_json(url, timeout=20):
+def fetch_bytes(url, timeout=60):
+    req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def read_parquet(url):
+    """Download a parquet file and return a pandas DataFrame."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        data = fetch_bytes(url)
+        tbl  = pq.read_table(io.BytesIO(data))
+        return tbl.to_pandas()
     except Exception as e:
-        print(f"  [WARN] {url[:80]}: {e}", file=sys.stderr)
+        print(f"  [WARN] Could not read {url.split('/')[-1]}: {e}", file=sys.stderr)
         return None
 
 
-def resolve_url(base_url, href):
-    if href.startswith("http"):
-        return href
-    if href.startswith("./"):
-        href = href[2:]
-    base = base_url.rsplit("/", 1)[0]
-    while href.startswith("../"):
-        href = href[3:]
-        base = base.rsplit("/", 1)[0]
-    return f"{base}/{href}"
-
-
-def collect_item_urls(catalog_url, depth=0, max_depth=5):
-    """Recursively collect all item URLs from a static STAC catalog tree."""
-    if depth > max_depth:
-        return [], []
-
-    catalog = fetch_json(catalog_url)
-    if not catalog:
-        return [], []
-
-    item_urls = []
-    child_urls = []
-
-    for link in catalog.get("links", []):
-        rel  = link.get("rel", "")
-        href = link.get("href", "")
-        if not href:
-            continue
-        abs_url = resolve_url(catalog_url, href)
-        if rel == "item":
-            item_urls.append(abs_url)
-        elif rel in ("child", "collection", "items"):
-            child_urls.append(abs_url)
-
-    # Recurse into children
-    for child_url in child_urls:
-        sub_items, _ = collect_item_urls(child_url, depth + 1, max_depth)
-        item_urls.extend(sub_items)
-        if len(item_urls) >= MAX_SCENES_PER_PROVIDER * 3:
-            break  # collect more than needed, we'll trim after
-
-    return item_urls, []
-
-
-def fetch_items_parallel(item_urls, provider_id, max_items):
-    """Fetch up to max_items STAC item JSONs in parallel."""
-    # Spread evenly across catalog (take every nth) to get good geographic spread
-    if len(item_urls) > max_items * 2:
-        step = len(item_urls) // max_items
-        item_urls = item_urls[::step][:max_items]
+def parse_assets(assets_val):
+    """Return (thumbnail_url, download_url) from assets field."""
+    if assets_val is None:
+        return None, None
+    if isinstance(assets_val, str):
+        try:
+            assets = json.loads(assets_val)
+        except Exception:
+            return None, None
     else:
-        item_urls = item_urls[:max_items]
+        assets = dict(assets_val)
 
-    features = []
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futures = {ex.submit(fetch_json, url): url for url in item_urls}
-        for fut in as_completed(futures):
-            item = fut.result()
-            if item:
-                feat = normalize_item(item, provider_id)
-                if feat:
-                    features.append(feat)
-    return features
-
-
-def normalize_item(item, provider_id):
-    if not item:
-        return None
-    geometry = item.get("geometry")
-    if not geometry:
-        return None
-
-    props  = item.get("properties", {})
-    assets = item.get("assets", {})
-    info   = PROVIDERS[provider_id]
-
-    # Thumbnail
     thumbnail = None
-    for key in ("thumbnail", "overview", "browse", "quicklook"):
+    for key in ("thumbnail", "overview", "browse", "quicklook", "preview"):
         if key in assets:
-            thumbnail = assets[key].get("href")
-            break
+            v = assets[key]
+            thumbnail = v.get("href") if isinstance(v, dict) else None
+            if thumbnail:
+                break
 
-    # Download (prefer COG/GeoTIFF)
     download = None
-    for key in ("data", "cog", "geotiff", "GRD", "SLC", "HH", "VV", "amplitude"):
+    for key in ("data", "cog", "GRD", "SLC", "HH", "VV", "GEC", "SICD", "amplitude"):
         if key in assets:
-            download = assets[key].get("href")
-            break
+            v = assets[key]
+            download = v.get("href") if isinstance(v, dict) else None
+            if download:
+                break
     if not download and assets:
-        download = next(iter(assets.values())).get("href")
+        first = next(iter(assets.values()))
+        download = first.get("href") if isinstance(first, dict) else None
+
+    return thumbnail, download
+
+
+def normalize_row(row, provider_id):
+    """Convert a parquet row to a GeoJSON Feature."""
+    info = PROVIDER_META[provider_id]
+
+    # Geometry — prefer pre-serialised geojson string
+    geom_str = row.get("geometry_geojson")
+    if geom_str:
+        try:
+            geometry = json.loads(geom_str)
+        except Exception:
+            return None
+    else:
+        return None  # skip rows without geometry
 
     # Date
-    dt = props.get("datetime") or props.get("start_datetime") or item.get("datetime")
+    dt_val = row.get("datetime") or row.get("start_datetime")
     date_str = year = None
-    if dt and dt not in ("null", None):
+    if dt_val is not None:
         try:
-            parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-            date_str = parsed.strftime("%Y-%m-%d")
-            year     = parsed.year
+            if hasattr(dt_val, "isoformat"):
+                date_str = dt_val.strftime("%Y-%m-%d")
+                year = dt_val.year
+            else:
+                s = str(dt_val)
+                date_str = s[:10]
+                year = int(s[:4])
         except Exception:
-            date_str = dt[:10] if dt else None
-            year = int(dt[:4]) if dt and len(dt) >= 4 else None
+            pass
 
-    sensor_mode = (
-        props.get("sar:instrument_mode")
-        or props.get("instrument_mode")
-        or props.get("mode")
-        or props.get("product_type")
-        or "N/A"
-    )
-    resolution = (
-        props.get("sar:pixel_spacing_range")
-        or props.get("gsd")
-        or props.get("resolution")
-        or props.get("pixel_spacing")
-    )
-    polarization = props.get("sar:polarizations") or props.get("polarization")
-    if isinstance(polarization, list):
+    # Sensor metadata
+    sensor_mode  = row.get("sar:instrument_mode") or row.get("instrument_mode") or "N/A"
+    resolution   = row.get("sar:resolution_range") or row.get("sar:pixel_spacing_range") or row.get("gsd")
+    polarization = row.get("sar:polarizations")
+    if isinstance(polarization, str):
+        try:
+            polarization = ", ".join(json.loads(polarization))
+        except Exception:
+            pass
+    elif isinstance(polarization, list):
         polarization = ", ".join(polarization)
+
+    if resolution is not None:
+        try:
+            resolution = round(float(resolution), 2)
+        except Exception:
+            resolution = None
+
+    thumbnail, download = parse_assets(row.get("assets"))
 
     return {
         "type": "Feature",
         "geometry": geometry,
         "properties": {
-            "id":             item.get("id", ""),
+            "id":             str(row.get("id", "")),
             "provider":       provider_id,
             "provider_label": info["label"],
             "color":          info["color"],
             "date":           date_str,
             "year":           year,
-            "sensor_mode":    sensor_mode,
+            "sensor_mode":    str(sensor_mode) if sensor_mode else "N/A",
             "resolution":     resolution,
-            "polarization":   polarization,
+            "polarization":   str(polarization) if polarization else None,
             "thumbnail":      thumbnail,
             "download":       download,
             "provider_url":   info["provider_url"],
-            "collection":     item.get("collection"),
+            "collection":     str(row.get("collection") or row.get("sar:product_type") or ""),
         },
     }
 
 
 def fetch_provider(provider_id):
-    info = PROVIDERS[provider_id]
-    print(f"  [{info['label']}] Collecting item URLs…")
-    item_urls, _ = collect_item_urls(info["catalog_url"])
-    total_found = len(item_urls)
-    print(f"  [{info['label']}] Found {total_found} item URLs — fetching up to {MAX_SCENES_PER_PROVIDER}…")
-    features = fetch_items_parallel(item_urls, provider_id, MAX_SCENES_PER_PROVIDER)
-    print(f"  [{info['label']}] ✓ {len(features)} scenes fetched")
+    info = PROVIDER_META[provider_id]
+    all_rows = []
+
+    for url in info["parquets"]:
+        fname = url.split("/")[-1]
+        print(f"  [{info['label']}] Fetching {fname}…")
+        df = read_parquet(url)
+        if df is not None:
+            print(f"    → {len(df)} rows")
+            all_rows.append(df)
+
+    if not all_rows:
+        return []
+
+    import pandas as pd
+    merged = pd.concat(all_rows, ignore_index=True)
+
+    # Deduplicate by id
+    if "id" in merged.columns:
+        merged = merged.drop_duplicates(subset=["id"])
+
+    features = []
+    for _, row in merged.iterrows():
+        feat = normalize_row(row, provider_id)
+        if feat:
+            features.append(feat)
+
+    print(f"  [{info['label']}] ✓ {len(features)} scenes")
     return features
 
 
 def main():
-    # Load existing data as fallback per provider
+    # Load existing data as fallback
     existing = {}
     if OUT_PATH.exists():
         try:
@@ -216,27 +224,26 @@ def main():
             pass
 
     all_features = {}
-    for pid in ("umbra", "capella", "iceye"):
+    for pid in ("iceye", "umbra", "capella"):
         try:
             all_features[pid] = fetch_provider(pid)
         except Exception as e:
             print(f"  [{pid}] ERROR: {e}", file=sys.stderr)
             all_features[pid] = []
 
-    # Fall back to cached data if a provider returned nothing
-    for pid in ("umbra", "capella", "iceye"):
         if not all_features[pid] and existing.get(pid):
-            print(f"  [{pid}] Using cached data ({len(existing[pid])} scenes).")
+            print(f"  [{pid}] Falling back to cached data ({len(existing[pid])} scenes).")
             all_features[pid] = existing[pid]
 
     merged = []
     for pid, feats in all_features.items():
         merged.extend(feats)
-        print(f"  {PROVIDERS[pid]['label']}: {len(feats)} scenes")
+        print(f"  {PROVIDER_META[pid]['label']}: {len(feats)} scenes")
 
     geojson = {
         "type": "FeatureCollection",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
         "features": merged,
     }
 
