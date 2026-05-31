@@ -151,29 +151,45 @@ def normalize_row(row, provider_id):
 
     if resolution is not None:
         try:
-            resolution = round(float(resolution), 2)
+            import math
+            f = float(resolution)
+            resolution = round(f, 2) if math.isfinite(f) else None
         except Exception:
             resolution = None
 
     thumbnail, download = parse_assets(row.get("assets"))
 
+    # Incidence angle / off-nadir (ICEYE uses these instead of resolution)
+    import math
+    def safe_float(v, decimals=1):
+        if v is None: return None
+        try:
+            f = float(v)
+            return round(f, decimals) if math.isfinite(f) else None
+        except Exception:
+            return None
+    incidence_angle = safe_float(row.get("view:incidence_angle"))
+    off_nadir       = safe_float(row.get("view:off_nadir"))
+
     return {
         "type": "Feature",
         "geometry": geometry,
         "properties": {
-            "id":             str(row.get("id", "")),
-            "provider":       provider_id,
-            "provider_label": info["label"],
-            "color":          info["color"],
-            "date":           date_str,
-            "year":           year,
-            "sensor_mode":    str(sensor_mode) if sensor_mode else "N/A",
-            "resolution":     resolution,
-            "polarization":   str(polarization) if polarization else None,
-            "thumbnail":      thumbnail,
-            "download":       download,
-            "provider_url":   info["provider_url"],
-            "collection":     str(row.get("collection") or row.get("sar:product_type") or ""),
+            "id":              str(row.get("id", "")),
+            "provider":        provider_id,
+            "provider_label":  info["label"],
+            "color":           info["color"],
+            "date":            date_str,
+            "year":            year,
+            "sensor_mode":     str(sensor_mode) if sensor_mode else "N/A",
+            "resolution":      resolution,
+            "polarization":    str(polarization) if polarization else None,
+            "incidence_angle": incidence_angle,
+            "off_nadir":       off_nadir,
+            "thumbnail":       thumbnail,
+            "download":        download,
+            "provider_url":    info["provider_url"],
+            "collection":      str(row.get("collection") or row.get("sar:product_type") or ""),
         },
     }
 

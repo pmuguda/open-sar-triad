@@ -180,17 +180,20 @@ window.showDetailById = id => {
 
 function showDetail(p) {
   const thumbHtml = p.thumbnail
-    ? `<img class="detail-thumbnail" src="${p.thumbnail}" referrerpolicy="no-referrer" crossorigin="anonymous" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
+    ? `<img class="detail-thumbnail" src="${p.thumbnail}" referrerpolicy="no-referrer" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
     : `<div class="detail-thumb-placeholder">No preview available</div>`;
 
   const rows = [
-    ['Date',        p.date           || '—'],
-    ['Provider',    p.provider_label || '—'],
-    ['Mode',        p.sensor_mode    || '—'],
-    ['Polarization',p.polarization   || '—'],
-    ['Resolution',  p.resolution != null ? p.resolution + ' m' : '—'],
-    ['Collection',  p.collection     || '—'],
-  ].map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
+    ['Date',            p.date             || '—'],
+    ['Provider',        p.provider_label   || '—'],
+    ['Mode',            p.sensor_mode      || '—'],
+    ['Polarization',    p.polarization     || '—'],
+    ['Resolution',      p.resolution != null ? p.resolution + ' m' : '—'],
+    ['Incidence angle', p.incidence_angle != null ? p.incidence_angle + '°' : '—'],
+    ['Off-nadir',       p.off_nadir != null ? p.off_nadir + '°' : '—'],
+    ['Collection',      p.collection       || '—'],
+  ].filter(([,v]) => v !== '—')
+   .map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
 
   const dl = p.download
     ? `<a class="detail-action-btn primary" href="${p.download}" target="_blank">Download Asset</a>` : '';
