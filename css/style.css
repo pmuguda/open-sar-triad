@@ -51,14 +51,15 @@ body.sidebar-collapsed #sidebar { width: 0; min-width: 0; overflow: hidden; bord
 /* ── Sidebar toggle tab (fixed, like bboxer) ──────────────── */
 #sidebar-toggle {
   position: fixed; left: var(--sidebar-w); top: 50%; transform: translateY(-50%);
-  z-index: 200; width: 16px; height: 48px; padding: 0;
+  z-index: 1100; width: 16px; height: 48px; padding: 0;
   background: var(--surface); border: 1px solid var(--border);
   border-left: none; border-radius: 0 8px 8px 0;
   color: var(--muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: left .28s ease, color .15s;
+  box-shadow: 2px 0 8px rgba(0,0,0,.4);
 }
-#sidebar-toggle:hover { color: var(--text); }
+#sidebar-toggle:hover { color: var(--text); background: var(--surface2, #21262d); }
 #sidebar-toggle svg { width: 10px; height: 10px; transition: transform .28s; }
 body.sidebar-collapsed #sidebar-toggle { left: 0; }
 body.sidebar-collapsed #sidebar-toggle svg { transform: rotate(180deg); }
