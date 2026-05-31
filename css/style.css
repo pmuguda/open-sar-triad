@@ -122,12 +122,14 @@ select#mode-filter:focus { border-color: var(--accent); }
 .reset-btn:hover { border-color: var(--red); color: var(--red); background: rgba(248,81,73,.06); }
 
 /* ── Histogram ────────────────────────────────────────────── */
-#histogram { width: 100%; display: block; }
+#histogram-section { overflow: visible; }
+#histogram { width: 100%; display: block; height: 90px; margin-top: 4px; }
 .hist-legend {
   display: flex; align-items: center; gap: 10px;
-  margin-top: 8px; font-size: 11px; color: var(--muted);
+  margin-top: 10px; font-size: 11px; color: var(--muted);
+  flex-wrap: wrap;
 }
-.hist-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.hist-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .iceye-dot   { background: var(--iceye); }
 .umbra-dot   { background: var(--umbra); }
 .capella-dot { background: var(--capella); }
@@ -188,14 +190,16 @@ select#mode-filter:focus { border-color: var(--accent); }
 .pill:not(.active) { opacity: .4; }
 .pill:hover { opacity: 1; }
 
-/* ── AOI Toolbar (top-right, like bboxer) ─────────────────── */
+/* ── AOI Toolbar (draggable) ──────────────────────────────── */
 #aoi-toolbar {
   position: absolute; top: 12px; right: 14px; z-index: 700;
   display: flex; align-items: center; gap: 1px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 9px; padding: 3px;
   box-shadow: 0 2px 14px rgba(0,0,0,.55);
+  cursor: grab; user-select: none;
 }
+#aoi-toolbar:active { cursor: grabbing; }
 .tb-btn {
   width: 30px; height: 30px; border-radius: 6px;
   border: 1.5px solid transparent; background: transparent;

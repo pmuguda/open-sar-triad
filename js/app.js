@@ -137,7 +137,10 @@ function centroid(geom) {
 // ── Histogram ──────────────────────────────────────────────
 function drawHistogram(counts, label) {
   const canvas = document.getElementById('histogram');
-  const W = canvas.offsetWidth || 240; canvas.width = W; const H = 90;
+  const W = canvas.offsetWidth || 240;
+  const H = 90;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, W, H);
   const providers = ['iceye','umbra','capella'];
   const vals = providers.map(p => counts[p]);
@@ -528,6 +531,62 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
   a.href=url; a.download=`open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(url);
 });
+
+// ── Draggable AOI toolbar ─────────────────────────────────────
+(function () {
+  const toolbar = document.getElementById('aoi-toolbar');
+  let dragging = false, ox = 0, oy = 0;
+
+  // Restore saved position
+  const saved = JSON.parse(localStorage.getItem('aoi-toolbar-pos') || 'null');
+  if (saved) {
+    toolbar.style.right  = 'auto';
+    toolbar.style.top    = saved.top  + 'px';
+    toolbar.style.left   = saved.left + 'px';
+  }
+
+  toolbar.addEventListener('mousedown', e => {
+    // Only drag on the toolbar background, not button clicks
+    if (e.target.closest('.tb-btn') || e.target.closest('.tb-divider')) return;
+    dragging = true;
+    const rect = toolbar.getBoundingClientRect();
+    ox = e.clientX - rect.left;
+    oy = e.clientY - rect.top;
+    toolbar.style.cursor = 'grabbing';
+    toolbar.style.right  = 'auto';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const mapArea = document.getElementById('map-area').getBoundingClientRect();
+    let left = e.clientX - mapArea.left - ox;
+    let top  = e.clientY - mapArea.top  - oy;
+    // Clamp within map-area
+    left = Math.max(0, Math.min(left, mapArea.width  - toolbar.offsetWidth));
+    top  = Math.max(0, Math.min(top,  mapArea.height - toolbar.offsetHeight));
+    toolbar.style.left = left + 'px';
+    toolbar.style.top  = top  + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    toolbar.style.cursor = '';
+    localStorage.setItem('aoi-toolbar-pos', JSON.stringify({
+      left: parseInt(toolbar.style.left),
+      top:  parseInt(toolbar.style.top),
+    }));
+  });
+
+  // Double-click to reset position
+  toolbar.addEventListener('dblclick', () => {
+    toolbar.style.left  = '';
+    toolbar.style.top   = '12px';
+    toolbar.style.right = '14px';
+    localStorage.removeItem('aoi-toolbar-pos');
+  });
+})();
 
 // ── Load data ────────────────────────────────────────────────
 fetch('data/scenes.geojson')
