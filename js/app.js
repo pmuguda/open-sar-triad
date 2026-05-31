@@ -119,6 +119,9 @@ function render() {
   const total = counts.iceye + counts.umbra + counts.capella;
   document.getElementById('total-vis').textContent = total;
   drawHistogram(counts);
+
+  // Keep country layer on top of scene polygons so clicks reach it
+  if (countryMode && countryLayer) countryLayer.bringToFront();
 }
 
 function centroid(geom) {
@@ -297,7 +300,10 @@ function setCountryMode(on) {
   if (on) {
     document.body.classList.add('mode-country');
     showHint('Hover and click a country to filter scenes');
-    loadCountries();
+    loadCountries().then(() => {
+      // Bring country layer on top so clicks reach it above scene polygons
+      if (countryLayer) countryLayer.bringToFront();
+    });
   } else {
     document.body.classList.remove('mode-country');
     hideHint();
@@ -329,7 +335,7 @@ const ISO_NAMES = {
 };
 
 async function loadCountries() {
-  if (countriesLoaded) return;
+  if (countriesLoaded) { if (countryLayer) countryLayer.bringToFront(); return; }
   try {
     const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
     const topo  = await res.json();
