@@ -10,157 +10,149 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 OUT_PATH = Path(__file__).parent.parent / "data" / "scenes.geojson"
 MAX_SCENES_PER_PROVIDER = 2000
+WORKERS = 20
 
 PROVIDERS = {
     "umbra": {
         "label": "Umbra",
         "color": "#00C9FF",
         "catalog_url": "https://s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json",
+        "provider_url": "https://umbra.space/open-data/",
     },
     "capella": {
         "label": "Capella",
         "color": "#FF6B35",
         "catalog_url": "https://capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json",
+        "provider_url": "https://www.capellaspace.com/community/capella-open-data-program/",
     },
     "iceye": {
         "label": "ICEYE",
         "color": "#00FF87",
         "catalog_url": "https://iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json",
+        "provider_url": "https://www.iceye.com/open-data-initiative",
     },
 }
 
 
-def fetch_json(url, timeout=30):
+def fetch_json(url, timeout=20):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
     except Exception as e:
-        print(f"  [WARN] Failed to fetch {url}: {e}", file=sys.stderr)
+        print(f"  [WARN] {url[:80]}: {e}", file=sys.stderr)
         return None
 
 
 def resolve_url(base_url, href):
-    """Resolve a relative or absolute STAC link href against a base URL."""
     if href.startswith("http"):
         return href
+    if href.startswith("./"):
+        href = href[2:]
     base = base_url.rsplit("/", 1)[0]
+    while href.startswith("../"):
+        href = href[3:]
+        base = base.rsplit("/", 1)[0]
     return f"{base}/{href}"
 
 
-def walk_catalog(catalog_url, provider_id, features, depth=0, max_depth=4):
-    """Recursively walk a STAC catalog, collecting item features."""
-    if len(features) >= MAX_SCENES_PER_PROVIDER:
-        return
+def collect_item_urls(catalog_url, depth=0, max_depth=5):
+    """Recursively collect all item URLs from a static STAC catalog tree."""
     if depth > max_depth:
-        return
+        return [], []
 
     catalog = fetch_json(catalog_url)
     if not catalog:
-        return
+        return [], []
 
-    links = catalog.get("links", [])
+    item_urls = []
+    child_urls = []
 
-    for link in links:
-        if len(features) >= MAX_SCENES_PER_PROVIDER:
-            break
-        rel = link.get("rel", "")
+    for link in catalog.get("links", []):
+        rel  = link.get("rel", "")
         href = link.get("href", "")
         if not href:
             continue
-
         abs_url = resolve_url(catalog_url, href)
-
         if rel == "item":
-            item = fetch_json(abs_url)
-            if item:
-                feature = normalize_item(item, provider_id)
-                if feature:
-                    features.append(feature)
+            item_urls.append(abs_url)
         elif rel in ("child", "collection", "items"):
-            walk_catalog(abs_url, provider_id, features, depth + 1, max_depth)
+            child_urls.append(abs_url)
+
+    # Recurse into children
+    for child_url in child_urls:
+        sub_items, _ = collect_item_urls(child_url, depth + 1, max_depth)
+        item_urls.extend(sub_items)
+        if len(item_urls) >= MAX_SCENES_PER_PROVIDER * 3:
+            break  # collect more than needed, we'll trim after
+
+    return item_urls, []
 
 
-def walk_items_endpoint(items_url, provider_id, features):
-    """Walk a /items endpoint with pagination."""
-    url = items_url
-    while url and len(features) < MAX_SCENES_PER_PROVIDER:
-        data = fetch_json(url)
-        if not data:
-            break
+def fetch_items_parallel(item_urls, provider_id, max_items):
+    """Fetch up to max_items STAC item JSONs in parallel."""
+    # Spread evenly across catalog (take every nth) to get good geographic spread
+    if len(item_urls) > max_items * 2:
+        step = len(item_urls) // max_items
+        item_urls = item_urls[::step][:max_items]
+    else:
+        item_urls = item_urls[:max_items]
 
-        items = []
-        if data.get("type") == "FeatureCollection":
-            items = data.get("features", [])
-        elif isinstance(data.get("items"), list):
-            items = data["items"]
-
-        for item in items:
-            if len(features) >= MAX_SCENES_PER_PROVIDER:
-                break
-            feature = normalize_item(item, provider_id)
-            if feature:
-                features.append(feature)
-
-        # follow next link
-        next_url = None
-        for link in data.get("links", []):
-            if link.get("rel") == "next":
-                next_url = link.get("href")
-                break
-        url = next_url
+    features = []
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        futures = {ex.submit(fetch_json, url): url for url in item_urls}
+        for fut in as_completed(futures):
+            item = fut.result()
+            if item:
+                feat = normalize_item(item, provider_id)
+                if feat:
+                    features.append(feat)
+    return features
 
 
 def normalize_item(item, provider_id):
-    """Convert a STAC item into a normalized GeoJSON feature."""
-    if not item or item.get("type") not in ("Feature", None):
-        if item and "geometry" not in item:
-            return None
-
+    if not item:
+        return None
     geometry = item.get("geometry")
     if not geometry:
         return None
 
-    props = item.get("properties", {})
+    props  = item.get("properties", {})
     assets = item.get("assets", {})
+    info   = PROVIDERS[provider_id]
 
-    # Extract thumbnail
+    # Thumbnail
     thumbnail = None
     for key in ("thumbnail", "overview", "browse", "quicklook"):
         if key in assets:
             thumbnail = assets[key].get("href")
             break
 
-    # Extract download link (prefer GeoTIFF COG)
+    # Download (prefer COG/GeoTIFF)
     download = None
-    for key in ("data", "cog", "geotiff", "GRD", "SLC", "HH", "VV"):
+    for key in ("data", "cog", "geotiff", "GRD", "SLC", "HH", "VV", "amplitude"):
         if key in assets:
             download = assets[key].get("href")
             break
     if not download and assets:
-        first = next(iter(assets.values()))
-        download = first.get("href")
+        download = next(iter(assets.values())).get("href")
 
-    # Normalize date
+    # Date
     dt = props.get("datetime") or props.get("start_datetime") or item.get("datetime")
-    if dt and dt != "null":
+    date_str = year = None
+    if dt and dt not in ("null", None):
         try:
             parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
             date_str = parsed.strftime("%Y-%m-%d")
-            year = parsed.year
+            year     = parsed.year
         except Exception:
             date_str = dt[:10] if dt else None
-            year = int(dt[:4]) if dt else None
-    else:
-        date_str = None
-        year = None
+            year = int(dt[:4]) if dt and len(dt) >= 4 else None
 
-    provider_info = PROVIDERS[provider_id]
-
-    # Provider-specific metadata extraction
     sensor_mode = (
         props.get("sar:instrument_mode")
         or props.get("instrument_mode")
@@ -173,80 +165,45 @@ def normalize_item(item, provider_id):
         or props.get("gsd")
         or props.get("resolution")
         or props.get("pixel_spacing")
-        or None
     )
-    polarization = props.get("sar:polarizations") or props.get("polarization") or None
+    polarization = props.get("sar:polarizations") or props.get("polarization")
     if isinstance(polarization, list):
         polarization = ", ".join(polarization)
-
-    # Build provider URL
-    item_id = item.get("id", "")
-    provider_url = None
-    if provider_id == "umbra":
-        provider_url = "https://umbra.space/open-data/"
-    elif provider_id == "capella":
-        provider_url = "https://www.capellaspace.com/community/capella-open-data-program/"
-    elif provider_id == "iceye":
-        provider_url = "https://www.iceye.com/open-data-initiative"
 
     return {
         "type": "Feature",
         "geometry": geometry,
         "properties": {
-            "id": item_id,
-            "provider": provider_id,
-            "provider_label": provider_info["label"],
-            "color": provider_info["color"],
-            "date": date_str,
-            "year": year,
-            "sensor_mode": sensor_mode,
-            "resolution": resolution,
-            "polarization": polarization,
-            "thumbnail": thumbnail,
-            "download": download,
-            "provider_url": provider_url,
-            "collection": item.get("collection"),
+            "id":             item.get("id", ""),
+            "provider":       provider_id,
+            "provider_label": info["label"],
+            "color":          info["color"],
+            "date":           date_str,
+            "year":           year,
+            "sensor_mode":    sensor_mode,
+            "resolution":     resolution,
+            "polarization":   polarization,
+            "thumbnail":      thumbnail,
+            "download":       download,
+            "provider_url":   info["provider_url"],
+            "collection":     item.get("collection"),
         },
     }
 
 
-def fetch_umbra(features):
-    print("  Fetching Umbra catalog...")
-    catalog = fetch_json(PROVIDERS["umbra"]["catalog_url"])
-    if not catalog:
-        return
-
-    for link in catalog.get("links", []):
-        if len(features) >= MAX_SCENES_PER_PROVIDER:
-            break
-        rel = link.get("rel", "")
-        href = link.get("href", "")
-        if rel in ("child", "collection", "item") and href:
-            abs_url = resolve_url(PROVIDERS["umbra"]["catalog_url"], href)
-            if rel == "item":
-                item = fetch_json(abs_url)
-                if item:
-                    f = normalize_item(item, "umbra")
-                    if f:
-                        features.append(f)
-            else:
-                walk_catalog(abs_url, "umbra", features, depth=1)
-
-
-def fetch_capella(features):
-    print("  Fetching Capella catalog...")
-    walk_catalog(PROVIDERS["capella"]["catalog_url"], "capella", features)
-
-
-def fetch_iceye(features):
-    print("  Fetching ICEYE catalog...")
-    walk_catalog(PROVIDERS["iceye"]["catalog_url"], "iceye", features)
+def fetch_provider(provider_id):
+    info = PROVIDERS[provider_id]
+    print(f"  [{info['label']}] Collecting item URLs…")
+    item_urls, _ = collect_item_urls(info["catalog_url"])
+    total_found = len(item_urls)
+    print(f"  [{info['label']}] Found {total_found} item URLs — fetching up to {MAX_SCENES_PER_PROVIDER}…")
+    features = fetch_items_parallel(item_urls, provider_id, MAX_SCENES_PER_PROVIDER)
+    print(f"  [{info['label']}] ✓ {len(features)} scenes fetched")
+    return features
 
 
 def main():
-    all_features = {"umbra": [], "capella": [], "iceye": []}
-
-    # Try to load existing data as fallback
+    # Load existing data as fallback per provider
     existing = {}
     if OUT_PATH.exists():
         try:
@@ -258,14 +215,18 @@ def main():
         except Exception:
             pass
 
-    fetch_umbra(all_features["umbra"])
-    fetch_capella(all_features["capella"])
-    fetch_iceye(all_features["iceye"])
+    all_features = {}
+    for pid in ("umbra", "capella", "iceye"):
+        try:
+            all_features[pid] = fetch_provider(pid)
+        except Exception as e:
+            print(f"  [{pid}] ERROR: {e}", file=sys.stderr)
+            all_features[pid] = []
 
-    # Fall back to existing data for any provider that returned nothing
+    # Fall back to cached data if a provider returned nothing
     for pid in ("umbra", "capella", "iceye"):
         if not all_features[pid] and existing.get(pid):
-            print(f"  [INFO] Using cached data for {pid} ({len(existing[pid])} scenes).")
+            print(f"  [{pid}] Using cached data ({len(existing[pid])} scenes).")
             all_features[pid] = existing[pid]
 
     merged = []
@@ -281,7 +242,7 @@ def main():
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(geojson, separators=(",", ":")))
-    print(f"\nWrote {len(merged)} total scenes to {OUT_PATH}")
+    print(f"\nWrote {len(merged)} total scenes → {OUT_PATH}")
 
 
 if __name__ == "__main__":
