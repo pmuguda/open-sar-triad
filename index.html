@@ -4,9 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>open-sar-triad — ICEYE · Umbra · Capella open SAR data</title>
-  <meta name="description" content="Interactive map explorer for open SAR datasets from ICEYE, Umbra, and Capella. Browse, filter, and download free commercial SAR scenes." />
+  <meta name="description" content="Interactive map explorer for open SAR datasets from ICEYE, Umbra, and Capella." />
   <meta name="author" content="Pavan Muguda Sanjeevamurthy" />
-  <link rel="canonical" href="https://pmuguda.github.io/open-sar-triad/" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.css" />
@@ -15,10 +14,8 @@
 <body>
 <div id="app">
 
-  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
   <aside id="sidebar">
-
-    <!-- Logo -->
     <div class="sidebar-header">
       <div class="logo-mark">SAR</div>
       <div>
@@ -31,58 +28,15 @@
       </a>
     </div>
 
-    <!-- Date range slider -->
-    <div class="panel-section">
-      <div class="section-title">Date Range</div>
-      <div id="date-slider"></div>
-      <div class="date-labels">
-        <span id="date-label-from">—</span>
-        <span id="date-label-to">—</span>
-      </div>
-    </div>
-
-    <!-- Sensor mode dropdown -->
     <div class="panel-section">
       <div class="section-title">Sensor Mode</div>
-      <select id="mode-filter">
-        <option value="">All modes</option>
-      </select>
+      <select id="mode-filter"><option value="">All modes</option></select>
     </div>
 
-    <!-- Country picker -->
-    <div class="panel-section">
-      <div class="section-title">Country</div>
-      <button id="country-btn" class="tool-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        Pick country on map
-      </button>
-      <div id="country-selected" class="country-selected hidden">
-        <span id="country-name">—</span>
-        <button id="country-clear" title="Clear">✕</button>
-      </div>
-    </div>
-
-    <!-- BBox tools -->
-    <div class="panel-section">
-      <div class="section-title">BBox Filter</div>
-      <div class="bbox-tools">
-        <button class="bbox-btn" id="tool-bbox" title="Draw bounding box">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>
-          BBox
-        </button>
-        <button class="bbox-btn" id="tool-clear-bbox" title="Clear BBox">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          Clear
-        </button>
-      </div>
-    </div>
-
-    <!-- Reset -->
     <div class="panel-section">
       <button id="reset-btn" class="reset-btn">Reset All Filters</button>
     </div>
 
-    <!-- Histogram -->
     <div class="panel-section" id="histogram-section">
       <div class="section-title">Scene Coverage</div>
       <canvas id="histogram" height="90"></canvas>
@@ -93,7 +47,6 @@
       </div>
     </div>
 
-    <!-- STAC Export -->
     <div class="panel-section">
       <div class="section-title">Export</div>
       <button id="export-stac-btn" class="export-btn">
@@ -102,23 +55,68 @@
       </button>
     </div>
 
+    <div class="sidebar-footer">
+      <span>Data: <a href="https://github.com/Jack-Hayes/commerical-sar-stac" target="_blank">Jack-Hayes/commerical-sar-stac</a></span>
+    </div>
   </aside>
 
-  <!-- ── Map area ──────────────────────────────────────────── -->
+  <!-- Sidebar collapse tab -->
+  <button id="sidebar-toggle" title="Toggle sidebar">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <path d="M10 3L5 8l5 5"/>
+    </svg>
+  </button>
+
+  <!-- ── Map area ─────────────────────────────────────────── -->
   <div id="map-area">
 
-    <!-- Floating provider pills -->
+    <!-- Provider pills -->
     <div id="provider-pills">
-      <button class="pill iceye active" id="pill-iceye" data-provider="iceye">
-        <span class="pill-dot"></span> ICEYE <span class="pill-count" id="pill-cnt-iceye">—</span>
+      <button class="pill iceye active"   id="pill-iceye"   data-provider="iceye">  <span class="pill-dot"></span>ICEYE   <span class="pill-count" id="pill-cnt-iceye">—</span></button>
+      <button class="pill umbra active"   id="pill-umbra"   data-provider="umbra">  <span class="pill-dot"></span>Umbra   <span class="pill-count" id="pill-cnt-umbra">—</span></button>
+      <button class="pill capella active" id="pill-capella" data-provider="capella"><span class="pill-dot"></span>Capella <span class="pill-count" id="pill-cnt-capella">—</span></button>
+    </div>
+
+    <!-- Floating AOI toolbar (top-right, like bboxer) -->
+    <div id="aoi-toolbar">
+      <button class="tb-btn" id="tb-bbox" title="Draw BBox">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="14" height="14" rx="1"/>
+          <circle cx="3" cy="3" r="1.6" fill="currentColor" stroke="none"/>
+          <circle cx="17" cy="3" r="1.6" fill="currentColor" stroke="none"/>
+          <circle cx="3" cy="17" r="1.6" fill="currentColor" stroke="none"/>
+          <circle cx="17" cy="17" r="1.6" fill="currentColor" stroke="none"/>
+        </svg>
       </button>
-      <button class="pill umbra active" id="pill-umbra" data-provider="umbra">
-        <span class="pill-dot"></span> Umbra <span class="pill-count" id="pill-cnt-umbra">—</span>
+      <button class="tb-btn" id="tb-poly" title="Draw Polygon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="10,2 18,8 15,17 5,17 2,8"/>
+        </svg>
       </button>
-      <button class="pill capella active" id="pill-capella" data-provider="capella">
-        <span class="pill-dot"></span> Capella <span class="pill-count" id="pill-cnt-capella">—</span>
+      <div class="tb-divider"></div>
+      <label class="tb-btn" title="Upload GeoJSON" style="cursor:pointer">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13V3M6 9l4-6 4 6"/><path d="M3 16h14"/>
+        </svg>
+        <input type="file" id="tb-upload" accept=".geojson,.json" hidden>
+      </label>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" id="tb-country" title="Country Picker">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="10" r="8"/>
+          <path d="M2 10h16"/><path d="M10 2a14 14 0 010 16"/><path d="M10 2a14 14 0 000 16"/>
+        </svg>
+      </button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn tb-clear" id="tb-clear" title="Clear all">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M5 5l10 10M15 5L5 15"/>
+        </svg>
       </button>
     </div>
+
+    <!-- Hint banner -->
+    <div id="hint-banner"></div>
 
     <!-- Country tooltip -->
     <div id="country-tooltip"></div>
@@ -130,22 +128,25 @@
       <button id="detail-close">✕ close</button>
       <div id="detail-content"></div>
     </div>
-
   </div>
 
 </div>
 
-<!-- Bottom total bar -->
-<div id="total-bar">
-  <span id="total-bar-label">
-    <strong id="total-vis">—</strong> visible scenes &nbsp;·&nbsp;
-    <span id="total-all">—</span> total loaded
-  </span>
-  <span id="total-bar-breakdown">
+<!-- ── Bottom bar ───────────────────────────────────────────── -->
+<div id="bottom-bar">
+  <!-- Date range slider (center) -->
+  <div id="date-bar">
+    <span class="date-bar-label" id="date-label-from">—</span>
+    <div id="date-slider"></div>
+    <span class="date-bar-label" id="date-label-to">—</span>
+  </div>
+  <!-- Total count (right) -->
+  <div id="total-bar">
+    <span id="total-vis-wrap"><strong id="total-vis">—</strong> visible</span>
     <span class="tb-dot iceye-dot"></span><span id="tb-iceye">—</span>
     <span class="tb-dot umbra-dot"></span><span id="tb-umbra">—</span>
     <span class="tb-dot capella-dot"></span><span id="tb-capella">—</span>
-  </span>
+  </div>
 </div>
 
 <!-- Loading overlay -->
