@@ -123,7 +123,7 @@ function render() {
   const total = counts.iceye + counts.umbra + counts.capella;
   document.getElementById('total-vis').textContent = total;
   drawHistogram(counts);
-
+  drawModeBreakdown();
 }
 
 function centroid(geom) {
@@ -165,6 +165,58 @@ function drawHistogram(counts, label) {
     ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui,sans-serif';
     ctx.fillText(PROVIDER_LABELS[pid], x + barW / 2, H - 4);
   });
+}
+
+// ── Mode breakdown (per-mode stacked bar) ──────────────────
+function drawModeBreakdown() {
+  const f = getFilters();
+  // Aggregate visible scenes by mode → provider
+  const modes = {};   // { modeName: { iceye, umbra, capella, total } }
+  allFeatures.forEach(feat => {
+    const p = feat.properties;
+    if (!f[p.provider]) return;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
+    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
+    if (f.bbox) {
+      const c = centroid(feat.geometry);
+      if (!c) return;
+      const [w, s, e, n] = f.bbox;
+      if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return;
+    }
+    const m = (p.sensor_mode || 'unknown').toLowerCase();
+    if (!modes[m]) modes[m] = { iceye: 0, umbra: 0, capella: 0, total: 0 };
+    modes[m][p.provider]++;
+    modes[m].total++;
+  });
+
+  const container = document.getElementById('mode-stats');
+  const sorted = Object.entries(modes).sort((a, b) => b[1].total - a[1].total);
+
+  if (!sorted.length) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--muted)">No scenes match filters</div>';
+    return;
+  }
+
+  const maxTotal = Math.max(...sorted.map(([, v]) => v.total));
+
+  container.innerHTML = sorted.map(([name, v]) => {
+    const widthPct = (v.total / maxTotal) * 100;
+    const segs = ['iceye', 'umbra', 'capella'].map(pid => {
+      if (!v[pid]) return '';
+      const pct = (v[pid] / v.total) * 100;
+      const label = pct > 14 ? v[pid] : '';
+      return `<div class="mode-bar-seg ${pid}" style="flex:${v[pid]}" title="${PROVIDER_LABELS[pid]}: ${v[pid]}">${label}</div>`;
+    }).join('');
+
+    return `<div class="mode-row">
+      <div class="mode-row-label">
+        <span class="mode-name">${name.replace(/_/g, ' ')}</span>
+        <span class="mode-total">${v.total.toLocaleString()}</span>
+      </div>
+      <div class="mode-bar" style="width:${widthPct}%; min-width: 40px">${segs}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── Popup ──────────────────────────────────────────────────
