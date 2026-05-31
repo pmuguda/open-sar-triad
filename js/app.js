@@ -1,185 +1,216 @@
 /* open-sar-triad — main app */
 
-const PROVIDER_COLORS = {
-  iceye:   '#00FF87',
-  umbra:   '#00C9FF',
-  capella: '#FF6B35',
-};
+const PROVIDER_COLORS = { iceye: '#00FF87', umbra: '#00C9FF', capella: '#FF6B35' };
+const PROVIDER_LABELS = { iceye: 'ICEYE', umbra: 'Umbra', capella: 'Capella' };
 
 let allFeatures = [];
-let activeLayers = {};       // id → leaflet layer
+let activeLayers = {};
 let drawnBbox = null;
-let drawControl = null;
 let drawnItems = null;
+let drawControl = null;
 let isDrawing = false;
+let countryLayer = null;
+let countryMode = false;
+let selectedCountryBbox = null;
+let countriesLoaded = false;
+let dateSlider = null;
+let dateMin = 0, dateMax = 0;
 
-// ── Map init ────────────────────────────────────────────────
-const map = L.map('map', {
-  center: [20, 0],
-  zoom: 2,
-  zoomControl: true,
-  attributionControl: true,
-});
+// ── Map ──────────────────────────────────────────────────────
+const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: true });
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
-  subdomains: 'abcd',
-  maxZoom: 19,
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
+  subdomains: 'abcd', maxZoom: 19,
 }).addTo(map);
 
-// Drawn items layer
 drawnItems = new L.FeatureGroup().addTo(map);
-
 drawControl = new L.Control.Draw({
   draw: {
-    rectangle: {
-      shapeOptions: { color: '#00C9FF', weight: 1.5, fillOpacity: 0.05 },
-    },
+    rectangle: { shapeOptions: { color: '#00C9FF', weight: 1.5, fillOpacity: 0.05 } },
     polyline: false, polygon: false, circle: false, marker: false, circlemarker: false,
   },
   edit: { featureGroup: drawnItems, remove: false, edit: false },
 });
 
-// ── Filters state ───────────────────────────────────────────
+// ── Provider state ───────────────────────────────────────────
+const providerActive = { iceye: true, umbra: true, capella: true };
+
+['iceye', 'umbra', 'capella'].forEach(pid => {
+  document.getElementById(`pill-${pid}`).addEventListener('click', () => {
+    providerActive[pid] = !providerActive[pid];
+    const el = document.getElementById(`pill-${pid}`);
+    el.classList.toggle('active', providerActive[pid]);
+    render();
+  });
+});
+
+// ── Filters ──────────────────────────────────────────────────
 function getFilters() {
+  let dateFrom = null, dateTo = null;
+  if (dateSlider) {
+    const vals = dateSlider.get();
+    dateFrom = sliderValToDate(+vals[0]);
+    dateTo   = sliderValToDate(+vals[1]);
+  }
   return {
-    iceye:    document.getElementById('tog-iceye').checked,
-    umbra:    document.getElementById('tog-umbra').checked,
-    capella:  document.getElementById('tog-capella').checked,
-    dateFrom: document.getElementById('date-from').value,
-    dateTo:   document.getElementById('date-to').value,
-    mode:     document.getElementById('mode-filter').value.trim().toLowerCase(),
-    bbox:     drawnBbox,
+    iceye:    providerActive.iceye,
+    umbra:    providerActive.umbra,
+    capella:  providerActive.capella,
+    dateFrom,
+    dateTo,
+    mode:     document.getElementById('mode-filter').value,
+    bbox:     selectedCountryBbox || drawnBbox,
   };
 }
 
-// ── Render ──────────────────────────────────────────────────
+function sliderValToDate(val) {
+  const d = new Date(val);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Render ────────────────────────────────────────────────────
 function render() {
   const f = getFilters();
-
-  // Remove existing layers
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
 
   const counts = { iceye: 0, umbra: 0, capella: 0 };
 
-  allFeatures.forEach(feature => {
-    const p = feature.properties;
+  allFeatures.forEach(feat => {
+    const p = feat.properties;
     if (!f[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && !p.sensor_mode.toLowerCase().includes(f.mode)) return;
+    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return;
     if (f.bbox) {
-      const [minLng, minLat, maxLng, maxLat] = f.bbox;
-      const center = getCentroid(feature.geometry);
-      if (!center) return;
-      if (center[0] < minLng || center[0] > maxLng || center[1] < minLat || center[1] > maxLat) return;
+      const c = centroid(feat.geometry);
+      if (!c) return;
+      const [w, s, e, n] = f.bbox;
+      if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return;
     }
 
     const color = PROVIDER_COLORS[p.provider];
-    const layer = L.geoJSON(feature, {
-      style: {
-        color,
-        weight: 1,
-        opacity: 0.8,
-        fillColor: color,
-        fillOpacity: 0.08,
-        className: 'scene-polygon',
-      },
+    const layer = L.geoJSON(feat, {
+      style: { color, weight: 1, opacity: 0.8, fillColor: color, fillOpacity: 0.08 },
     });
-
     layer.on('click', () => showDetail(p));
-    layer.on('mouseover', function () {
-      this.setStyle({ fillOpacity: 0.25, weight: 1.5 });
-    });
-    layer.on('mouseout', function () {
-      this.setStyle({ fillOpacity: 0.08, weight: 1 });
-    });
-
+    layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.28, weight: 1.5 }); });
+    layer.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.08, weight: 1 }); });
     layer.bindPopup(makePopup(p), { maxWidth: 280 });
     layer.addTo(map);
     activeLayers[p.id] = layer;
     counts[p.provider]++;
   });
 
-  document.getElementById('vis-iceye').textContent   = counts.iceye;
-  document.getElementById('vis-umbra').textContent   = counts.umbra;
-  document.getElementById('vis-capella').textContent = counts.capella;
+  const total = counts.iceye + counts.umbra + counts.capella;
+  document.getElementById('total-vis').textContent  = total;
+  document.getElementById('tb-iceye').textContent   = counts.iceye;
+  document.getElementById('tb-umbra').textContent   = counts.umbra;
+  document.getElementById('tb-capella').textContent = counts.capella;
+
+  drawHistogram(counts);
 }
 
-function getCentroid(geometry) {
-  if (!geometry) return null;
-  if (geometry.type === 'Point') return geometry.coordinates;
-  if (geometry.type === 'Polygon') {
-    const coords = geometry.coordinates[0];
-    const lng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
-    const lat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
-    return [lng, lat];
-  }
-  if (geometry.type === 'MultiPolygon') {
-    const first = geometry.coordinates[0][0];
-    const lng = first.reduce((s, c) => s + c[0], 0) / first.length;
-    const lat = first.reduce((s, c) => s + c[1], 0) / first.length;
-    return [lng, lat];
-  }
-  return null;
+function centroid(geom) {
+  if (!geom) return null;
+  if (geom.type === 'Point') return geom.coordinates;
+  const coords = geom.type === 'Polygon' ? geom.coordinates[0]
+               : geom.type === 'MultiPolygon' ? geom.coordinates[0][0] : null;
+  if (!coords) return null;
+  return [
+    coords.reduce((s, c) => s + c[0], 0) / coords.length,
+    coords.reduce((s, c) => s + c[1], 0) / coords.length,
+  ];
 }
 
-// ── Popup ────────────────────────────────────────────────────
+// ── Histogram ─────────────────────────────────────────────────
+function drawHistogram(counts) {
+  const canvas = document.getElementById('histogram');
+  const W = canvas.offsetWidth || 256;
+  canvas.width = W;
+  const H = 90;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const providers = ['iceye', 'umbra', 'capella'];
+  const values = providers.map(p => counts[p]);
+  const max = Math.max(...values, 1);
+
+  const barW = Math.floor((W - 32) / 3);
+  const gap  = (W - barW * 3) / 4;
+
+  providers.forEach((pid, i) => {
+    const x = gap + i * (barW + gap);
+    const barH = Math.max(2, Math.round((values[i] / max) * (H - 28)));
+    const y = H - 18 - barH;
+    const color = PROVIDER_COLORS[pid];
+
+    // bar
+    ctx.fillStyle = color + '33';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    // value label
+    ctx.fillStyle = color;
+    ctx.font = `600 11px system-ui, -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(values[i], x + barW / 2, y - 4);
+
+    // name label
+    ctx.fillStyle = '#8b949e';
+    ctx.font = `10px system-ui, -apple-system, sans-serif`;
+    ctx.fillText(PROVIDER_LABELS[pid], x + barW / 2, H - 4);
+  });
+}
+
+// ── Popup ─────────────────────────────────────────────────────
 function makePopup(p) {
-  const detailBtn = `<button class="popup-btn details-btn" onclick="showDetailById('${p.id}')">Details</button>`;
-  const dlBtn = p.download
-    ? `<a class="popup-btn" href="${p.download}" target="_blank">Download</a>`
-    : '';
-  const provBtn = p.provider_url
-    ? `<a class="popup-btn" href="${p.provider_url}" target="_blank">${p.provider_label}</a>`
-    : '';
-
-  return `
-    <div class="popup-provider ${p.provider}">${p.provider_label}</div>
-    <div class="popup-id">${p.id || '—'}</div>
-    <div class="popup-date">📅 ${p.date || 'Unknown date'}</div>
-    <div class="popup-mode">⚡ ${p.sensor_mode || '—'}</div>
-    <div class="popup-actions">${detailBtn}${dlBtn}${provBtn}</div>
-  `;
+  const dl  = p.download    ? `<a class="popup-btn" href="${p.download}" target="_blank">Download</a>` : '';
+  const pv  = p.provider_url? `<a class="popup-btn" href="${p.provider_url}" target="_blank">${p.provider_label}</a>` : '';
+  const det = `<button class="popup-btn details-btn" onclick="showDetailById('${escHtml(p.id)}')">Details</button>`;
+  return `<div class="popup-provider ${p.provider}">${p.provider_label}</div>
+<div class="popup-id">${escHtml(p.id||'—')}</div>
+<div class="popup-date">📅 ${p.date||'Unknown'}</div>
+<div class="popup-mode">⚡ ${p.sensor_mode||'—'}</div>
+<div class="popup-actions">${det}${dl}${pv}</div>`;
 }
 
-// ── Detail panel ─────────────────────────────────────────────
-function showDetailById(id) {
-  const feature = allFeatures.find(f => f.properties.id === id);
-  if (feature) showDetail(feature.properties);
-}
-window.showDetailById = showDetailById;
+function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── Detail panel ───────────────────────────────────────────────
+window.showDetailById = id => {
+  const f = allFeatures.find(f => f.properties.id === id);
+  if (f) showDetail(f.properties);
+};
 
 function showDetail(p) {
   const thumb = p.thumbnail
     ? `<img class="detail-thumbnail" src="${p.thumbnail}" alt="SAR thumbnail" onerror="this.style.display='none'" />`
     : `<div class="detail-thumb-placeholder">No preview available</div>`;
-
   const rows = [
-    ['Date',        p.date          || '—'],
-    ['Provider',    p.provider_label || '—'],
-    ['Mode',        p.sensor_mode   || '—'],
-    ['Polarization',p.polarization  || '—'],
-    ['Resolution',  p.resolution != null ? p.resolution + ' m' : '—'],
-    ['Collection',  p.collection    || '—'],
-  ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+    ['Date',         p.date          || '—'],
+    ['Provider',     p.provider_label|| '—'],
+    ['Mode',         p.sensor_mode   || '—'],
+    ['Polarization', p.polarization  || '—'],
+    ['Resolution',   p.resolution != null ? p.resolution + ' m' : '—'],
+    ['Collection',   p.collection    || '—'],
+  ].map(([k,v]) => `<tr><td>${k}</td><td>${escHtml(v)}</td></tr>`).join('');
 
-  const dlBtn = p.download
-    ? `<a class="detail-action-btn primary" href="${p.download}" target="_blank">Download Asset</a>`
-    : '';
-  const provBtn = p.provider_url
-    ? `<a class="detail-action-btn" href="${p.provider_url}" target="_blank">View on ${p.provider_label}</a>`
-    : '';
+  const dl = p.download
+    ? `<a class="detail-action-btn primary" href="${p.download}" target="_blank">Download Asset</a>` : '';
+  const pv = p.provider_url
+    ? `<a class="detail-action-btn" href="${p.provider_url}" target="_blank">View on ${p.provider_label}</a>` : '';
 
-  document.getElementById('detail-content').innerHTML = `
-    ${thumb}
-    <div class="detail-provider ${p.provider}">${p.provider_label}</div>
-    <div class="detail-id">${p.id || '—'}</div>
-    <table class="detail-table"><tbody>${rows}</tbody></table>
-    <div class="detail-actions">${dlBtn}${provBtn}</div>
-  `;
-
+  document.getElementById('detail-content').innerHTML =
+    `${thumb}<div class="detail-provider ${p.provider}">${p.provider_label}</div>
+<div class="detail-id">${escHtml(p.id||'—')}</div>
+<table class="detail-table"><tbody>${rows}</tbody></table>
+<div class="detail-actions">${dl}${pv}</div>`;
   document.getElementById('detail-panel').classList.remove('hidden');
 }
 
@@ -187,114 +218,233 @@ document.getElementById('detail-close').addEventListener('click', () => {
   document.getElementById('detail-panel').classList.add('hidden');
 });
 
-// ── Draw bbox ────────────────────────────────────────────────
-document.getElementById('draw-btn').addEventListener('click', () => {
+// ── Country picker ─────────────────────────────────────────────
+const tooltip = document.getElementById('country-tooltip');
+
+document.getElementById('country-btn').addEventListener('click', () => {
+  countryMode = !countryMode;
+  document.getElementById('country-btn').classList.toggle('active', countryMode);
+  if (countryMode) {
+    loadCountries();
+    map.getContainer().style.cursor = 'crosshair';
+  } else {
+    map.getContainer().style.cursor = '';
+    tooltip.style.display = 'none';
+  }
+});
+
+document.getElementById('country-clear').addEventListener('click', () => {
+  selectedCountryBbox = null;
+  document.getElementById('country-selected').classList.add('hidden');
+  render();
+});
+
+async function loadCountries() {
+  if (countriesLoaded) return;
+  try {
+    const res  = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    const topo = await res.json();
+    const geojson = topojson.feature(topo, topo.objects.countries);
+
+    countryLayer = L.geoJSON(geojson, {
+      style: { color: 'transparent', weight: 0, fillColor: 'transparent', fillOpacity: 0 },
+      onEachFeature(feat, layer) {
+        layer.on('mousemove', e => {
+          if (!countryMode) return;
+          const name = feat.properties.name || 'Unknown';
+          tooltip.textContent = name;
+          tooltip.style.display = 'block';
+          const rect = document.getElementById('map-area').getBoundingClientRect();
+          tooltip.style.left = (e.originalEvent.clientX - rect.left + 12) + 'px';
+          tooltip.style.top  = (e.originalEvent.clientY - rect.top  - 28) + 'px';
+          layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.15, color: '#d29922', weight: 1 });
+        });
+        layer.on('mouseout', () => {
+          tooltip.style.display = 'none';
+          layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+        });
+        layer.on('click', () => {
+          if (!countryMode) return;
+          const b = layer.getBounds();
+          selectedCountryBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          const name = feat.properties.name || 'Unknown';
+          document.getElementById('country-name').textContent = name;
+          document.getElementById('country-selected').classList.remove('hidden');
+          map.fitBounds(b, { padding: [40, 40] });
+          countryMode = false;
+          document.getElementById('country-btn').classList.remove('active');
+          map.getContainer().style.cursor = '';
+          tooltip.style.display = 'none';
+          render();
+        });
+      },
+    }).addTo(map);
+
+    countriesLoaded = true;
+  } catch (e) {
+    console.error('Failed to load countries', e);
+  }
+}
+
+// ── BBox draw ──────────────────────────────────────────────────
+document.getElementById('tool-bbox').addEventListener('click', () => {
   if (isDrawing) return;
   isDrawing = true;
-  document.getElementById('draw-btn').classList.add('active');
+  document.getElementById('tool-bbox').classList.add('active');
   map.addControl(drawControl);
   new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable();
 });
 
-map.on(L.Draw.Event.CREATED, (e) => {
+map.on(L.Draw.Event.CREATED, e => {
   drawnItems.clearLayers();
   drawnItems.addLayer(e.layer);
   const b = e.layer.getBounds();
   drawnBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
   map.removeControl(drawControl);
   isDrawing = false;
-  document.getElementById('draw-btn').classList.remove('active');
-  document.getElementById('clear-bbox-btn').style.display = 'block';
+  document.getElementById('tool-bbox').classList.remove('active');
   render();
 });
 
-document.getElementById('clear-bbox-btn').addEventListener('click', () => {
+document.getElementById('tool-clear-bbox').addEventListener('click', () => {
   drawnItems.clearLayers();
   drawnBbox = null;
-  document.getElementById('clear-bbox-btn').style.display = 'none';
   render();
 });
 
-// ── Location search ──────────────────────────────────────────
-document.getElementById('location-btn').addEventListener('click', searchLocation);
-document.getElementById('location-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') searchLocation();
-});
+// ── Sensor mode dropdown ────────────────────────────────────────
+document.getElementById('mode-filter').addEventListener('change', render);
 
-function searchLocation() {
-  const q = document.getElementById('location-input').value.trim();
-  if (!q) return;
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
-  fetch(url, { headers: { 'Accept-Language': 'en' } })
-    .then(r => r.json())
-    .then(results => {
-      if (results && results.length > 0) {
-        const r = results[0];
-        map.setView([+r.lat, +r.lon], 8);
-      } else {
-        alert('Location not found.');
-      }
-    })
-    .catch(() => alert('Location search failed.'));
+function populateModes(features) {
+  const modes = new Set();
+  features.forEach(f => {
+    const m = f.properties.sensor_mode;
+    if (m && m !== 'N/A' && m !== 'null') modes.add(m);
+  });
+  const sel = document.getElementById('mode-filter');
+  [...modes].sort().forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    sel.appendChild(opt);
+  });
 }
 
-// ── Provider toggles ─────────────────────────────────────────
-['iceye', 'umbra', 'capella'].forEach(pid => {
-  const el = document.getElementById(`tog-${pid}`);
-  const chip = el.closest('.provider-chip');
-  el.addEventListener('change', () => {
-    chip.classList.toggle('disabled', !el.checked);
-    render();
+// ── Date slider ────────────────────────────────────────────────
+function initDateSlider(features) {
+  const dates = features
+    .map(f => f.properties.date)
+    .filter(Boolean)
+    .map(d => new Date(d).getTime())
+    .filter(t => !isNaN(t));
+
+  if (!dates.length) return;
+
+  dateMin = Math.min(...dates);
+  dateMax = Math.max(...dates);
+
+  const sliderEl = document.getElementById('date-slider');
+  dateSlider = noUiSlider.create(sliderEl, {
+    start: [dateMin, dateMax],
+    connect: true,
+    range: { min: dateMin, max: dateMax },
+    tooltips: [
+      { to: v => new Date(+v).toISOString().slice(0,7) },
+      { to: v => new Date(+v).toISOString().slice(0,7) },
+    ],
+    step: 30 * 24 * 3600 * 1000, // 1 month steps
   });
+
+  function updateLabels(vals) {
+    document.getElementById('date-label-from').textContent = new Date(+vals[0]).toISOString().slice(0,7);
+    document.getElementById('date-label-to').textContent   = new Date(+vals[1]).toISOString().slice(0,7);
+  }
+
+  dateSlider.on('update', updateLabels);
+  dateSlider.on('change', () => render());
+  updateLabels([dateMin, dateMax]);
+}
+
+// ── STAC export ────────────────────────────────────────────────
+document.getElementById('export-stac-btn').addEventListener('click', () => {
+  const f = getFilters();
+  const visible = allFeatures.filter(feat => {
+    const p = feat.properties;
+    if (!f[p.provider]) return false;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
+    if (f.mode && p.sensor_mode && p.sensor_mode !== f.mode) return false;
+    if (f.bbox) {
+      const c = centroid(feat.geometry);
+      if (!c) return false;
+      const [w, s, e, n] = f.bbox;
+      if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return false;
+    }
+    return true;
+  });
+
+  const collection = {
+    type: 'FeatureCollection',
+    stac_version: '1.0.0',
+    id: 'open-sar-triad-export',
+    description: 'Exported SAR scenes from open-sar-triad',
+    exported_at: new Date().toISOString(),
+    providers: [
+      { name: 'ICEYE',   url: 'https://www.iceye.com/open-data-initiative' },
+      { name: 'Umbra',   url: 'https://umbra.space/open-data/' },
+      { name: 'Capella', url: 'https://www.capellaspace.com/community/capella-open-data-program/' },
+    ],
+    features: visible,
+  };
+
+  const blob = new Blob([JSON.stringify(collection, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 });
 
-// ── Date / mode filters ───────────────────────────────────────
-['date-from', 'date-to', 'mode-filter'].forEach(id => {
-  document.getElementById(id).addEventListener('input', () => render());
-});
-
-// ── Reset ─────────────────────────────────────────────────────
+// ── Reset ──────────────────────────────────────────────────────
 document.getElementById('reset-btn').addEventListener('click', () => {
-  ['tog-iceye', 'tog-umbra', 'tog-capella'].forEach(id => {
-    document.getElementById(id).checked = true;
-    document.getElementById(id).closest('.provider-chip').classList.remove('disabled');
+  ['iceye','umbra','capella'].forEach(pid => {
+    providerActive[pid] = true;
+    document.getElementById(`pill-${pid}`).classList.add('active');
   });
-  document.getElementById('date-from').value = '';
-  document.getElementById('date-to').value = '';
+  if (dateSlider) dateSlider.set([dateMin, dateMax]);
   document.getElementById('mode-filter').value = '';
-  document.getElementById('location-input').value = '';
   drawnItems.clearLayers();
   drawnBbox = null;
-  document.getElementById('clear-bbox-btn').style.display = 'none';
+  selectedCountryBbox = null;
+  document.getElementById('country-selected').classList.add('hidden');
+  countryMode = false;
+  document.getElementById('country-btn').classList.remove('active');
+  map.getContainer().style.cursor = '';
   render();
 });
 
-// ── Load data ─────────────────────────────────────────────────
+// ── Load data ──────────────────────────────────────────────────
 fetch('data/scenes.geojson')
-  .then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  })
+  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     allFeatures = geojson.features || [];
 
-    // Set total counts per provider
     const totals = { iceye: 0, umbra: 0, capella: 0 };
-    allFeatures.forEach(f => {
-      const pid = f.properties.provider;
-      if (pid in totals) totals[pid]++;
-    });
+    allFeatures.forEach(f => { const p = f.properties.provider; if (p in totals) totals[p]++; });
 
-    document.getElementById('scene-count').textContent = allFeatures.length;
-    ['iceye', 'umbra', 'capella'].forEach(pid => {
-      document.getElementById(`cnt-${pid}`).textContent = totals[pid];
-    });
+    document.getElementById('total-all').textContent   = allFeatures.length;
+    document.getElementById('pill-cnt-iceye').textContent   = totals.iceye;
+    document.getElementById('pill-cnt-umbra').textContent   = totals.umbra;
+    document.getElementById('pill-cnt-capella').textContent = totals.capella;
+
+    populateModes(allFeatures);
+    initDateSlider(allFeatures);
 
     document.getElementById('loading').classList.add('hidden');
     render();
   })
   .catch(err => {
-    console.warn('Could not load scenes.geojson:', err);
+    console.warn('scenes.geojson:', err);
     document.getElementById('loading').innerHTML =
       `<p style="color:#FF6B35">No scene data found.<br>Run <code>scripts/fetch_catalog.py</code> to generate it.</p>`;
   });

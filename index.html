@@ -3,106 +3,149 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>open-sar-triad — ICEYE · Umbra · Capella</title>
+  <title>open-sar-triad — ICEYE · Umbra · Capella open SAR data</title>
+  <meta name="description" content="Interactive map explorer for open SAR datasets from ICEYE, Umbra, and Capella. Browse, filter, and download free commercial SAR scenes." />
+  <meta name="author" content="Pavan Muguda Sanjeevamurthy" />
+  <link rel="canonical" href="https://pmuguda.github.io/open-sar-triad/" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
-<!-- ── Header ───────────────────────────────────────────────── -->
-<header>
-  <div class="header-left">
-    <span class="logo">open-sar-triad</span>
-    <span class="tagline">Open SAR datasets from ICEYE · Umbra · Capella</span>
-  </div>
-  <div class="header-right">
-    <span id="scene-count" class="badge">—</span>
-    <span class="badge-label">scenes</span>
-    <a href="https://github.com/pmuguda/open-sar-triad" target="_blank" class="gh-link" title="GitHub">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.25.78-.55v-2.1c-3.19.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.27-5.23-5.67 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 2.87-.39c.97.01 1.95.13 2.87.39 2.18-1.49 3.14-1.18 3.14-1.18.63 1.57.23 2.73.11 3.02.74.8 1.18 1.82 1.18 3.07 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.2.66.79.55C20.21 21.41 23.5 17.1 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
-    </a>
-  </div>
-</header>
-
-<!-- ── Layout ────────────────────────────────────────────────── -->
 <div id="app">
 
-  <!-- Sidebar -->
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
   <aside id="sidebar">
 
-    <section class="filter-section">
-      <h3>Providers</h3>
-      <div class="provider-toggles">
-        <label class="provider-chip iceye">
-          <input type="checkbox" id="tog-iceye" checked />
-          <span class="dot"></span> ICEYE
-          <span class="count" id="cnt-iceye">—</span>
-        </label>
-        <label class="provider-chip umbra">
-          <input type="checkbox" id="tog-umbra" checked />
-          <span class="dot"></span> Umbra
-          <span class="count" id="cnt-umbra">—</span>
-        </label>
-        <label class="provider-chip capella">
-          <input type="checkbox" id="tog-capella" checked />
-          <span class="dot"></span> Capella
-          <span class="count" id="cnt-capella">—</span>
-        </label>
+    <!-- Logo -->
+    <div class="sidebar-header">
+      <div class="logo-mark">SAR</div>
+      <div>
+        <h1>open-sar-triad</h1>
+        <p>ICEYE · Umbra · Capella</p>
       </div>
-    </section>
+      <a href="https://github.com/pmuguda/open-sar-triad" target="_blank"
+         style="margin-left:auto;color:var(--muted);display:flex;align-items:center;flex-shrink:0" title="GitHub">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.25.78-.55v-2.1c-3.19.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.27-5.23-5.67 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 2.87-.39c.97.01 1.95.13 2.87.39 2.18-1.49 3.14-1.18 3.14-1.18.63 1.57.23 2.73.11 3.02.74.8 1.18 1.82 1.18 3.07 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.2.66.79.55C20.21 21.41 23.5 17.1 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+      </a>
+    </div>
 
-    <section class="filter-section">
-      <h3>Date Range</h3>
-      <div class="date-inputs">
-        <input type="date" id="date-from" placeholder="From" />
-        <input type="date" id="date-to" placeholder="To" />
+    <!-- Date range slider -->
+    <div class="panel-section">
+      <div class="section-title">Date Range</div>
+      <div id="date-slider"></div>
+      <div class="date-labels">
+        <span id="date-label-from">—</span>
+        <span id="date-label-to">—</span>
       </div>
-    </section>
+    </div>
 
-    <section class="filter-section">
-      <h3>Sensor Mode</h3>
-      <input type="text" id="mode-filter" placeholder="e.g. spotlight, stripmap…" />
-    </section>
+    <!-- Sensor mode dropdown -->
+    <div class="panel-section">
+      <div class="section-title">Sensor Mode</div>
+      <select id="mode-filter">
+        <option value="">All modes</option>
+      </select>
+    </div>
 
-    <section class="filter-section">
-      <h3>Location Search</h3>
-      <div class="location-row">
-        <input type="text" id="location-input" placeholder="City or place name…" />
-        <button id="location-btn">Go</button>
+    <!-- Country picker -->
+    <div class="panel-section">
+      <div class="section-title">Country</div>
+      <button id="country-btn" class="tool-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        Pick country on map
+      </button>
+      <div id="country-selected" class="country-selected hidden">
+        <span id="country-name">—</span>
+        <button id="country-clear" title="Clear">✕</button>
       </div>
-    </section>
+    </div>
 
-    <section class="filter-section">
-      <h3>BBox Filter</h3>
-      <button id="draw-btn" class="draw-btn">Draw BBox</button>
-      <button id="clear-bbox-btn" class="secondary-btn" style="display:none">Clear BBox</button>
-    </section>
+    <!-- BBox tools -->
+    <div class="panel-section">
+      <div class="section-title">BBox Filter</div>
+      <div class="bbox-tools">
+        <button class="bbox-btn" id="tool-bbox" title="Draw bounding box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>
+          BBox
+        </button>
+        <button class="bbox-btn" id="tool-clear-bbox" title="Clear BBox">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Clear
+        </button>
+      </div>
+    </div>
 
-    <section class="filter-section">
+    <!-- Reset -->
+    <div class="panel-section">
       <button id="reset-btn" class="reset-btn">Reset All Filters</button>
-    </section>
+    </div>
 
-    <section class="filter-section stats-section">
-      <h3>Visible Scenes</h3>
-      <div id="stats">
-        <div class="stat-row"><span class="stat-dot iceye-dot"></span><span id="vis-iceye">—</span> ICEYE</div>
-        <div class="stat-row"><span class="stat-dot umbra-dot"></span><span id="vis-umbra">—</span> Umbra</div>
-        <div class="stat-row"><span class="stat-dot capella-dot"></span><span id="vis-capella">—</span> Capella</div>
+    <!-- Histogram -->
+    <div class="panel-section" id="histogram-section">
+      <div class="section-title">Scene Coverage</div>
+      <canvas id="histogram" height="90"></canvas>
+      <div class="hist-legend">
+        <span class="hist-dot iceye-dot"></span>ICEYE
+        <span class="hist-dot umbra-dot"></span>Umbra
+        <span class="hist-dot capella-dot"></span>Capella
       </div>
-    </section>
+    </div>
+
+    <!-- STAC Export -->
+    <div class="panel-section">
+      <div class="section-title">Export</div>
+      <button id="export-stac-btn" class="export-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export as STAC Collection
+      </button>
+    </div>
 
   </aside>
 
-  <!-- Map -->
-  <div id="map"></div>
+  <!-- ── Map area ──────────────────────────────────────────── -->
+  <div id="map-area">
 
-  <!-- Detail panel -->
-  <div id="detail-panel" class="hidden">
-    <button id="detail-close">✕</button>
-    <div id="detail-content"></div>
+    <!-- Floating provider pills -->
+    <div id="provider-pills">
+      <button class="pill iceye active" id="pill-iceye" data-provider="iceye">
+        <span class="pill-dot"></span> ICEYE <span class="pill-count" id="pill-cnt-iceye">—</span>
+      </button>
+      <button class="pill umbra active" id="pill-umbra" data-provider="umbra">
+        <span class="pill-dot"></span> Umbra <span class="pill-count" id="pill-cnt-umbra">—</span>
+      </button>
+      <button class="pill capella active" id="pill-capella" data-provider="capella">
+        <span class="pill-dot"></span> Capella <span class="pill-count" id="pill-cnt-capella">—</span>
+      </button>
+    </div>
+
+    <!-- Country tooltip -->
+    <div id="country-tooltip"></div>
+
+    <div id="map"></div>
+
+    <!-- Detail panel -->
+    <div id="detail-panel" class="hidden">
+      <button id="detail-close">✕ close</button>
+      <div id="detail-content"></div>
+    </div>
+
   </div>
 
+</div>
+
+<!-- Bottom total bar -->
+<div id="total-bar">
+  <span id="total-bar-label">
+    <strong id="total-vis">—</strong> visible scenes &nbsp;·&nbsp;
+    <span id="total-all">—</span> total loaded
+  </span>
+  <span id="total-bar-breakdown">
+    <span class="tb-dot iceye-dot"></span><span id="tb-iceye">—</span>
+    <span class="tb-dot umbra-dot"></span><span id="tb-umbra">—</span>
+    <span class="tb-dot capella-dot"></span><span id="tb-capella">—</span>
+  </span>
 </div>
 
 <!-- Loading overlay -->
@@ -113,6 +156,8 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
