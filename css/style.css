@@ -150,6 +150,7 @@ select#mode-filter:focus { border-color: var(--accent); }
   font-size: 11px; color: var(--muted);
   border-top: 1px solid var(--border); flex-shrink: 0;
   display: flex; flex-direction: column; gap: 6px;
+  overflow: hidden;
 }
 .sidebar-footer a { color: var(--umbra); text-decoration: none; }
 .sidebar-footer a:hover { text-decoration: underline; color: var(--iceye); }
