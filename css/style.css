@@ -67,14 +67,15 @@ body.sidebar-collapsed #sidebar-toggle svg { transform: rotate(180deg); }
 /* ── Detail panel toggle tab (fixed, right side) ──────────── */
 #detail-toggle {
   position: fixed; right: var(--detail-w); top: 50%; transform: translateY(-50%);
-  z-index: 200; width: 16px; height: 48px; padding: 0;
+  z-index: 1100; width: 16px; height: 48px; padding: 0;
   background: var(--surface); border: 1px solid var(--border);
   border-right: none; border-radius: 8px 0 0 8px;
   color: var(--muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: right .2s ease, color .15s, opacity .15s;
+  box-shadow: -2px 0 8px rgba(0,0,0,.4);
 }
-#detail-toggle:hover { color: var(--text); }
+#detail-toggle:hover { color: var(--text); background: var(--surface2, #21262d); }
 #detail-toggle svg { width: 10px; height: 10px; transition: transform .2s; }
 #detail-toggle.hidden { opacity: 0; pointer-events: none; right: 0; }
 body.detail-collapsed #detail-toggle svg { transform: rotate(180deg); }
