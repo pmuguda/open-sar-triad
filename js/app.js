@@ -139,7 +139,7 @@ function centroid(geom) {
 function drawHistogram(counts, label) {
   const canvas = document.getElementById('histogram');
   const W = canvas.offsetWidth || 240;
-  const H = 90;
+  const H = 110;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, W, H);
@@ -155,7 +155,7 @@ function drawHistogram(counts, label) {
 
   providers.forEach((pid, i) => {
     const x = gap + i * (barW + gap);
-    const barH = Math.max(2, Math.round((vals[i] / max) * (H - 28)));
+    const barH = Math.max(2, Math.round((vals[i] / max) * (H - 42)));
     const y = H - 18 - barH;
     const color = PROVIDER_COLORS[pid];
     ctx.fillStyle = color + '33'; ctx.strokeStyle = color; ctx.lineWidth = 1;
