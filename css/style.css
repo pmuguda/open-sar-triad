@@ -148,8 +148,8 @@ select#mode-filter:focus { border-color: var(--accent); }
   border-top: 1px solid var(--border); flex-shrink: 0;
   display: flex; flex-direction: column; gap: 6px;
 }
-.sidebar-footer a { color: var(--accent); text-decoration: none; }
-.sidebar-footer a:hover { text-decoration: underline; }
+.sidebar-footer a { color: var(--umbra); text-decoration: none; }
+.sidebar-footer a:hover { text-decoration: underline; color: var(--iceye); }
 
 .kofi-btn {
   display: flex; align-items: center; justify-content: center; gap: 7px;
