@@ -16,7 +16,8 @@ let dateMin = 0, dateMax = 0;
 const providerActive = { iceye: true, umbra: true, capella: true };
 
 // ── Map ────────────────────────────────────────────────────
-const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: true });
+const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: false });
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
   subdomains: 'abcd', maxZoom: 19,
