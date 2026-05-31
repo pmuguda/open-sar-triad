@@ -189,9 +189,12 @@ function proxyThumb(url, provider) {
 
 function showDetail(p) {
   const thumbSrc = proxyThumb(p.thumbnail, p.provider);
+  const noPreviewMsg = p.provider === 'umbra'
+    ? 'Umbra open data does not include preview images'
+    : 'Preview unavailable';
   const thumbHtml = thumbSrc
-    ? `<img class="detail-thumbnail" src="${thumbSrc}" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>Preview unavailable</div>'" />`
-    : `<div class="detail-thumb-placeholder">No preview available</div>`;
+    ? `<img class="detail-thumbnail" src="${thumbSrc}" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>${noPreviewMsg}</div>'" />`
+    : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
 
   const rows = [
     ['Date',            p.date             || '—'],
