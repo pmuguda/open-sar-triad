@@ -106,11 +106,14 @@ function render() {
     const color = PROVIDER_COLORS[p.provider];
     const layer = L.geoJSON(feat, {
       style: { color, weight: 1, opacity: .8, fillColor: color, fillOpacity: .08 },
+      interactive: !countryMode,  // pass-through clicks when country mode active
     });
-    layer.on('click',     () => showDetail(p));
-    layer.on('mouseover', function () { this.setStyle({ fillOpacity: .28, weight: 1.5 }); });
-    layer.on('mouseout',  function () { this.setStyle({ fillOpacity: .08, weight: 1 }); });
-    layer.bindPopup(makePopup(p), { maxWidth: 280 });
+    if (!countryMode) {
+      layer.on('click',     () => showDetail(p));
+      layer.on('mouseover', function () { this.setStyle({ fillOpacity: .28, weight: 1.5 }); });
+      layer.on('mouseout',  function () { this.setStyle({ fillOpacity: .08, weight: 1 }); });
+      layer.bindPopup(makePopup(p), { maxWidth: 280 });
+    }
     layer.addTo(map);
     activeLayers[p.id] = layer;
     counts[p.provider]++;
@@ -120,8 +123,6 @@ function render() {
   document.getElementById('total-vis').textContent = total;
   drawHistogram(counts);
 
-  // Keep country layer on top of scene polygons so clicks reach it
-  if (countryMode && countryLayer) countryLayer.bringToFront();
 }
 
 function centroid(geom) {
@@ -300,14 +301,13 @@ function setCountryMode(on) {
   if (on) {
     document.body.classList.add('mode-country');
     showHint('Hover and click a country to filter scenes');
-    loadCountries().then(() => {
-      // Bring country layer on top so clicks reach it above scene polygons
-      if (countryLayer) countryLayer.bringToFront();
-    });
+    render(); // rebuild scenes as non-interactive so clicks reach country layer
+    loadCountries();
   } else {
     document.body.classList.remove('mode-country');
     hideHint();
     tooltip.style.display = 'none';
+    render(); // rebuild scenes as interactive again
   }
 }
 
@@ -335,7 +335,7 @@ const ISO_NAMES = {
 };
 
 async function loadCountries() {
-  if (countriesLoaded) { if (countryLayer) countryLayer.bringToFront(); return; }
+  if (countriesLoaded) return;
   try {
     const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
     const topo  = await res.json();
