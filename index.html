@@ -12,6 +12,21 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
+
+<!-- Sidebar collapse tab (fixed, like bboxer) -->
+<button id="sidebar-toggle" title="Toggle sidebar">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <path d="M10 3L5 8l5 5"/>
+  </svg>
+</button>
+
+<!-- Detail panel collapse tab (fixed, right side) -->
+<button id="detail-toggle" class="hidden" title="Toggle detail panel">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <path d="M6 3l5 5-5 5"/>
+  </svg>
+</button>
+
 <div id="app">
 
   <!-- ── Sidebar ─────────────────────────────────────────── -->
@@ -38,7 +53,7 @@
     </div>
 
     <div class="panel-section" id="histogram-section">
-      <div class="section-title">Scene Coverage</div>
+      <div class="section-title" id="hist-title">Scene Coverage</div>
       <canvas id="histogram" height="90"></canvas>
       <div class="hist-legend">
         <span class="hist-dot iceye-dot"></span>ICEYE
@@ -60,24 +75,17 @@
     </div>
   </aside>
 
-  <!-- Sidebar collapse tab -->
-  <button id="sidebar-toggle" title="Toggle sidebar">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-      <path d="M10 3L5 8l5 5"/>
-    </svg>
-  </button>
-
   <!-- ── Map area ─────────────────────────────────────────── -->
   <div id="map-area">
 
-    <!-- Provider pills -->
+    <!-- Provider pills (compact, top-left) -->
     <div id="provider-pills">
-      <button class="pill iceye active"   id="pill-iceye"   data-provider="iceye">  <span class="pill-dot"></span>ICEYE   <span class="pill-count" id="pill-cnt-iceye">—</span></button>
-      <button class="pill umbra active"   id="pill-umbra"   data-provider="umbra">  <span class="pill-dot"></span>Umbra   <span class="pill-count" id="pill-cnt-umbra">—</span></button>
-      <button class="pill capella active" id="pill-capella" data-provider="capella"><span class="pill-dot"></span>Capella <span class="pill-count" id="pill-cnt-capella">—</span></button>
+      <button class="pill iceye active"   id="pill-iceye"   data-provider="iceye">  <span class="pill-dot"></span>ICEYE</button>
+      <button class="pill umbra active"   id="pill-umbra"   data-provider="umbra">  <span class="pill-dot"></span>Umbra</button>
+      <button class="pill capella active" id="pill-capella" data-provider="capella"><span class="pill-dot"></span>Capella</button>
     </div>
 
-    <!-- Floating AOI toolbar (top-right, like bboxer) -->
+    <!-- Floating AOI toolbar (top-right) -->
     <div id="aoi-toolbar">
       <button class="tb-btn" id="tb-bbox" title="Draw BBox">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -125,7 +133,6 @@
 
     <!-- Detail panel -->
     <div id="detail-panel" class="hidden">
-      <button id="detail-close">✕ close</button>
       <div id="detail-content"></div>
     </div>
   </div>
@@ -134,18 +141,16 @@
 
 <!-- ── Bottom bar ───────────────────────────────────────────── -->
 <div id="bottom-bar">
-  <!-- Date range slider (center) -->
   <div id="date-bar">
     <span class="date-bar-label" id="date-label-from">—</span>
     <div id="date-slider"></div>
     <span class="date-bar-label" id="date-label-to">—</span>
   </div>
-  <!-- Total count (right) -->
   <div id="total-bar">
-    <span id="total-vis-wrap"><strong id="total-vis">—</strong> visible</span>
-    <span class="tb-dot iceye-dot"></span><span id="tb-iceye">—</span>
-    <span class="tb-dot umbra-dot"></span><span id="tb-umbra">—</span>
-    <span class="tb-dot capella-dot"></span><span id="tb-capella">—</span>
+    <strong id="total-vis">—</strong><span style="color:var(--muted)"> visible</span>
+    <span class="tb-dot iceye-dot"></span>
+    <span class="tb-dot umbra-dot"></span>
+    <span class="tb-dot capella-dot"></span>
   </div>
 </div>
 
