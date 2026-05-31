@@ -135,6 +135,36 @@ select#mode-filter:focus { border-color: var(--accent); }
 .umbra-dot   { background: var(--umbra); }
 .capella-dot { background: var(--capella); }
 
+/* ── Mode breakdown ───────────────────────────────────────── */
+#mode-stats { display: flex; flex-direction: column; gap: 8px; }
+
+.mode-row { display: flex; flex-direction: column; gap: 3px; }
+
+.mode-row-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: var(--muted);
+}
+.mode-row-label .mode-name {
+  text-transform: capitalize; font-weight: 500; color: var(--text); font-size: 11.5px;
+}
+.mode-row-label .mode-total { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+.mode-bar {
+  display: flex; width: 100%; height: 18px;
+  border-radius: 4px; overflow: hidden;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.mode-bar-seg {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 700; color: #000;
+  font-variant-numeric: tabular-nums;
+  transition: flex .25s ease;
+  overflow: hidden; white-space: nowrap;
+}
+.mode-bar-seg.iceye   { background: var(--iceye); }
+.mode-bar-seg.umbra   { background: var(--umbra); }
+.mode-bar-seg.capella { background: var(--capella); }
+
 /* ── Export ───────────────────────────────────────────────── */
 .export-btn {
   display: flex; align-items: center; justify-content: center; gap: 6px;
