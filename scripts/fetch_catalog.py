@@ -186,7 +186,7 @@ def normalize_row(row, provider_id):
             "color":           info["color"],
             "date":            date_str,
             "year":            year,
-            "sensor_mode":     str(sensor_mode) if sensor_mode else "N/A",
+            "sensor_mode":     (str(sensor_mode).lower() if sensor_mode else "n/a"),
             "resolution":      resolution,
             "polarization":    str(polarization) if polarization else None,
             "incidence_angle": incidence_angle,

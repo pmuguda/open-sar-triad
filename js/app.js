@@ -309,9 +309,17 @@ document.getElementById('mode-filter').addEventListener('change', render);
 
 function populateModes(features) {
   const modes = new Set();
-  features.forEach(f => { const m = f.properties.sensor_mode; if (m && m !== 'N/A') modes.add(m); });
+  features.forEach(f => {
+    const m = f.properties.sensor_mode;
+    if (m && m.toLowerCase() !== 'n/a') modes.add(m.toLowerCase());
+  });
   const sel = document.getElementById('mode-filter');
-  [...modes].sort().forEach(m => { const o = document.createElement('option'); o.value=m; o.textContent=m; sel.appendChild(o); });
+  [...modes].sort().forEach(m => {
+    const o = document.createElement('option');
+    o.value = m;
+    o.textContent = m.replace(/_/g, ' ');
+    sel.appendChild(o);
+  });
 }
 
 // ── Date slider ─────────────────────────────────────────────
