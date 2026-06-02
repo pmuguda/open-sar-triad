@@ -4,6 +4,8 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 **Live application:** https://pmuguda.github.io/open-sar-triad
 
+**Support this project:** https://ko-fi.com/pavan_muguda
+
 ---
 
 ## Table of Contents
