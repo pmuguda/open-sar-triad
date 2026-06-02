@@ -8,6 +8,30 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 ---
 
+## Demo
+
+**Toggle providers on and off**
+
+![Provider toggle](assets/01-provider-toggle.gif)
+
+**Filter by date range**
+
+![Date range filter](assets/02-date-range.gif)
+
+**Filter by sensor mode**
+
+![Sensor mode filter](assets/03-sensor-mode.gif)
+
+**Draw a bounding box area of interest**
+
+![Draw bounding box](assets/04-draw-bbox.gif)
+
+**Click a scene to view metadata and download link**
+
+![Scene detail panel](assets/05-scene-detail.gif)
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)
