@@ -6,3 +6,4 @@ vendor/
 index-offline.html
 index-record.html
 data/scenes-small.geojson
+js/app-record.js
