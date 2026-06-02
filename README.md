@@ -1,43 +1,325 @@
 # open-sar-triad
 
-An interactive map explorer for open SAR datasets from **ICEYE**, **Umbra**, and **Capella** — the three leading commercial SAR providers with public open data programs.
+An interactive, browser-based map explorer for discovering and filtering open Synthetic Aperture Radar (SAR) scene catalogs from three major commercial satellite operators: **ICEYE**, **Umbra**, and **Capella**. Every scene footprint is rendered as a polygon on a world map. Users can filter by provider, date range, sensor mode, and geographic area of interest, then export results in STAC format.
 
-🌐 **Live**: [pmuguda.github.io/open-sar-triad](https://pmuguda.github.io/open-sar-triad)
+**Live application:** https://pmuguda.github.io/open-sar-triad
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Data Sources](#data-sources)
+- [Upstream Data Repository](#upstream-data-repository)
+- [Project Structure](#project-structure)
+- [Architecture](#architecture)
+- [Data Pipeline](#data-pipeline)
+- [Filter Reference](#filter-reference)
+- [Local Development](#local-development)
+- [Deployment](#deployment)
+- [Automated Data Refresh](#automated-data-refresh)
+- [Dependencies](#dependencies)
+- [License](#license)
+
+---
+
+## Overview
+
+open-sar-triad is a fully static web application with no backend. All scene data is stored as a single GeoJSON file (`data/scenes.geojson`) and loaded directly in the browser. Filtering, map rendering, and export are handled entirely client-side using vanilla JavaScript and the Leaflet mapping library. The scene catalog is automatically refreshed every Monday via a GitHub Actions workflow.
+
+The three providers represented in this tool each operate public open data programs under CC-BY 4.0 licenses:
+
+| Provider | Brand Color |
+|----------|-------------|
+| ICEYE | Green (#00FF87) |
+| Umbra | Blue (#00C9FF) |
+| Capella | Orange (#FF6B35) |
 
 ---
 
 ## Features
 
-- 🗺️ Leaflet map with footprint polygons for every open scene
-- 🔍 Filter by provider, date range, sensor mode, and drawn bounding box
-- 📍 Location search (powered by Nominatim)
-- 🖼️ Scene detail panel with thumbnail, metadata, download link, and provider page
-- 🔄 Weekly auto-refresh via GitHub Actions (every Monday 03:00 UTC)
-- ⚡ Fully static — hosted on GitHub Pages, no backend
+**Map and visualization**
+- Leaflet map with a CartoDB dark basemap
+- Scene footprints rendered as colored polygons, one per acquisition
+- Clickable scenes open a detail panel showing thumbnail, metadata, and a direct download link
 
-## Data sources
+**Filtering**
+- Toggle individual providers on or off
+- Filter by date range using an interactive slider
+- Filter by sensor mode (Stripmap, Spotlight, ScanSAR, etc.)
+- Draw a bounding box or polygon on the map to filter by geographic area
+- Click a country to filter scenes that intersect its territory
+- Upload a custom GeoJSON file to use as an area of interest
 
-| Provider | Open Data Program | STAC Catalog |
-|----------|-------------------|--------------|
-| [ICEYE](https://www.iceye.com/open-data-initiative) | CC-BY 4.0 | `iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json` |
-| [Umbra](https://umbra.space/open-data/) | CC-BY 4.0 | `s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json` |
-| [Capella](https://www.capellaspace.com/community/capella-open-data-program/) | CC-BY 4.0 | `capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json` |
+**Statistics panel**
+- Bar chart showing scene count per provider for the current filter state
+- Stacked horizontal bar chart showing sensor mode breakdown per provider
 
-## Local development
+**Export**
+- Export all currently visible scenes as a STAC-compliant GeoJSON collection
 
-```bash
-# Fetch latest scene data
-python3 scripts/fetch_catalog.py
+**Automation**
+- Scene catalog refreshed every Monday at 03:00 UTC via GitHub Actions
+- Deployed automatically to GitHub Pages on every push to `main`
 
-# Serve locally
-python3 -m http.server 8767
-# open http://localhost:8767
+---
+
+## Data Sources
+
+Scene metadata originates from the public STAC catalogs maintained by each provider.
+
+| Provider | Open Data Program | STAC Catalog Endpoint | License |
+|----------|-------------------|-----------------------|---------|
+| ICEYE | https://www.iceye.com/open-data-initiative | `iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json` | CC-BY 4.0 |
+| Umbra | https://umbra.space/open-data/ | `s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json` | CC-BY 4.0 |
+| Capella | https://www.capellaspace.com/community/capella-open-data-program/ | `capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json` | CC-BY 4.0 |
+
+---
+
+## Upstream Data Repository
+
+The data pipeline in this project does **not** crawl the STAC catalogs directly. Instead, it consumes pre-built GeoParquet files maintained by the repository:
+
+**https://github.com/Jack-Hayes/commerical-sar-stac**
+
+That repository processes the three providers' STAC catalogs on a regular cadence and publishes normalized GeoParquet files under the path `parquets/viz/`. This project's fetch script downloads those files directly and converts them to GeoJSON.
+
+The specific Parquet files consumed are:
+
+| Provider | File(s) |
+|----------|---------|
+| ICEYE | `parquets/viz/iceye/iceye.parquet` |
+| Umbra | `parquets/viz/umbra/umbra.parquet` |
+| Capella | `parquets/viz/capella/capella_GEC.parquet` |
+| | `parquets/viz/capella/capella_GEO.parquet` |
+| | `parquets/viz/capella/capella_SLC.parquet` |
+| | `parquets/viz/capella/capella_SICD.parquet` |
+| | `parquets/viz/capella/capella_SIDD.parquet` |
+| | `parquets/viz/capella/capella_CSI.parquet` |
+| | `parquets/viz/capella/capella_CPHD.parquet` |
+
+All scene data credit goes to Jack-Hayes/commerical-sar-stac and the original providers.
+
+---
+
+## Project Structure
+
+```
+open-sar-triad/
+├── .github/
+│   └── workflows/
+│       ├── deploy.yml          # GitHub Pages deployment workflow
+│       └── fetch-data.yml      # Weekly data refresh workflow
+├── css/
+│   └── style.css               # All application styles (~20 KB)
+├── data/
+│   └── scenes.geojson          # Generated scene catalog (~17 MB, git-tracked)
+├── js/
+│   └── app.js                  # Main application logic (~30 KB, 666 lines)
+├── scripts/
+│   └── fetch_catalog.py        # Data pipeline: downloads Parquet, outputs GeoJSON
+├── index.html                  # Application shell and UI layout
+├── requirements.txt            # Python dependencies for the fetch script
+└── .gitignore
 ```
 
-## Refresh cadence
+---
 
-The `fetch-data` GitHub Action runs every Monday and commits an updated `data/scenes.geojson`. You can also trigger it manually from the Actions tab.
+## Architecture
+
+**Frontend**
+
+The application is a single HTML page with no build step and no framework. `index.html` defines the UI layout; `css/style.css` applies a dark theme; `js/app.js` contains all application logic.
+
+On page load, `app.js` fetches `data/scenes.geojson` and stores the full feature array in memory. All filtering operates on this in-memory array — no server requests are made after the initial load. Leaflet GeoJSON layers are added and removed from the map on every filter change.
+
+Key global state managed by `app.js`:
+
+| Variable | Description |
+|----------|-------------|
+| `allFeatures` | Full array of GeoJSON features loaded at startup |
+| `activeLayers` | Leaflet layer objects currently rendered on the map |
+| `aoiBbox` | `[west, south, east, north]` from a drawn area of interest |
+| `countryLayer` | TopoJSON-derived Leaflet layer for country boundaries |
+| `selectedCountry` | Currently selected country `{ layer, bbox, name }` |
+| `dateSlider` | noUiSlider instance for the date range control |
+| `providerActive` | `{ iceye, umbra, capella }` boolean flags |
+
+Key functions in `app.js`:
+
+| Function | Purpose |
+|----------|---------|
+| `getFilters()` | Reads all UI controls and returns the current filter state |
+| `render()` | Applies filters to `allFeatures`, rebuilds map layers, updates stats |
+| `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
+| `drawHistogram()` | Renders the provider scene-count bar chart on a canvas element |
+| `drawModeBreakdown()` | Renders the stacked sensor-mode bar chart |
+| `showDetail()` | Populates the right-side detail panel with scene metadata |
+| `bboxFromGeometry()` | Extracts a bounding box from any GeoJSON geometry |
+| `unwrapAntimeridian()` | Corrects polygon coordinates that cross the ±180° meridian |
+| `loadCountries()` | Fetches world-atlas TopoJSON and creates interactive country polygons |
+| `startDraw()` | Activates Leaflet-Draw rectangle or polygon drawing mode |
+| `initDateSlider()` | Builds the noUiSlider control using the data's actual date range |
+| `populateModes()` | Populates the sensor mode dropdown from the loaded feature set |
+
+**Data file**
+
+`data/scenes.geojson` is a standard GeoJSON FeatureCollection. Each feature represents one SAR scene acquisition. The top-level object includes:
+
+```json
+{
+  "type": "FeatureCollection",
+  "generated_at": "<ISO 8601 timestamp>",
+  "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
+  "features": [...]
+}
+```
+
+Each feature carries the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Provider-assigned scene identifier |
+| `provider` | string | `iceye`, `umbra`, or `capella` |
+| `provider_label` | string | Display name for the provider |
+| `color` | string | Hex color used on the map |
+| `date` | string | Acquisition date in `YYYY-MM-DD` format |
+| `year` | integer | Acquisition year |
+| `sensor_mode` | string | Sensor mode in lowercase (e.g. `stripmap`, `spotlight`) |
+| `resolution` | number | Ground range resolution in metres, if available |
+| `polarization` | string | Polarization channels (e.g. `VV`, `HH, HV`) |
+| `incidence_angle` | number | Look angle in degrees, if available |
+| `off_nadir` | number | Off-nadir angle in degrees, if available |
+| `thumbnail` | string | URL to a preview image |
+| `download` | string | URL to the scene data asset |
+| `provider_url` | string | URL to the provider's open data program page |
+| `collection` | string | Product type or collection name |
+
+---
+
+## Data Pipeline
+
+The script `scripts/fetch_catalog.py` is responsible for building `data/scenes.geojson`. It requires Python 3.11 or later.
+
+**Steps:**
+
+1. For each provider, download the corresponding Parquet file(s) from the `Jack-Hayes/commerical-sar-stac` repository on GitHub.
+2. Read each Parquet file into a Pandas DataFrame using PyArrow.
+3. Deduplicate rows by `id` within each provider.
+4. Convert each row to a GeoJSON Feature using `normalize_row()`:
+   - Parse geometry from the `geometry_geojson` column.
+   - Extract acquisition date from `datetime` or `start_datetime`.
+   - Normalize sensor mode to lowercase.
+   - Parse asset URLs (thumbnail and data download) from the nested `assets` field.
+   - Skip rows whose `id` contains `footprint` or `collection` (these are catalog metadata entries, not real acquisitions).
+5. Merge all providers into a single list of features.
+6. Write the merged FeatureCollection to `data/scenes.geojson` as compact JSON.
+
+**Fallback behavior:** If a provider's Parquet files cannot be fetched (network failure, HTTP error), the script retains that provider's data from the existing `data/scenes.geojson` rather than writing an empty result.
+
+**Python dependencies:**
+
+```
+pyarrow>=14.0
+pandas>=2.0
+```
+
+---
+
+## Filter Reference
+
+| Filter | UI Control | Behavior |
+|--------|-----------|---------|
+| Provider | Pill toggles at the top of the sidebar | Shows or hides all scenes from a given provider |
+| Date range | Dual-handle slider | Inclusive filter on the `date` property |
+| Sensor mode | Dropdown select | Exact match on the normalized `sensor_mode` value; "All modes" disables this filter |
+| Bounding box | Draw rectangle or polygon button on the map toolbar | Filters to scenes whose centroid falls within the drawn area |
+| Country | Country picker button on the map toolbar, then click a country | Filters to scenes whose centroid falls within the country's bounding box |
+| GeoJSON upload | File input in the sidebar | Extracts the bounding box of the uploaded geometry and applies it as an area-of-interest filter |
+
+All filters are combined with AND logic: a scene must pass every active filter to appear on the map and in the statistics.
+
+---
+
+## Local Development
+
+**Requirements:** Python 3.11+, a browser.
+
+```bash
+# Clone the repository
+git clone https://github.com/pmuguda/open-sar-triad.git
+cd open-sar-triad
+
+# (Optional) Refresh the scene catalog from upstream
+pip install -r requirements.txt
+python3 scripts/fetch_catalog.py
+
+# Serve the application locally
+python3 -m http.server 8767
+# Then open http://localhost:8767 in a browser
+```
+
+The `data/scenes.geojson` file is already committed to the repository, so you do not need to run the fetch script to get the application working locally.
+
+---
+
+## Deployment
+
+The application is hosted on GitHub Pages as a static site. There is no build step.
+
+The workflow at `.github/workflows/deploy.yml` triggers on every push to the `main` branch and on manual dispatch. It uploads the entire repository as a Pages artifact and deploys it. No compilation, bundling, or server configuration is required.
+
+---
+
+## Automated Data Refresh
+
+The workflow at `.github/workflows/fetch-data.yml` runs every Monday at 03:00 UTC (cron schedule `0 3 * * 1`) and can also be triggered manually from the Actions tab.
+
+Steps performed by the workflow:
+
+1. Check out the repository.
+2. Set up Python 3.11.
+3. Install `requirements.txt`.
+4. Run `scripts/fetch_catalog.py`.
+5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
+6. The deploy workflow then picks up the push and publishes the updated catalog to GitHub Pages.
+
+---
+
+## Dependencies
+
+**JavaScript (loaded from CDN)**
+
+| Library | Version | Purpose | License |
+|---------|---------|---------|---------|
+| Leaflet | 1.9.4 | Interactive map | BSD-2-Clause |
+| Leaflet-Draw | 1.0.4 | Bounding box and polygon drawing tools | MIT |
+| noUiSlider | 15.7.1 | Date range slider | WTFPL |
+| topojson-client | 3.1.0 | Decodes TopoJSON country boundaries | BSD-3-Clause |
+
+**External services**
+
+| Service | Purpose |
+|---------|---------|
+| CartoDB (via OpenStreetMap) | Basemap tiles |
+| world-atlas (unpkg CDN) | Country boundary TopoJSON |
+| images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) |
+
+**Python (data pipeline only)**
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| pyarrow | >=14.0 | Read Parquet files |
+| pandas | >=2.0 | DataFrame operations and deduplication |
+
+---
 
 ## License
 
-Code: MIT. Scene data: CC-BY 4.0 per each provider's open data license.
+Code in this repository is released under the **MIT License**.
+
+Scene data is licensed **CC-BY 4.0** per the open data program terms of each provider (ICEYE, Umbra, and Capella). Attribution must be given to the original provider when redistributing or publishing derived work.
+
+The upstream Parquet files are sourced from [Jack-Hayes/commerical-sar-stac](https://github.com/Jack-Hayes/commerical-sar-stac).
