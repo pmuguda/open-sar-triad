@@ -26,6 +26,10 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 ![Draw bounding box](assets/04-draw-bbox.gif)
 
+**Select a country to filter scenes within its borders**
+
+![Country filter](assets/06-country-filter.gif)
+
 **Click a scene to view metadata and download link**
 
 ![Scene detail panel](assets/05-scene-detail.gif)
