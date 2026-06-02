@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/
+vendor/
+index-offline.html
+index-record.html
+data/scenes-small.geojson
