@@ -353,3 +353,8 @@ Code in this repository is released under the **MIT License**.
 Scene data is licensed **CC-BY 4.0** per the open data program terms of each provider (ICEYE, Umbra, and Capella). Attribution must be given to the original provider when redistributing or publishing derived work.
 
 The upstream Parquet files are sourced from [Jack-Hayes/commerical-sar-stac](https://github.com/Jack-Hayes/commerical-sar-stac).
+
+## Acknowledgements
+This project was developed with AI assistance (Claude by Anthropic) for code 
+generation and debugging. Architecture decisions, refinements, and 
+ongoing maintenance are made by me.
