@@ -47,6 +47,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Filter Reference](#filter-reference)
 - [Local Development](#local-development)
 - [Deployment](#deployment)
+- [Progressive Web App](#progressive-web-app)
 - [Automated Data Refresh](#automated-data-refresh)
 - [Dependencies](#dependencies)
 - [License](#license)
@@ -99,6 +100,11 @@ The three providers represented in this tool each operate public open data progr
 - Export all currently visible scenes as a STAC-compliant GeoJSON collection
 - Generate a bash download script that saves scene assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
+
+**Progressive Web App**
+- Installable from Chrome/Edge without an app store or approval process
+- Opens in a standalone app window with its own dock/taskbar entry
+- Service worker caches the app shell, catalog, icons, and core map dependencies for offline repeat visits
 
 **Automation**
 - Scene catalog refreshed every Monday at 03:00 UTC via GitHub Actions
@@ -153,7 +159,10 @@ open-sar-triad/
 │       ├── deploy.yml          # GitHub Pages deployment workflow
 │       └── fetch-data.yml      # Weekly data refresh workflow
 ├── assets/
-│   └── logo.svg                # Repository logo used by the README
+│   ├── logo.svg                # Repository logo used by the README
+│   ├── pwa-icon.svg            # Source PWA install icon
+│   ├── pwa-icon-192.png        # 192px install icon
+│   └── pwa-icon-512.png        # 512px install icon
 ├── css/
 │   ├── style.css               # All application styles
 │   └── tour.css                # Onboarding tour overlay and tooltip styles
@@ -165,6 +174,8 @@ open-sar-triad/
 ├── scripts/
 │   └── fetch_catalog.py        # Data pipeline: downloads Parquet, outputs GeoJSON
 ├── index.html                  # Application shell and UI layout
+├── manifest.json               # PWA install metadata
+├── sw.js                       # Service worker for offline caching
 ├── requirements.txt            # Python dependencies for the fetch script
 └── .gitignore
 ```
@@ -331,6 +342,20 @@ The `data/scenes.geojson` file is already committed to the repository, so you do
 The application is hosted on GitHub Pages as a static site. There is no build step.
 
 The workflow at `.github/workflows/deploy.yml` triggers on every push to the `main` branch and on manual dispatch. It uploads the entire repository as a Pages artifact and deploys it. No compilation, bundling, or server configuration is required.
+
+---
+
+## Progressive Web App
+
+open-sar-triad includes a lightweight PWA setup:
+
+- `manifest.json` defines the installable app name, standalone display mode, theme colors, and icons.
+- `sw.js` precaches the static app shell, scene catalog, PWA icons, and core CDN dependencies.
+- `index.html` registers the service worker and exposes the manifest to browsers.
+
+On Chrome or Edge, users can install the live site directly from the browser address bar. The installed app opens in a standalone window without browser chrome and appears in the operating system dock or taskbar. After the first successful load, repeat visits can open from cache even when offline. Map tiles and external thumbnails are cached opportunistically as users browse, so previously viewed map areas and previews are more likely to be available offline.
+
+No app store, signing step, review, or approval process is required.
 
 ---
 

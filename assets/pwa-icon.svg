@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">open-sar-triad app icon</title>
+  <desc id="desc">Square install icon for open-sar-triad showing three SAR provider tracks over an acquisition footprint.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#151d26"/>
+      <stop offset="1" stop-color="#080d12"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="#0d1117"/>
+  <rect x="38" y="38" width="436" height="436" fill="url(#bg)" stroke="#303b46" stroke-width="6"/>
+  <path d="M110 142h292M110 256h292M110 370h292M142 110v292M256 110v292M370 110v292" stroke="#263541" stroke-width="4" opacity=".72"/>
+  <polygon points="142,344 314,232 392,292 204,410" fill="#f0b94f" fill-opacity=".14" stroke="#f0b94f" stroke-width="7"/>
+  <polygon points="172,302 294,224 346,266 218,344" fill="#f0b94f" fill-opacity=".20" stroke="#f0b94f" stroke-opacity=".7" stroke-width="5"/>
+  <path d="M92 100C188 46 324 48 420 108" fill="none" stroke="#f0b94f" stroke-width="6" stroke-opacity=".45"/>
+  <path d="M104 120l280 224" fill="none" stroke="#49e68d" stroke-width="9" stroke-linecap="round"/>
+  <path d="M256 76l98 276" fill="none" stroke="#5dd2ff" stroke-width="9" stroke-linecap="round"/>
+  <path d="M420 122L242 408" fill="none" stroke="#ff7848" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="104" cy="120" r="19" fill="#49e68d" filter="url(#glow)"/>
+  <circle cx="256" cy="76" r="19" fill="#5dd2ff" filter="url(#glow)"/>
+  <circle cx="420" cy="122" r="19" fill="#ff7848" filter="url(#glow)"/>
+  <circle cx="286" cy="318" r="12" fill="#f0b94f"/>
+  <path d="M114 444h284" stroke="#f0b94f" stroke-width="6" stroke-opacity=".72"/>
+  <path d="M142 464h228" stroke="#f0b94f" stroke-width="4" stroke-opacity=".38"/>
+</svg>
