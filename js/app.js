@@ -1,5 +1,13 @@
 /* open-sar-triad — app.js */
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('Service worker registration failed', err);
+    });
+  });
+}
+
 const PROVIDER_COLORS = { iceye: '#00FF87', umbra: '#00C9FF', capella: '#FF6B35' };
 const PROVIDER_LABELS = { iceye: 'ICEYE', umbra: 'Umbra', capella: 'Capella' };
 
@@ -388,7 +396,7 @@ function updateModes() {
 function makePopup(p) {
   const dlUrl = safeUrl(p.download);
   const pvUrl = safeUrl(p.provider_url);
-  const det = `<button class="popup-btn details-btn" onclick="showDetailById('${esc(p.id)}')">Details</button>`;
+  const det = `<button class="popup-btn details-btn" data-detail-id="${esc(p.id)}">Details</button>`;
   const dl  = dlUrl ? `<a class="popup-btn" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download</a>` : '';
   const pv  = pvUrl ? `<a class="popup-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.provider_label)}</a>` : '';
   return `<div class="popup-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
@@ -414,6 +422,12 @@ window.showDetailById = id => {
   if (f) showDetail(f.properties);
 };
 
+document.getElementById('map').addEventListener('click', e => {
+  const btn = e.target.closest('[data-detail-id]');
+  if (!btn) return;
+  window.showDetailById(btn.dataset.detailId);
+});
+
 function proxyThumb(url, provider) {
   if (!safeUrl(url)) return null;
   if (provider === 'iceye') {
@@ -428,7 +442,7 @@ function showDetail(p) {
     ? 'Umbra open data does not include preview images'
     : 'Preview unavailable';
   const thumbHtml = thumbSrc
-    ? `<img class="detail-thumbnail" src="${thumbSrc}" alt="SAR thumbnail" onerror="this.outerHTML='<div class=detail-thumb-placeholder>${noPreviewMsg}</div>'" />`
+    ? `<img class="detail-thumbnail" src="${esc(thumbSrc)}" alt="SAR thumbnail" data-preview-fallback="${esc(noPreviewMsg)}" />`
     : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
 
   const rows = [
@@ -456,6 +470,16 @@ ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_lab
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
 <div class="detail-actions">${dl}${pv}</div>`;
+
+  const img = document.querySelector('#detail-content .detail-thumbnail[data-preview-fallback]');
+  if (img) {
+    img.addEventListener('error', () => {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'detail-thumb-placeholder';
+      placeholder.textContent = img.dataset.previewFallback || 'Preview unavailable';
+      img.replaceWith(placeholder);
+    }, { once: true });
+  }
 
   const panel = document.getElementById('detail-panel');
   panel.scrollTop = 0;
@@ -802,8 +826,20 @@ document.querySelector('[data-export="stac"]').addEventListener('click', () => {
 function fileNameFromUrl(url, fallbackId) {
   try {
     const name = new URL(url).pathname.split('/').pop();
-    return name || fallbackId;
-  } catch { return fallbackId; }
+    return safeFileName(name || fallbackId);
+  } catch { return safeFileName(fallbackId); }
+}
+
+function safeFileName(value) {
+  const cleaned = String(value || 'scene')
+    .replace(/[\\/:*?"<>|`$]/g, '_')
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .trim();
+  return cleaned || 'scene';
+}
+
+function shQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
 }
 
 document.querySelector('[data-export="script"]').addEventListener('click', () => {
@@ -813,7 +849,7 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   const byProvider = { iceye: [], umbra: [], capella: [] };
   visible.forEach(feat => {
     const p = feat.properties;
-    if (p.download && byProvider[p.provider]) byProvider[p.provider].push(p);
+    if (safeUrl(p.download) && byProvider[p.provider]) byProvider[p.provider].push(p);
   });
 
   const counts = Object.fromEntries(
@@ -854,7 +890,7 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
     lines.push(`# ── ${PROVIDER_LABELS[pid]} (${scenes.length} scenes) ${'─'.repeat(40)}`);
     scenes.forEach(p => {
       const fname = fileNameFromUrl(p.download, p.id);
-      lines.push(`dl "${p.download}" "${pid}/${fname}"`);
+      lines.push(`dl ${shQuote(safeUrl(p.download))} ${shQuote(`${pid}/${fname}`)}`);
     });
     lines.push('');
   }

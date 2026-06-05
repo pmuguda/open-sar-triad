@@ -48,6 +48,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Local Development](#local-development)
 - [Deployment](#deployment)
 - [Progressive Web App](#progressive-web-app)
+- [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
 - [Dependencies](#dependencies)
 - [License](#license)
@@ -199,7 +200,7 @@ Key global state managed by `app.js`:
 | `aoiBbox` | `[west, south, east, north]` from a drawn area of interest |
 | `countryLayer` | TopoJSON-derived Leaflet layer for country boundaries |
 | `selectedCountry` | Currently selected country `{ layer, bbox, name }` |
-| `dateSlider` | noUiSlider instance for the date range control |
+| `MONTHS`, `tlFrom`, `tlTo` | Timeline month list and active acquisition-window indices |
 | `providerActive` | `{ iceye, umbra, capella }` boolean flags |
 | `orbitFilter` | Active orbit filter: `''` (all), `'ascending'`, or `'descending'` |
 | `lookFilter` | Active look-direction filter: `''` (all), `'left'`, or `'right'` |
@@ -212,14 +213,15 @@ Key functions in `app.js`:
 | `render()` | Applies filters to `allFeatures`, rebuilds map layers, updates stats |
 | `initCollapsibleTrays()` | Wires the numbered sidebar trays so Acquisition, Coverage, and Export can collapse independently |
 | `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
-| `drawHistogram()` | Renders the provider scene-count bar chart on a canvas element |
-| `drawModeBreakdown()` | Renders the stacked sensor-mode bar chart |
+| `updateCoverage()` | Updates provider scene-count numbers and bars |
+| `updateModes()` | Renders the stacked sensor-mode breakdown |
 | `showDetail()` | Populates the right-side `04 Preview` detail panel with scene metadata |
 | `bboxFromGeometry()` | Extracts a bounding box from any GeoJSON geometry |
 | `unwrapAntimeridian()` | Corrects polygon coordinates that cross the ±180° meridian |
 | `loadCountries()` | Fetches world-atlas TopoJSON and creates interactive country polygons |
 | `startDraw()` | Activates Leaflet-Draw rectangle or polygon drawing mode |
-| `initDateSlider()` | Builds the noUiSlider control using the data's actual date range |
+| `buildTimelineHist()` | Builds the acquisition-window histogram from the loaded scene dates |
+| `setTimelineRange()` | Updates the active acquisition-window range |
 | `populateModes()` | Populates the sensor mode dropdown from the loaded feature set |
 
 **Data file**
@@ -351,11 +353,26 @@ open-sar-triad includes a lightweight PWA setup:
 
 - `manifest.json` defines the installable app name, standalone display mode, theme colors, and icons.
 - `sw.js` precaches the static app shell, scene catalog, PWA icons, and core CDN dependencies.
-- `index.html` registers the service worker and exposes the manifest to browsers.
+- `index.html` exposes the manifest to browsers; `js/app.js` registers the service worker.
 
-On Chrome or Edge, users can install the live site directly from the browser address bar. The installed app opens in a standalone window without browser chrome and appears in the operating system dock or taskbar. After the first successful load, repeat visits can open from cache even when offline. Map tiles and external thumbnails are cached opportunistically as users browse, so previously viewed map areas and previews are more likely to be available offline.
+On Chrome or Edge, users can install the live site directly from the browser address bar. The installed app opens in a standalone window without browser chrome and appears in the operating system dock or taskbar. After the first successful load, repeat visits can open the cached app shell and scene catalog even when offline. Third-party map tiles, provider thumbnails, and scene asset downloads are not cached by the service worker.
 
 No app store, signing step, review, or approval process is required.
+
+---
+
+## Security Notes
+
+open-sar-triad is a static, client-side application with no custom backend and no user accounts. The main security controls are:
+
+- A restrictive Content Security Policy in `index.html`: scripts are limited to this site plus the pinned CDN dependencies, inline scripts are disabled, framing is blocked, and form submissions/base URL rewriting are disabled.
+- CDN JavaScript and CSS dependencies are version-pinned, and Leaflet/Leaflet-Draw assets include Subresource Integrity attributes.
+- Catalog text rendered into popups, preview panels, mode breakdowns, and exported HTML is escaped before insertion.
+- Catalog asset links are accepted only when they use `http:` or `https:`; `javascript:`, `data:`, and other schemes are rejected by the fetch pipeline and checked again in the browser.
+- Generated download scripts quote URLs and destination paths defensively before writing shell commands.
+- The service worker precaches only the app shell, scene catalog, icons, and known CDN dependencies. It does not cache arbitrary third-party provider thumbnails or scene downloads.
+
+The weekly data workflow writes only `data/scenes.geojson`, and the GitHub Pages deployment workflow uses the official Pages actions with least-privilege repository permissions.
 
 ---
 
@@ -382,7 +399,6 @@ Steps performed by the workflow:
 |---------|---------|---------|---------|
 | Leaflet | 1.9.4 | Interactive map | BSD-2-Clause |
 | Leaflet-Draw | 1.0.4 | Bounding box and polygon drawing tools | MIT |
-| noUiSlider | 15.7.1 | Date range slider | WTFPL |
 | topojson-client | 3.1.0 | Decodes TopoJSON country boundaries | BSD-3-Clause |
 
 **External services**
@@ -390,7 +406,7 @@ Steps performed by the workflow:
 | Service | Purpose |
 |---------|---------|
 | CartoDB (via OpenStreetMap) | Basemap tiles |
-| world-atlas (unpkg CDN) | Country boundary TopoJSON |
+| world-atlas (jsDelivr CDN) | Country boundary TopoJSON |
 | images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) |
 
 **Python (data pipeline only)**

@@ -19,6 +19,7 @@ const APP_SHELL = [
   'https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js',
   'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 ];
+const APP_SHELL_URLS = new Set(APP_SHELL.map(url => new URL(url, self.location.href).href));
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
@@ -57,7 +58,9 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(staleWhileRevalidate(request));
+  if (APP_SHELL_URLS.has(request.url)) {
+    event.respondWith(staleWhileRevalidate(request));
+  }
 });
 
 async function cacheFirst(request) {
