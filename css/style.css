@@ -207,6 +207,7 @@ body {
 .btn .gi { width: 13px; height: 13px; color: var(--accent); flex: none; }
 .btn .gi svg { display: block; width: 100%; height: 100%; }
 .btn.reset { margin-top: 14px; }
+.export-note { font-size: 10.5px; color: var(--ink-3); font-family: var(--font-mono); margin: 4px 0 0; padding: 0 2px; line-height: 1.5; min-height: 1em; }
 
 /* coverage readouts */
 .cov { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }

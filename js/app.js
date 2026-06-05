@@ -197,6 +197,7 @@ function render() {
   if (visEl) visEl.textContent = total.toLocaleString('en-US');
   updateCoverage(counts, total);
   updateModes();
+  updateDownloadCount(visible);
   updateTimelineHistogram();
   if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
 }
@@ -225,6 +226,19 @@ function pointInPolygon(pt, geom) {
   if (geom.type === 'Polygon')           return inRing(geom.coordinates[0]);
   if (geom.type === 'MultiPolygon')      return geom.coordinates.some(p => inRing(p[0]));
   return false;
+}
+
+// ── Download count hint ────────────────────────────────────
+function updateDownloadCount(visible) {
+  const el = document.getElementById('dl-count');
+  if (!el) return;
+  const withUrl = visible.filter(f => f.properties.download).length;
+  if (!visible.length) { el.textContent = ''; return; }
+  if (withUrl === visible.length) {
+    el.textContent = `${withUrl.toLocaleString()} scenes have direct download links`;
+  } else {
+    el.textContent = `${withUrl.toLocaleString()} of ${visible.length.toLocaleString()} scenes have direct download links`;
+  }
 }
 
 // ── Coverage stats ─────────────────────────────────────────
@@ -732,10 +746,7 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   a.download = `open-sar-triad-download-${date}.sh`;
   a.click();
   URL.revokeObjectURL(url);
-  const toastMsg = omitted
-    ? `download.sh ready · ${total} of ${visible.length} scenes (${omitted} have no download URL)`
-    : `download.sh ready · ${total} scenes`;
-  showToast(toastMsg);
+  showToast(`download.sh ready · ${total} scenes`);
 });
 
 // ── Copy share link ────────────────────────────────────────
