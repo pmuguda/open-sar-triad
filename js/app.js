@@ -680,10 +680,10 @@ function initGeoPills(groupId, onChange) {
 initGeoPills('orbit-pills', val => { orbitFilter = val; });
 initGeoPills('look-pills',  val => { lookFilter  = val; });
 
-// ── Collapsible sidebar sections ─────────────────────────────
-document.querySelectorAll('.collapsible-hdr').forEach(hdr => {
+// ── Collapsible sidebar trays ─────────────────────────────────
+document.querySelectorAll('.tray-header').forEach(hdr => {
   hdr.addEventListener('click', () => {
-    hdr.closest('.panel-section').classList.toggle('sect-collapsed');
+    hdr.closest('.sidebar-tray').classList.toggle('tray-collapsed');
   });
 });
 
