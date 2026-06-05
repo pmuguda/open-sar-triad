@@ -219,7 +219,7 @@ function drawModeBreakdown() {
 
     return `<div class="mode-row">
       <div class="mode-row-label">
-        <span class="mode-name">${name.replace(/_/g, ' ')}</span>
+        <span class="mode-name">${esc(name.replace(/_/g, ' '))}</span>
         <span class="mode-total">${v.total.toLocaleString()}</span>
       </div>
       <div class="mode-bar" style="width:${widthPct}%; min-width: 40px">${segs}</div>
@@ -229,16 +229,26 @@ function drawModeBreakdown() {
 
 // ── Popup ──────────────────────────────────────────────────
 function makePopup(p) {
+  const dlUrl = safeUrl(p.download);
+  const pvUrl = safeUrl(p.provider_url);
   const det = `<button class="popup-btn details-btn" onclick="showDetailById('${esc(p.id)}')">Details</button>`;
-  const dl  = p.download    ? `<a class="popup-btn" href="${p.download}" target="_blank">Download</a>` : '';
-  const pv  = p.provider_url? `<a class="popup-btn" href="${p.provider_url}" target="_blank">${p.provider_label}</a>` : '';
-  return `<div class="popup-provider ${p.provider}">${p.provider_label}</div>
+  const dl  = dlUrl ? `<a class="popup-btn" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download</a>` : '';
+  const pv  = pvUrl ? `<a class="popup-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.provider_label)}</a>` : '';
+  return `<div class="popup-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="popup-id">${esc(p.id||'—')}</div>
-<div class="popup-date">📅 ${p.date||'Unknown'}</div>
-<div class="popup-mode">⚡ ${p.sensor_mode||'—'}</div>
+<div class="popup-date">📅 ${esc(p.date||'Unknown')}</div>
+<div class="popup-mode">⚡ ${esc(p.sensor_mode||'—')}</div>
 <div class="popup-actions">${det}${dl}${pv}</div>`;
 }
 const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function safeUrl(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(String(url));
+    return (u.protocol === 'https:' || u.protocol === 'http:') ? url : null;
+  } catch { return null; }
+}
 
 // ── Detail panel ───────────────────────────────────────────
 window.showDetailById = id => {
@@ -247,7 +257,7 @@ window.showDetailById = id => {
 };
 
 function proxyThumb(url, provider) {
-  if (!url) return null;
+  if (!safeUrl(url)) return null;
   // ICEYE S3 has no CORS headers — route through weserv.nl (free CDN proxy)
   if (provider === 'iceye') {
     return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=600&output=jpg&q=80`;
@@ -276,13 +286,15 @@ function showDetail(p) {
   ].filter(([,v]) => v !== '—')
    .map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
 
-  const dl = p.download
-    ? `<a class="detail-action-btn primary" href="${p.download}" target="_blank">Download Asset</a>` : '';
-  const pv = p.provider_url
-    ? `<a class="detail-action-btn" href="${p.provider_url}" target="_blank">View on ${p.provider_label}</a>` : '';
+  const dlUrl = safeUrl(p.download);
+  const pvUrl = safeUrl(p.provider_url);
+  const dl = dlUrl
+    ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
+  const pv = pvUrl
+    ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
   document.getElementById('detail-content').innerHTML =
-    `${thumbHtml}<div class="detail-provider ${p.provider}">${p.provider_label}</div>
+    `${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
 <div class="detail-actions">${dl}${pv}</div>`;
@@ -617,7 +629,7 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
 
   // Restore saved position
   const saved = JSON.parse(localStorage.getItem('aoi-toolbar-pos') || 'null');
-  if (saved) {
+  if (saved && typeof saved.top === 'number' && typeof saved.left === 'number') {
     toolbar.style.right  = 'auto';
     toolbar.style.top    = saved.top  + 'px';
     toolbar.style.left   = saved.left + 'px';
