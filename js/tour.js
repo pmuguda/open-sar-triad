@@ -40,7 +40,7 @@
       },
     },
     {
-      target: '.panel-section',
+      target: '#export-section',
       title:  'Export & Share',
       body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
       pos:    'right',
@@ -263,7 +263,7 @@
     // Scroll sidebar targets into view so they aren't clipped
     var el   = s.target ? document.querySelector(s.target) : null;
     if (el && el.closest('#sidebar')) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
 
     var rect = el ? el.getBoundingClientRect() : null;
