@@ -1,4 +1,15 @@
-# open-sar-triad
+<p align="center">
+  <img src="assets/logo.svg" alt="open-sar-triad" width="720">
+</p>
+
+<p align="center">
+  <a href="https://github.com/pmuguda/open-sar-triad/actions/workflows/deploy.yml"><img alt="Deploy to GitHub Pages" src="https://github.com/pmuguda/open-sar-triad/actions/workflows/deploy.yml/badge.svg"></a>
+  <a href="https://github.com/pmuguda/open-sar-triad/actions/workflows/fetch-data.yml"><img alt="Fetch SAR Catalog Data" src="https://github.com/pmuguda/open-sar-triad/actions/workflows/fetch-data.yml/badge.svg"></a>
+  <a href="https://pmuguda.github.io/open-sar-triad"><img alt="GitHub Pages" src="https://img.shields.io/badge/GitHub%20Pages-live-00c9ff?logo=githubpages&logoColor=white"></a>
+  <img alt="Code license: MIT" src="https://img.shields.io/badge/code-MIT-f0b94f">
+  <img alt="Scene data license: CC BY 4.0" src="https://img.shields.io/badge/scene%20data-CC%20BY%204.0-49e68d">
+  <img alt="Built-in UI tour" src="https://img.shields.io/badge/UI-built--in%20tour-ff7848">
+</p>
 
 An interactive, browser-based map explorer for discovering and filtering open Synthetic Aperture Radar (SAR) scene catalogs from three major commercial satellite operators: **ICEYE**, **Umbra**, and **Capella**. Every scene footprint is rendered as a polygon on a world map. Users can filter by provider, date range, sensor mode, orbit pass direction, radar look direction, and geographic area of interest, then export results in STAC format.
 
@@ -132,6 +143,8 @@ open-sar-triad/
 │   └── workflows/
 │       ├── deploy.yml          # GitHub Pages deployment workflow
 │       └── fetch-data.yml      # Weekly data refresh workflow
+├── assets/
+│   └── logo.svg                # Repository logo used by the README
 ├── css/
 │   ├── style.css               # All application styles
 │   └── tour.css                # Onboarding tour overlay and tooltip styles

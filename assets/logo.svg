@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">open-sar-triad</title>
+  <desc id="desc">Logo for the open SAR triad discovery console.</desc>
+  <rect width="960" height="240" fill="#0d1117"/>
+  <g transform="translate(56 48)" color="#f0b94f">
+    <rect x="0" y="0" width="144" height="144" fill="none" stroke="currentColor" stroke-opacity=".58" stroke-width="3"/>
+    <line x1="49" y1="-4" x2="49" y2="12" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
+    <line x1="72" y1="-4" x2="72" y2="18" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
+    <line x1="95" y1="-4" x2="95" y2="12" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
+    <line x1="28" y1="112" x2="92" y2="36" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
+    <line x1="43" y1="122" x2="107" y2="46" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
+    <line x1="58" y1="132" x2="122" y2="56" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
+    <line x1="72" y1="132" x2="128" y2="28" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="72" cy="132" r="7" fill="currentColor"/>
+    <circle cx="128" cy="28" r="5" fill="currentColor"/>
+  </g>
+  <g transform="translate(248 74)">
+    <text x="0" y="46" font-family="IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif" font-size="64" font-weight="700" fill="#f0f3f6" letter-spacing="1">
+      open<tspan fill="#f0b94f"> . </tspan>sar<tspan fill="#f0b94f"> . </tspan>triad
+    </text>
+    <g transform="translate(2 92)" font-family="IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" letter-spacing="7" fill="#8b949e">
+      <circle cx="10" cy="-7" r="8" fill="#49e68d"/>
+      <text x="30" y="0">ICEYE</text>
+      <circle cx="172" cy="-7" r="8" fill="#5dd2ff"/>
+      <text x="192" y="0">UMBRA</text>
+      <circle cx="352" cy="-7" r="8" fill="#ff7848"/>
+      <text x="372" y="0">CAPELLA</text>
+    </g>
+  </g>
+</svg>
