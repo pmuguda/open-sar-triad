@@ -1,33 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>open-sar-triad — ICEYE · Umbra · Capella open SAR data</title>
+  <title>open-sar-triad — SAR discovery console</title>
   <meta name="description" content="Interactive map explorer for open SAR datasets from ICEYE, Umbra, and Capella." />
   <meta name="author" content="Pavan Muguda Sanjeevamurthy" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://raw.githubusercontent.com; frame-ancestors 'none';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://raw.githubusercontent.com https://images.weserv.nl; frame-ancestors 'none';" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"
         crossorigin="anonymous" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.css"
-        integrity="sha384-PSZaVsyG9jDu8hFaSJev5s/9poIJlX7cuxSGdqCgXRHpo2DzIaZAyCd2rG/DJJmV"
-        crossorigin="anonymous" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/tour.css" />
 </head>
 <body>
-
-<!-- Sidebar collapse tab (fixed, like bboxer) -->
-<button id="sidebar-toggle" title="Toggle sidebar">
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-    <path d="M10 3L5 8l5 5"/>
-  </svg>
-</button>
 
 <!-- Detail panel collapse tab (fixed, right side) -->
 <button id="detail-toggle" class="hidden" title="Toggle detail panel">
@@ -36,118 +29,188 @@
   </svg>
 </button>
 
-<div id="app">
+<div class="app" id="app">
 
-  <!-- ── Sidebar ─────────────────────────────────────────── -->
-  <aside id="sidebar">
-    <div class="sidebar-header">
-      <div class="logo-mark">SAR</div>
-      <div>
-        <h1>open-sar-triad</h1>
-        <p>ICEYE · Umbra · Capella</p>
-        <p class="tagline">A lightweight, browser-based open SAR discovery portal for commercial SAR open data.</p>
-      </div>
-    </div>
+  <!-- ═══════════ CONSOLE ═══════════ -->
+  <aside class="console" id="console">
+    <div class="console-scroll">
 
-    <!-- ── Filters tray ──────────────────────────────────────── -->
-    <div class="sidebar-tray" id="filters-tray">
-      <div class="tray-header">
-        <span>Filters</span>
-        <svg class="sect-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
-      </div>
-      <div class="tray-body">
-        <div class="tray-section">
-          <div class="tray-label">Sensor Mode</div>
-          <select id="mode-filter"><option value="">All modes</option></select>
+      <!-- identity -->
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none">
+            <rect x="3.5" y="3.5" width="41" height="41" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.2"/>
+            <line x1="17" y1="2" x2="17" y2="6" stroke="currentColor" stroke-width="1.4"/>
+            <line x1="24" y1="2" x2="24" y2="7.5" stroke="currentColor" stroke-width="1.4"/>
+            <line x1="31" y1="2" x2="31" y2="6" stroke="currentColor" stroke-width="1.4"/>
+            <line x1="9"  y1="33" x2="27" y2="11" stroke="currentColor" stroke-opacity="0.32" stroke-width="1"/>
+            <line x1="13" y1="36" x2="31" y2="14" stroke="currentColor" stroke-opacity="0.32" stroke-width="1"/>
+            <line x1="17" y1="39" x2="35" y2="17" stroke="currentColor" stroke-opacity="0.32" stroke-width="1"/>
+            <line x1="24" y1="40" x2="39" y2="9" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="24" cy="40" r="2.3" fill="currentColor"/>
+            <circle cx="39" cy="9" r="1.6" fill="currentColor"/>
+          </svg>
         </div>
-        <div class="tray-section" id="geometry-section">
-          <div class="tray-label">Geometry</div>
-          <div class="geo-row">
-            <span class="geo-label">Orbit</span>
-            <div class="geo-pills" id="orbit-pills">
-              <button class="geo-pill active" data-val="">All</button>
-              <button class="geo-pill" data-val="ascending" title="Satellite moving south → north">↑ Asc</button>
-              <button class="geo-pill" data-val="descending" title="Satellite moving north → south">↓ Desc</button>
+        <div class="brand-txt">
+          <div class="wordmark">open<span class="sep">·</span>sar<span class="sep">·</span>triad</div>
+          <div class="brand-sub">
+            <span><span class="tdot" style="background:var(--iceye)"></span> ICEYE</span>
+            <span><span class="tdot" style="background:var(--umbra)"></span> Umbra</span>
+            <span><span class="tdot" style="background:var(--capella)"></span> Capella</span>
+          </div>
+        </div>
+        <div class="theme-toggle" role="group" aria-label="Theme">
+          <button data-theme-btn="dark" aria-pressed="true">DARK</button>
+          <button data-theme-btn="paper" aria-pressed="false">PAPER</button>
+        </div>
+      </div>
+
+      <!-- 00 · status strapline -->
+      <div class="mod" style="padding-top:13px;padding-bottom:13px;">
+        <div style="font-size:10.5px;letter-spacing:.04em;color:var(--ink-2);line-height:1.55;">
+          Browser-based discovery console for commercial open SAR.
+          <span style="color:var(--ink-3)">Synthetic-aperture scenes across three constellations, plotted by acquisition geometry &amp; time.</span>
+        </div>
+      </div>
+
+      <!-- 01 · SENSORS -->
+      <div class="mod" id="sensors-mod">
+        <div class="mod-h"><span class="ix">01</span><span class="ttl">Constellations</span><span class="rule"></span><span class="meta" id="sensorMeta">3 / 3 ONLINE</span></div>
+        <div class="sensors" id="sensors">
+          <div class="srow" data-sensor="iceye"   aria-pressed="true" style="--sc:var(--iceye)">
+            <span class="led"></span><span class="nm">ICEYE</span><span class="ct" data-ct></span><span class="sw"></span>
+          </div>
+          <div class="srow" data-sensor="umbra"   aria-pressed="true" style="--sc:var(--umbra)">
+            <span class="led"></span><span class="nm">Umbra</span><span class="ct" data-ct></span><span class="sw"></span>
+          </div>
+          <div class="srow" data-sensor="capella" aria-pressed="true" style="--sc:var(--capella)">
+            <span class="led"></span><span class="nm">Capella</span><span class="ct" data-ct></span><span class="sw"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 · FILTERS -->
+      <div class="mod" id="filters-mod">
+        <div class="mod-h"><span class="ix">02</span><span class="ttl">Acquisition</span><span class="rule"></span><span class="meta">FILTERS</span></div>
+
+        <div class="field">
+          <div class="flabel"><span>Sensor mode</span><span class="v" id="modeVal">ALL</span></div>
+          <div class="selx">
+            <select id="modeSel">
+              <option value="">All modes</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="flabel"><span>Geometry</span><span class="v">ORBIT · LOOK</span></div>
+          <div class="seg-line">
+            <span class="k">Orbit</span>
+            <div class="seg" data-group="orbit">
+              <button data-v="all" aria-pressed="true">ALL</button>
+              <button data-v="asc" aria-pressed="false"><span class="ar">↑</span>ASC</button>
+              <button data-v="desc" aria-pressed="false"><span class="ar">↓</span>DESC</button>
             </div>
           </div>
-          <div class="geo-row">
-            <span class="geo-label">Look</span>
-            <div class="geo-pills" id="look-pills">
-              <button class="geo-pill active" data-val="">All</button>
-              <button class="geo-pill" data-val="left" title="Radar beam points left of flight path">← Left</button>
-              <button class="geo-pill" data-val="right" title="Radar beam points right of flight path">→ Right</button>
+          <div class="seg-line">
+            <span class="k">Look</span>
+            <div class="seg" data-group="look">
+              <button data-v="all" aria-pressed="true">ALL</button>
+              <button data-v="left" aria-pressed="false"><span class="ar">←</span>LEFT</button>
+              <button data-v="right" aria-pressed="false"><span class="ar">→</span>RIGHT</button>
             </div>
           </div>
         </div>
-        <button id="reset-btn" class="reset-btn">Reset All Filters</button>
-      </div>
-    </div>
 
-    <!-- ── Stats tray ────────────────────────────────────────── -->
-    <div class="sidebar-tray" id="stats-tray">
-      <div class="tray-header">
-        <span>Stats</span>
-        <svg class="sect-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+        <button class="btn reset" id="resetBtn">↺ Reset all filters</button>
       </div>
-      <div class="tray-body">
-        <div class="tray-section" id="histogram-section">
-          <div class="tray-label" id="hist-title">Scene Coverage</div>
-          <canvas id="histogram" height="90"></canvas>
-          <div class="hist-legend">
-            <span class="hist-dot iceye-dot"></span>ICEYE
-            <span class="hist-dot umbra-dot"></span>Umbra
-            <span class="hist-dot capella-dot"></span>Capella
+
+      <!-- 03 · COVERAGE / STATS -->
+      <div class="mod" id="stats-mod">
+        <div class="mod-h"><span class="ix">03</span><span class="ttl">Coverage</span><span class="rule"></span><span class="meta" id="covTotal">— SCENES</span></div>
+        <div class="cov">
+          <div class="cell" style="--sc:var(--iceye)">
+            <div class="num" data-cov="iceye">—</div>
+            <div class="lab">ICEYE</div>
+            <div class="bar"><i data-covbar="iceye" style="width:0%"></i></div>
+          </div>
+          <div class="cell" style="--sc:var(--umbra)">
+            <div class="num" data-cov="umbra">—</div>
+            <div class="lab">Umbra</div>
+            <div class="bar"><i data-covbar="umbra" style="width:0%"></i></div>
+          </div>
+          <div class="cell" style="--sc:var(--capella)">
+            <div class="num" data-cov="capella">—</div>
+            <div class="lab">Capella</div>
+            <div class="bar"><i data-covbar="capella" style="width:0%"></i></div>
           </div>
         </div>
-        <div class="tray-section" id="mode-stats-section">
-          <div class="tray-label">Mode Breakdown</div>
-          <div id="mode-stats"></div>
-        </div>
+
+        <div style="margin:18px 0 9px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);">Mode breakdown</div>
+        <div class="modes" id="modes"></div>
       </div>
+
+      <!-- 04 · EXPORT -->
+      <div class="mod" id="export-mod">
+        <div class="mod-h"><span class="ix">04</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC</span></div>
+        <button class="btn ghost" data-export="stac">
+          <span class="gi"><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" stroke="currentColor" stroke-width="1.3"/><line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.1"/><line x1="6" y1="6" x2="6" y2="14" stroke="currentColor" stroke-width="1.1"/></svg></span>
+          Export as STAC collection
+        </button>
+        <button class="btn ghost" data-export="script">
+          <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M5 4 2 8l3 4M11 4l3 4-3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          Generate download script
+        </button>
+        <button class="btn ghost" data-export="link">
+          <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5 9.5 6.5M7 4l1-1a3 3 0 0 1 4 4l-1 1M9 12l-1 1a3 3 0 0 1-4-4l1-1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+          Copy share link
+        </button>
+      </div>
+
     </div>
 
-    <div class="panel-section" id="export-section">
-      <div class="section-title">Export</div>
-      <button id="export-stac-btn" class="export-btn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export as STAC Collection
-      </button>
-      <button id="download-script-btn" class="export-btn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Generate Download Script
-      </button>
-      <button id="copy-link-btn" class="export-btn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Copy Share Link
-      </button>
-      <div id="download-count" class="download-count"></div>
-    </div>
-
-    <div class="sidebar-footer">
-      <a class="kofi-btn" href="https://ko-fi.com/pavan_muguda" target="_blank" rel="noopener noreferrer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z"/>
-          <path d="M17 9h2.5a2.5 2.5 0 0 1 0 5H17"/>
-          <path d="M7 3v2M11 3v2"/>
-        </svg>
-        Buy me a coffee
-      </a>
-      <span style="display:flex;align-items:center;gap:7px;white-space:nowrap;flex-wrap:nowrap">Made by <a href="https://pmuguda.github.io" target="_blank" rel="noopener noreferrer" style="background:linear-gradient(135deg,#00FF87 0%,#00C9FF 50%,#FF6B35 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:700;white-space:nowrap">Pavan Muguda Sanjeevamurthy</a><a href="https://github.com/pmuguda/open-sar-triad" target="_blank" rel="noopener noreferrer" title="GitHub repo" style="color:var(--muted);display:flex;align-items:center;flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.25.78-.55v-2.1c-3.19.69-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.27-5.23-5.67 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.18a10.97 10.97 0 0 1 2.87-.39c.97.01 1.95.13 2.87.39 2.18-1.49 3.14-1.18 3.14-1.18.63 1.57.23 2.73.11 3.02.74.8 1.18 1.82 1.18 3.07 0 4.41-2.69 5.38-5.25 5.66.41.36.78 1.06.78 2.13v3.16c0 .31.2.66.79.55C20.21 21.41 23.5 17.1 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg></a></span>
-      <span>Data: <a href="https://github.com/Jack-Hayes/commerical-sar-stac" target="_blank" rel="noopener noreferrer" style="color:var(--capella)">Jack-Hayes/commerical-sar-stac</a></span>
+    <div class="cfoot">
+      <span>v2 · build 0605</span>
+      <span class="links">
+        <a href="https://github.com/pmuguda/open-sar-triad" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://ko-fi.com/pavan_muguda" target="_blank" rel="noopener">Ko-fi</a>
+      </span>
     </div>
   </aside>
 
-  <!-- ── Map area ─────────────────────────────────────────── -->
-  <div id="map-area">
+  <button class="collapse" id="collapseBtn" aria-label="Toggle console"><span class="cv">‹</span></button>
 
-    <!-- Provider pills (compact, top-left) -->
-    <div id="provider-pills">
-      <button class="pill iceye active"   id="pill-iceye"   data-provider="iceye">  <span class="pill-dot"></span>ICEYE</button>
-      <button class="pill umbra active"   id="pill-umbra"   data-provider="umbra">  <span class="pill-dot"></span>Umbra</button>
-      <button class="pill capella active" id="pill-capella" data-provider="capella"><span class="pill-dot"></span>Capella</button>
+  <!-- ═══════════ VIEWPORT ═══════════ -->
+  <main class="viewport" id="viewport">
+    <div id="map"></div>
+
+    <!-- static overlays -->
+    <div class="mo" aria-hidden="true">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="reticle">
+        <div class="ring"></div><div class="h"></div><div class="v"></div><div class="dot"></div>
+      </div>
     </div>
 
-    <!-- Floating AOI toolbar (top-right) -->
+    <!-- coordinate status bar -->
+    <div class="coordbar">
+      <div class="seg-c"><span class="live"><span class="blip"></span>LIVE</span></div>
+      <div class="seg-c"><span class="k">LAT</span><span class="num" id="rdLat">20.0000</span></div>
+      <div class="seg-c"><span class="k">LNG</span><span class="num" id="rdLng">0.0000</span></div>
+      <div class="seg-c"><span class="k">Z</span><span class="num" id="rdZ">2</span></div>
+      <div class="seg-c"><span class="k">PROJ</span><span class="num">EPSG:3857</span></div>
+    </div>
+
+    <!-- legend / quick toggles -->
+    <div class="maplegend" id="mapLegend">
+      <div class="lg" data-sensor="iceye"   aria-pressed="true" style="--sc:var(--iceye)"><span class="d"></span>ICEYE</div>
+      <div class="lg" data-sensor="umbra"   aria-pressed="true" style="--sc:var(--umbra)"><span class="d"></span>Umbra</div>
+      <div class="lg" data-sensor="capella" aria-pressed="true" style="--sc:var(--capella)"><span class="d"></span>Capella</div>
+    </div>
+    <button class="helpbtn" id="helpBtn">?</button>
+
+    <!-- Floating AOI toolbar (draggable) -->
     <div id="aoi-toolbar">
       <button class="tb-btn" id="tb-bbox" title="Draw BBox">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -191,29 +254,38 @@
     <!-- Country tooltip -->
     <div id="country-tooltip"></div>
 
-    <div id="map"></div>
-
     <!-- Detail panel -->
     <div id="detail-panel" class="hidden">
       <div id="detail-content"></div>
     </div>
-  </div>
 
-</div>
+    <!-- Toast -->
+    <div class="toast" id="toast"><span class="ok">✦</span><span id="toastMsg">Done</span></div>
 
-<!-- ── Bottom bar ───────────────────────────────────────────── -->
-<div id="bottom-bar">
-  <div id="date-bar">
-    <span class="date-bar-label" id="date-label-from">—</span>
-    <div id="date-slider"></div>
-    <span class="date-bar-label" id="date-label-to">—</span>
-  </div>
-  <div id="total-bar">
-    <strong id="total-vis">—</strong><span style="color:var(--muted)"> visible</span>
-    <span class="tb-dot iceye-dot"></span>
-    <span class="tb-dot umbra-dot"></span>
-    <span class="tb-dot capella-dot"></span>
-  </div>
+    <!-- Temporal scrubber -->
+    <div class="timeline" id="timeline">
+      <div class="tl-cap">
+        <span class="k">Acquisition window</span>
+        <span class="rng"><span id="rngFrom">—</span><span class="arrow">→</span><span id="rngTo">—</span></span>
+        <span class="dur" id="rngDur">— months</span>
+      </div>
+      <div class="tl-main">
+        <div class="tl-hist" id="hist"></div>
+        <div class="tl-axis" id="axis"></div>
+        <div class="tl-track" id="track">
+          <div class="tl-sel" id="sel"></div>
+          <div class="tl-h" id="hFrom" data-h="from"><span class="grip" id="gFrom">—</span></div>
+          <div class="tl-h" id="hTo" data-h="to"><span class="grip" id="gTo">—</span></div>
+        </div>
+      </div>
+      <div class="tl-foot">
+        <span class="k">In view</span>
+        <span class="big" id="visCount">—</span>
+        <span class="sm">scenes visible</span>
+      </div>
+    </div>
+
+  </main>
 </div>
 
 <!-- Loading overlay -->
@@ -227,9 +299,6 @@
         crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"
         integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN"
-        crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/nouislider@15.7.1/dist/nouislider.min.js"
-        integrity="sha384-/gBUOLHADjY2rp6bHB0IyW9AC28q4OsnirJScje4l1crgYW7Qarx3dH8zcqcUgmy"
         crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
         integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
