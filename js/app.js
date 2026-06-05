@@ -743,6 +743,15 @@ async function loadCountries() {
 }
 
 // ── Draw tools ─────────────────────────────────────────────
+// Drawn AOI shapes must not intercept scene clicks. Canvas-rendered layers
+// (preferCanvas:true) use options.interactive for hit-testing — pointer-events CSS
+// has no effect on them. SVG layers need pointer-events:none on their _path.
+function makeDrawnLayerPassthrough(l) {
+  l.options.interactive = false;
+  if (l._path) l._path.style.pointerEvents = 'none';
+  if (typeof l.eachLayer === 'function') l.eachLayer(sub => makeDrawnLayerPassthrough(sub));
+}
+
 let activeDrawTool = null;
 
 function startDraw(ToolClass, options, btnId) {
@@ -761,7 +770,7 @@ document.getElementById('tb-poly').addEventListener('click', () => startDraw(L.D
 
 map.on(L.Draw.Event.CREATED, e => {
   drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
-  drawnItems.eachLayer(l => { if (l._path) l._path.style.pointerEvents = 'none'; });
+  drawnItems.eachLayer(l => makeDrawnLayerPassthrough(l));
   const b = e.layer.getBounds();
   aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
   if (selectedCountry) {
@@ -788,7 +797,7 @@ document.getElementById('tb-upload').addEventListener('change', e => {
       drawnItems.clearLayers();
       const layer = L.geoJSON(geojson, { style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } });
       layer.addTo(drawnItems);
-      drawnItems.eachLayer(l => { if (l._path) l._path.style.pointerEvents = 'none'; });
+      drawnItems.eachLayer(l => makeDrawnLayerPassthrough(l));
       const b = layer.getBounds();
       aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
       if (selectedCountry) {
@@ -825,11 +834,13 @@ function restoreBboxAoi(parts) {
   if (w >= e || s >= n) return false;
   aoiBbox = parts;
   drawnItems.clearLayers();
-  L.rectangle([[s, w], [n, e]], {
+  const rect = L.rectangle([[s, w], [n, e]], {
     color: '#3fb950',
     weight: 1.5,
     fillOpacity: 0.05,
-  }).addTo(drawnItems);
+  });
+  rect.addTo(drawnItems);
+  makeDrawnLayerPassthrough(rect);
   return true;
 }
 
