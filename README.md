@@ -8,31 +8,11 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 ---
 
-## Demo
+## Built-in Tour
 
-**Toggle providers on and off**
+The application includes an interactive onboarding tour, so separate demo GIFs are no longer needed in the README. First-time visitors are guided through the provider toggles, collapsible sidebar trays, AOI tools, home view control, timeline, and scene preview panel directly inside the live tool.
 
-![Provider toggle](assets/01-provider-toggle.gif)
-
-**Filter by date range**
-
-![Date range filter](assets/02-date-range.gif)
-
-**Filter by sensor mode**
-
-![Sensor mode filter](assets/03-sensor-mode.gif)
-
-**Draw a bounding box area of interest**
-
-![Draw bounding box](assets/04-draw-bbox.gif)
-
-**Select a country to filter scenes within its borders**
-
-![Country filter](assets/06-country-filter.gif)
-
-**Click a scene to view metadata and download link**
-
-![Scene detail panel](assets/05-scene-detail.gif)
+Use the `?` button in the bottom-right corner to replay the tour at any time. Shared links skip the tour automatically so recipients land directly on the filtered map view.
 
 ---
 
