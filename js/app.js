@@ -32,7 +32,8 @@ let tlFrom = 0, tlTo = 0;
 // ── Map ────────────────────────────────────────────────────
 const INITIAL_CENTER = [20, 0];
 const INITIAL_ZOOM = 2;
-const map = L.map('map', { center: INITIAL_CENTER, zoom: INITIAL_ZOOM, zoomControl: false });
+const map = L.map('map', { center: INITIAL_CENTER, zoom: INITIAL_ZOOM, zoomControl: false, preferCanvas: true });
+const footprintRenderer = L.canvas({ padding: 0.5 });
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
 
@@ -211,8 +212,10 @@ function getVisibleFeatures() {
 // ── Geometry cache (built once at load, avoids repeated JSON.parse) ──
 const geomCache    = {};   // id → unwrapped geometry copy
 const centroidCache = {};  // id → [lng, lat]
+const scaledGeomCache = new Map();
 
 function buildGeomCache(features) {
+  scaledGeomCache.clear();
   features.forEach(feat => {
     const id  = feat.properties.id;
     const g   = JSON.parse(JSON.stringify(feat.geometry));
@@ -244,21 +247,40 @@ function featureScaleFactor(feat, zoomFactor) {
 function applyScale(geom, cx, cy, factor) {
   if (factor <= 1) return geom;
   const sc = ring => ring.map(([x, y]) => [cx + (x - cx) * factor, cy + (y - cy) * factor]);
-  const g  = JSON.parse(JSON.stringify(geom));
-  if (g.type === 'Polygon')      g.coordinates = g.coordinates.map(sc);
-  else if (g.type === 'MultiPolygon') g.coordinates = g.coordinates.map(p => p.map(sc));
-  return g;
+  if (geom.type === 'Polygon') {
+    return { type: 'Polygon', coordinates: geom.coordinates.map(sc) };
+  }
+  if (geom.type === 'MultiPolygon') {
+    return { type: 'MultiPolygon', coordinates: geom.coordinates.map(p => p.map(sc)) };
+  }
+  return geom;
+}
+
+function getDisplayGeometry(feat, zoomFactor) {
+  const id = feat.properties.id;
+  const geom = geomCache[id] || feat.geometry;
+  const c = centroidCache[id];
+  const featFactor = featureScaleFactor(feat, zoomFactor);
+  if (featFactor <= 1 || !c) return geom;
+
+  const key = `${id}:${featFactor.toFixed(3)}`;
+  if (scaledGeomCache.has(key)) return scaledGeomCache.get(key);
+
+  const scaled = applyScale(geom, c[0], c[1], featFactor);
+  scaledGeomCache.set(key, scaled);
+  return scaled;
 }
 
 // Re-render on zoom only when scale factor tier changes
 let _lastScaleFactor = null;
 map.on('zoomend', () => {
   const f = sceneScaleFactor();
-  if (f !== _lastScaleFactor) { _lastScaleFactor = f; render(); }
+  if (f !== _lastScaleFactor) { _lastScaleFactor = f; render({ geometryOnly: true }); }
 });
 
 // ── Render ─────────────────────────────────────────────────
-function render() {
+function render(options = {}) {
+  const geometryOnly = !!options.geometryOnly;
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
   const counts  = { iceye: 0, umbra: 0, capella: 0 };
@@ -268,11 +290,7 @@ function render() {
   // Group visible features by provider into 3 geoJSON layers (far fewer DOM nodes)
   const byProvider = { iceye: [], umbra: [], capella: [] };
   visible.forEach(feat => {
-    const id = feat.properties.id;
-    const g  = geomCache[id] || feat.geometry;
-    const c  = centroidCache[id];
-    const featFactor = featureScaleFactor(feat, factor);
-    const geom = (featFactor > 1 && c) ? applyScale(g, c[0], c[1], featFactor) : g;
+    const geom = getDisplayGeometry(feat, factor);
     byProvider[feat.properties.provider].push({ type: 'Feature', geometry: geom, properties: feat.properties });
     counts[feat.properties.provider]++;
   });
@@ -281,6 +299,7 @@ function render() {
     if (!feats.length) continue;
     const color = PROVIDER_COLORS[provider];
     const layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
+      renderer:     footprintRenderer,
       style:        () => ({ color, weight: 1, opacity: 0.85, fillColor: color, fillOpacity: 0.18 }),
       interactive:  !countryMode,
       pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
@@ -297,12 +316,14 @@ function render() {
   }
 
   const total = counts.iceye + counts.umbra + counts.capella;
-  const visEl = document.getElementById('visCount');
-  if (visEl) visEl.textContent = total.toLocaleString('en-US');
-  updateCoverage(counts, total);
-  updateModes();
-  updateDownloadCount(visible);
-  updateTimelineHistogram();
+  if (!geometryOnly) {
+    const visEl = document.getElementById('visCount');
+    if (visEl) visEl.textContent = total.toLocaleString('en-US');
+    updateCoverage(counts, total);
+    updateModes(visible);
+    updateDownloadCount(visible);
+    updateTimelineHistogram();
+  }
   if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
 }
 
@@ -360,9 +381,9 @@ function updateCoverage(counts, total) {
 }
 
 // ── Mode breakdown ─────────────────────────────────────────
-function updateModes() {
+function updateModes(visibleFeatures = getVisibleFeatures()) {
   const modes = {};
-  getVisibleFeatures().forEach(feat => {
+  visibleFeatures.forEach(feat => {
     const p = feat.properties;
     const m = (p.sensor_mode || 'unknown').toLowerCase();
     if (!modes[m]) modes[m] = { iceye: 0, umbra: 0, capella: 0, total: 0 };
