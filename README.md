@@ -378,5 +378,5 @@ The upstream Parquet files are sourced from [Jack-Hayes/commerical-sar-stac](htt
 
 ## Acknowledgements
 This project was developed with AI assistance (Claude by Anthropic) for code 
-generation and debugging. Architecture decisions, refinements, and 
+generation and debugging. Architecture decisions, refinements, ideations and
 ongoing maintenance are made by me.
