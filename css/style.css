@@ -247,20 +247,20 @@ body {
 /* console footer */
 .cfoot {
   padding: 13px 20px; border-top: 1px solid var(--line);
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 6px;
   font-size: 10px; letter-spacing: .06em; color: var(--ink-3);
 }
+.cfoot-row { display: flex; align-items: center; gap: 8px; }
 .cfoot a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 1px; }
 .cfoot a:hover { color: var(--accent); border-color: var(--accent); }
-.cfoot .links { display: flex; gap: 8px; }
 .cfoot .icon-link {
   width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
-  background: var(--bg-2); color: var(--ink-2);
+  background: var(--bg-2); color: var(--ink-2); flex-shrink: 0;
 }
 .cfoot .icon-link:hover { background: var(--bg-3); color: var(--accent); border-color: var(--accent); }
 .cfoot .icon-link svg { width: 15px; height: 15px; }
-.cfoot .kofi-link { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; border: none; }
-.cfoot .kofi-link:hover { color: var(--accent); }
+.cfoot .kofi-link { color: var(--ink-3); white-space: nowrap; border: none; }
+.cfoot .kofi-link:hover { color: var(--accent); border-color: transparent; }
 
 /* collapse handle */
 .collapse {
