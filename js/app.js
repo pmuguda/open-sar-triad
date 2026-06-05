@@ -687,6 +687,7 @@ async function loadCountries() {
     geojson.features = geojson.features.filter(f => +f.id !== 10);
 
     countryLayer = L.geoJSON(geojson, {
+      renderer: L.svg(),
       style: () => ({ color: 'transparent', weight: 0, fillColor: '#ffffff', fillOpacity: 0.001 }),
       onEachFeature(feat, layer) {
         layer.on('mousemove', e => {
@@ -696,7 +697,7 @@ async function loadCountries() {
           tooltip.style.left = (e.originalEvent.clientX + 14) + 'px';
           tooltip.style.top  = (e.originalEvent.clientY - 32) + 'px';
           if (hoveredCountry && hoveredCountry !== layer && hoveredCountry !== (selectedCountry && selectedCountry.layer)) {
-            hoveredCountry.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+            hoveredCountry.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
           }
           if (layer !== (selectedCountry && selectedCountry.layer)) {
             layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.15, color: '#d29922', weight: 1 });
