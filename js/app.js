@@ -169,6 +169,8 @@ function buildGeomCache(features) {
 // At low zoom scenes are inflated so they're visible; above zoom 9 they
 // render at true geographic size.
 const UNSCALED_SENSOR_MODES = new Set(['stripmap', 'scan']);
+const REDUCED_SCALE_SENSOR_MODES = new Set(['sliding_spotlight']);
+const REDUCED_SCALE_BLEND = 0.6;
 
 function sceneScaleFactor() {
   const z = map.getZoom();
@@ -177,7 +179,9 @@ function sceneScaleFactor() {
 
 function featureScaleFactor(feat, zoomFactor) {
   const mode = (feat.properties.sensor_mode || '').toLowerCase();
-  return UNSCALED_SENSOR_MODES.has(mode) ? 1 : zoomFactor;
+  if (UNSCALED_SENSOR_MODES.has(mode)) return 1;
+  if (REDUCED_SCALE_SENSOR_MODES.has(mode)) return 1 + (zoomFactor - 1) * REDUCED_SCALE_BLEND;
+  return zoomFactor;
 }
 
 function applyScale(geom, cx, cy, factor) {
