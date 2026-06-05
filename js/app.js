@@ -151,34 +151,81 @@ function getVisibleFeatures() {
   });
 }
 
+// ── Geometry cache (built once at load, avoids repeated JSON.parse) ──
+const geomCache    = {};   // id → unwrapped geometry copy
+const centroidCache = {};  // id → [lng, lat]
+
+function buildGeomCache(features) {
+  features.forEach(feat => {
+    const id  = feat.properties.id;
+    const g   = JSON.parse(JSON.stringify(feat.geometry));
+    unwrapAntimeridian(g);
+    geomCache[id]    = g;
+    centroidCache[id] = centroid(g);
+  });
+}
+
+// ── Zoom-dependent scale factor ────────────────────────────
+// At low zoom scenes are inflated so they're visible; above zoom 9 they
+// render at true geographic size.
+function sceneScaleFactor() {
+  const z = map.getZoom();
+  return z >= 9 ? 1 : Math.pow(2, (9 - z) * 0.75);
+}
+
+function applyScale(geom, cx, cy, factor) {
+  if (factor <= 1) return geom;
+  const sc = ring => ring.map(([x, y]) => [cx + (x - cx) * factor, cy + (y - cy) * factor]);
+  const g  = JSON.parse(JSON.stringify(geom));
+  if (g.type === 'Polygon')      g.coordinates = g.coordinates.map(sc);
+  else if (g.type === 'MultiPolygon') g.coordinates = g.coordinates.map(p => p.map(sc));
+  return g;
+}
+
+// Re-render on zoom only when scale factor tier changes
+let _lastScaleFactor = null;
+map.on('zoomend', () => {
+  const f = sceneScaleFactor();
+  if (f !== _lastScaleFactor) { _lastScaleFactor = f; render(); }
+});
+
 // ── Render ─────────────────────────────────────────────────
 function render() {
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
-  const counts = { iceye: 0, umbra: 0, capella: 0 };
+  const counts  = { iceye: 0, umbra: 0, capella: 0 };
   const visible = getVisibleFeatures();
+  const factor  = sceneScaleFactor();
 
+  // Group visible features by provider into 3 geoJSON layers (far fewer DOM nodes)
+  const byProvider = { iceye: [], umbra: [], capella: [] };
   visible.forEach(feat => {
-    const p = feat.properties;
-    const color = PROVIDER_COLORS[p.provider];
-    const geomCopy = JSON.parse(JSON.stringify(feat.geometry));
-    unwrapAntimeridian(geomCopy);
-
-    const layer = L.geoJSON({ type: 'Feature', geometry: geomCopy, properties: p }, {
-      style: { color, weight: 1, opacity: 0.85, fillColor: color, fillOpacity: 0.15 },
-      interactive: !countryMode,
-      pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
-    });
-    if (!countryMode) {
-      layer.on('click',     () => showDetail(p));
-      layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.45, weight: 2 }); });
-      layer.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.15, weight: 1 }); });
-      layer.bindPopup(makePopup(p), { maxWidth: 280 });
-    }
-    layer.addTo(map);
-    activeLayers[p.id] = layer;
-    counts[p.provider]++;
+    const id = feat.properties.id;
+    const g  = geomCache[id] || feat.geometry;
+    const c  = centroidCache[id];
+    const geom = (factor > 1 && c) ? applyScale(g, c[0], c[1], factor) : g;
+    byProvider[feat.properties.provider].push({ type: 'Feature', geometry: geom, properties: feat.properties });
+    counts[feat.properties.provider]++;
   });
+
+  for (const [provider, feats] of Object.entries(byProvider)) {
+    if (!feats.length) continue;
+    const color = PROVIDER_COLORS[provider];
+    const layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
+      style:        () => ({ color, weight: 1, opacity: 0.85, fillColor: color, fillOpacity: 0.18 }),
+      interactive:  !countryMode,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
+      onEachFeature: countryMode ? undefined : (feat, lyr) => {
+        const p = feat.properties;
+        lyr.on('click', () => showDetail(p));
+        lyr.on('mouseover', function () { this.setStyle({ fillOpacity: 0.5, weight: 2 }); });
+        lyr.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.18, weight: 1 }); });
+        lyr.bindPopup(makePopup(p), { maxWidth: 280 });
+      },
+    });
+    layer.addTo(map);
+    activeLayers[provider] = layer;
+  }
 
   const total = counts.iceye + counts.umbra + counts.capella;
   const visEl = document.getElementById('visCount');
@@ -1038,6 +1085,7 @@ fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     allFeatures = geojson.features || [];
+    buildGeomCache(allFeatures);
     populateModes(allFeatures);
     restoreState();
     initTimeline(allFeatures);
