@@ -761,6 +761,7 @@ document.getElementById('tb-poly').addEventListener('click', () => startDraw(L.D
 
 map.on(L.Draw.Event.CREATED, e => {
   drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
+  drawnItems.eachLayer(l => { if (l._path) l._path.style.pointerEvents = 'none'; });
   const b = e.layer.getBounds();
   aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
   if (selectedCountry) {
@@ -787,6 +788,7 @@ document.getElementById('tb-upload').addEventListener('change', e => {
       drawnItems.clearLayers();
       const layer = L.geoJSON(geojson, { style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } });
       layer.addTo(drawnItems);
+      drawnItems.eachLayer(l => { if (l._path) l._path.style.pointerEvents = 'none'; });
       const b = layer.getBounds();
       aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
       if (selectedCountry) {
