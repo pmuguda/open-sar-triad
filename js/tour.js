@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'sar-tour-v1';
+  var STORAGE_KEY = 'sar-tour-v2';
   var PAD    = 10;   // spotlight padding around target
   var MARGIN = 14;   // tooltip margin from edge / target
   var TT_W   = 290;  // tooltip width (matches CSS)
@@ -20,28 +20,24 @@
       pos:    'bottom',
     },
     {
-      target: '#mode-filter',
-      title:  'Sensor Mode Filter',
-      body:   'Filter scenes by acquisition mode — Stripmap, Spotlight, ScanSAR, and more. Different modes trade off swath coverage against image resolution.',
+      target: '#filters-tray',
+      title:  'Filters',
+      body:   'All scene filters live here in one collapsible tray. <b>Sensor Mode</b> narrows by acquisition type (Spotlight, Stripmap…). <b>Orbit</b> picks ascending or descending satellite passes. <b>Look</b> picks left or right radar illumination side. <b>Reset All Filters</b> clears every filter at once.',
       pos:    'right',
+      before: function () {
+        var t = document.getElementById('filters-tray');
+        if (t) t.classList.remove('tray-collapsed');
+      },
     },
     {
-      target: '#reset-btn',
-      title:  'Reset All Filters',
-      body:   'One click clears everything at once: provider toggles, date range, sensor mode, and any drawn area of interest.',
+      target: '#stats-tray',
+      title:  'Stats',
+      body:   'A live bar chart shows visible scene counts per provider, and stacked bars break down sensor modes across all three providers. Both update instantly as you adjust any filter. Click the tray header to collapse when you need more sidebar space.',
       pos:    'right',
-    },
-    {
-      target: '#histogram-section',
-      title:  'Scene Coverage Chart',
-      body:   'A bar chart showing how many scenes are visible per provider right now. It updates live as you pan, zoom, or change any filter.',
-      pos:    'right',
-    },
-    {
-      target: '#mode-stats-section',
-      title:  'Mode Breakdown',
-      body:   'Stacked bars showing the sensor-mode distribution across all three providers for the currently visible scenes.',
-      pos:    'right',
+      before: function () {
+        var t = document.getElementById('stats-tray');
+        if (t) t.classList.remove('tray-collapsed');
+      },
     },
     {
       target: '#export-stac-btn',
@@ -63,7 +59,7 @@
     },
     {
       target: null,
-      title:  "Scene Footprints — You're Ready!",
+      title:  “Scene Footprints — You're Ready!”,
       body:   'Each coloured polygon on the map is a SAR scene. Click one for a quick popup with date and mode, then hit “Details” to open the right-side panel with a thumbnail preview, full metadata, and download links.',
       pos:    'center',
     },
@@ -260,6 +256,9 @@
       document.getElementById('tt-back').onclick = function () { go(i - 1); };
     }
     document.getElementById('tt-fwd').onclick = isLast ? finish : function () { go(i + 1); };
+
+    // Run optional pre-step hook (e.g. expand a collapsed tray)
+    if (s.before) s.before();
 
     // Scroll sidebar targets into view so they aren't clipped
     var el   = s.target ? document.querySelector(s.target) : null;

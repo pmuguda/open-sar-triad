@@ -1,6 +1,6 @@
 # open-sar-triad
 
-An interactive, browser-based map explorer for discovering and filtering open Synthetic Aperture Radar (SAR) scene catalogs from three major commercial satellite operators: **ICEYE**, **Umbra**, and **Capella**. Every scene footprint is rendered as a polygon on a world map. Users can filter by provider, date range, sensor mode, and geographic area of interest, then export results in STAC format.
+An interactive, browser-based map explorer for discovering and filtering open Synthetic Aperture Radar (SAR) scene catalogs from three major commercial satellite operators: **ICEYE**, **Umbra**, and **Capella**. Every scene footprint is rendered as a polygon on a world map. Users can filter by provider, date range, sensor mode, orbit pass direction, radar look direction, and geographic area of interest, then export results in STAC format.
 
 **Live application:** https://pmuguda.github.io/open-sar-triad
 
@@ -75,17 +75,23 @@ The three providers represented in this tool each operate public open data progr
 - Scene footprints rendered as colored polygons, one per acquisition
 - Clickable scenes open a detail panel showing thumbnail, metadata, and a direct download link
 
-**Filtering**
+**Filtering** — collapsible Filters tray in the sidebar
 - Toggle individual providers on or off
 - Filter by date range using an interactive slider
 - Filter by sensor mode (Stripmap, Spotlight, ScanSAR, etc.)
+- Filter by orbit pass direction (ascending / descending)
+- Filter by radar look direction (left / right)
 - Draw a bounding box or polygon on the map to filter by geographic area
 - Click a country to filter scenes that intersect its territory
 - Upload a custom GeoJSON file to use as an area of interest
 
-**Statistics panel**
+**Statistics** — collapsible Stats tray in the sidebar
 - Bar chart showing scene count per provider for the current filter state
 - Stacked horizontal bar chart showing sensor mode breakdown per provider
+
+**Onboarding tour**
+- Step-by-step UI tour that auto-starts for first-time visitors
+- Skip or replay via the `?` button in the bottom-right corner
 
 **Export**
 - Export all currently visible scenes as a STAC-compliant GeoJSON collection
@@ -143,11 +149,13 @@ open-sar-triad/
 │       ├── deploy.yml          # GitHub Pages deployment workflow
 │       └── fetch-data.yml      # Weekly data refresh workflow
 ├── css/
-│   └── style.css               # All application styles (~20 KB)
+│   ├── style.css               # All application styles
+│   └── tour.css                # Onboarding tour overlay and tooltip styles
 ├── data/
 │   └── scenes.geojson          # Generated scene catalog (~17 MB, git-tracked)
 ├── js/
-│   └── app.js                  # Main application logic (~30 KB, 666 lines)
+│   ├── app.js                  # Main application logic
+│   └── tour.js                 # Step-by-step onboarding tour
 ├── scripts/
 │   └── fetch_catalog.py        # Data pipeline: downloads Parquet, outputs GeoJSON
 ├── index.html                  # Application shell and UI layout
@@ -176,6 +184,8 @@ Key global state managed by `app.js`:
 | `selectedCountry` | Currently selected country `{ layer, bbox, name }` |
 | `dateSlider` | noUiSlider instance for the date range control |
 | `providerActive` | `{ iceye, umbra, capella }` boolean flags |
+| `orbitFilter` | Active orbit filter: `''` (all), `'ascending'`, or `'descending'` |
+| `lookFilter` | Active look-direction filter: `''` (all), `'left'`, or `'right'` |
 
 Key functions in `app.js`:
 
@@ -226,6 +236,8 @@ Each feature carries the following properties:
 | `download` | string | URL to the scene data asset |
 | `provider_url` | string | URL to the provider's open data program page |
 | `collection` | string | Product type or collection name |
+| `orbit_state` | string | Satellite pass direction: `ascending`, `descending`, or `null` |
+| `look_dir` | string | Radar look direction: `left` or `right` |
 
 ---
 
@@ -262,12 +274,14 @@ pandas>=2.0
 
 | Filter | UI Control | Behavior |
 |--------|-----------|---------|
-| Provider | Pill toggles at the top of the sidebar | Shows or hides all scenes from a given provider |
-| Date range | Dual-handle slider | Inclusive filter on the `date` property |
-| Sensor mode | Dropdown select | Exact match on the normalized `sensor_mode` value; "All modes" disables this filter |
-| Bounding box | Draw rectangle or polygon button on the map toolbar | Filters to scenes whose centroid falls within the drawn area |
-| Country | Country picker button on the map toolbar, then click a country | Filters to scenes whose centroid falls within the country's bounding box |
-| GeoJSON upload | File input in the sidebar | Extracts the bounding box of the uploaded geometry and applies it as an area-of-interest filter |
+| Provider | Pill toggles (map, top-left) | Shows or hides all scenes from a given provider |
+| Date range | Dual-handle slider (bottom bar) | Inclusive filter on the `date` property |
+| Sensor mode | Dropdown select in Filters tray | Exact match on the normalized `sensor_mode` value; "All modes" disables this filter |
+| Orbit state | Three-way pill in Filters tray → Geometry | Filters to `ascending` or `descending` passes; "All" disables. Scenes with no recorded orbit state are excluded when a direction is selected |
+| Look direction | Three-way pill in Filters tray → Geometry | Filters to `left` or `right` radar look; "All" disables |
+| Bounding box | Draw rectangle or polygon on the AOI toolbar | Filters to scenes whose centroid falls within the drawn area |
+| Country | Country picker on the AOI toolbar, then click a country | Filters to scenes whose centroid falls within the country's bounding box |
+| GeoJSON upload | File input on the AOI toolbar | Extracts the bounding box of the uploaded geometry and uses it as an area-of-interest filter |
 
 All filters are combined with AND logic: a scene must pass every active filter to appear on the map and in the statistics.
 
