@@ -457,7 +457,9 @@ ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_lab
 <table class="detail-table"><tbody>${rows}</tbody></table>
 <div class="detail-actions">${dl}${pv}</div>`;
 
-  document.getElementById('detail-panel').classList.remove('hidden');
+  const panel = document.getElementById('detail-panel');
+  panel.scrollTop = 0;
+  panel.classList.remove('hidden');
   document.body.classList.remove('detail-collapsed');
   document.getElementById('detail-toggle').classList.remove('hidden');
 }

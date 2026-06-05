@@ -15,15 +15,23 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 **Live application:** https://pmuguda.github.io/open-sar-triad
 
+**Author:** [Pavan Muguda Sanjeevamurthy](https://pmuguda.github.io/)
+
 **Support this project:** https://ko-fi.com/pavan_muguda
 
 ---
 
 ## Built-in Tour
 
-The application includes an interactive onboarding tour, so separate demo GIFs are no longer needed in the README. First-time visitors are guided through the provider toggles, collapsible sidebar trays, AOI tools, home view control, timeline, and scene preview panel directly inside the live tool.
+The application includes an interactive onboarding tour, so separate demo GIFs are no longer needed in the README. First-time desktop visitors are guided through the provider toggles, collapsible sidebar trays, AOI tools, home view control, timeline, and scene preview panel directly inside the live tool.
 
-Use the `?` button in the bottom-right corner to replay the tour at any time. Shared links skip the tour automatically so recipients land directly on the filtered map view.
+Use the `?` button to replay the tour at any time. On mobile, the tour is opt-in so the first screen stays map-first and usable. Shared links skip the tour automatically so recipients land directly on the filtered map view.
+
+---
+
+## Desktop and Mobile
+
+open-sar-triad works on both desktop and mobile browsers. The desktop layout provides the clearest experience for exploring dense SAR footprints, comparing coverage numbers, adjusting the acquisition window, and reviewing scene metadata. Mobile uses a compact map-first layout with a bottom sheet for filters, coverage, export, preview, and sharing; it is useful for quick checks and shared links, but desktop is recommended for the most readable analysis workflow.
 
 ---
 
@@ -82,7 +90,8 @@ The three providers represented in this tool each operate public open data progr
 - Stacked horizontal bar chart showing sensor mode breakdown per provider
 
 **Onboarding tour**
-- Step-by-step UI tour that auto-starts for first-time visitors
+- Step-by-step UI tour that auto-starts for first-time desktop visitors
+- Mobile-specific opt-in tour that targets the compact map controls, bottom sheet, coverage, export, AOI toolbar, and acquisition window
 - Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 

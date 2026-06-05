@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'sar-tour-v3';
+  var STORAGE_KEY = 'sar-tour-v4';
   var PAD    = 10;   // spotlight padding around target
   var MARGIN = 14;   // tooltip margin from edge / target
   var TT_W   = 290;  // tooltip width (matches CSS)
@@ -65,6 +65,83 @@
       pos:    'center',
     },
   ];
+
+  var MOBILE_STEPS = [
+    {
+      target: null,
+      title:  'open-sar-triad on mobile',
+      body:   'The mobile layout keeps the map first. Use the bottom sheet for filters, stats, and exports, then collapse it when you want more map space.',
+      pos:    'center',
+    },
+    {
+      target: '#mapLegend',
+      title:  'Provider Toggles',
+      body:   'Tap ICEYE, Umbra, or Capella to show or hide each provider.',
+      pos:    'bottom',
+    },
+    {
+      target: '#timeline',
+      title:  'Acquisition Window',
+      body:   'Drag the two date handles to filter scenes by acquisition month. The scene count updates as the window changes.',
+      pos:    'top',
+    },
+    {
+      target: '#filters-mod',
+      title:  'Acquisition Filters',
+      body:   'Use the bottom sheet for mode, orbit, look direction, stats, and export tools.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.remove('collapsed');
+        if (window.expandTray) window.expandTray('#filters-mod');
+      },
+    },
+    {
+      target: '#stats-mod',
+      title:  'Coverage',
+      body:   'Coverage shows the visible scene count by provider, plus the mode breakdown for the current map, date window, and filters.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.remove('collapsed');
+        if (window.expandTray) window.expandTray('#stats-mod');
+      },
+    },
+    {
+      target: '#export-mod',
+      title:  'Export & Share',
+      body:   'Export the current visible scenes, generate a download script, or copy a share link that restores the same filters and map state.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.remove('collapsed');
+        if (window.expandTray) window.expandTray('#export-mod');
+      },
+    },
+    {
+      target: '#aoi-toolbar',
+      title:  'AOI Tools',
+      body:   'Draw an area, upload GeoJSON, pick a country, or clear spatial filters from this compact toolbar.',
+      pos:    'top',
+    },
+    {
+      target: '#collapseBtn',
+      title:  'Map Space',
+      body:   'Use this handle to collapse or expand the bottom sheet.',
+      pos:    'top',
+    },
+    {
+      target: null,
+      title:  'Ready',
+      body:   'Tap a scene footprint to preview details, or collapse the sheet and explore the map.',
+      pos:    'center',
+    },
+  ];
+
+  function isMobile() {
+    return window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
+  }
+
+  function steps() {
+    return isMobile() ? MOBILE_STEPS : STEPS;
+  }
 
   var currentStep = 0;
   var overlayEl   = null;
@@ -158,6 +235,8 @@
     var y = Math.max(0, rect.top  - PAD);
     var w = rect.width  + PAD * 2;
     var h = rect.height + PAD * 2;
+    if (x + w > window.innerWidth) w = window.innerWidth - x;
+    if (y + h > window.innerHeight) h = window.innerHeight - y;
 
     holeRect.setAttribute('x',      x);
     holeRect.setAttribute('y',      y);
@@ -221,9 +300,10 @@
 
   /* ── Render a step ────────────────────────────────────────── */
   function renderStep(i) {
-    var s      = STEPS[i];
-    var isLast = i === STEPS.length - 1;
-    var total  = STEPS.length - 1;   // exclude welcome step from count
+    var list   = steps();
+    var s      = list[i];
+    var isLast = i === list.length - 1;
+    var total  = list.length - 1;   // exclude welcome step from count
 
     var counterHtml = i > 0
       ? '<span class="tt-counter">' + i + '&thinsp;/&thinsp;' + total + '</span>'
@@ -325,6 +405,10 @@
 
     // If already completed, don't auto-start
     if (localStorage.getItem(STORAGE_KEY)) return;
+
+    // Mobile needs the first screen clear and map-first. Keep the tour
+    // available from the help button, but do not auto-block the interface.
+    if (isMobile()) return;
 
     // Shared links carry state in the URL hash — skip tour so the
     // recipient lands directly on the filtered view, not the tour.

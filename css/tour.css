@@ -137,3 +137,20 @@
 
 /* ── Help button hidden during tour ──────────────────────────── */
 #helpBtn.tour-running { display: none; }
+
+@media (max-width: 860px) {
+  #tour-tooltip {
+    width: min(320px, calc(100vw - 36px));
+    padding: 16px;
+    font-size: 12px;
+  }
+  .tt-heading { font-size: 14px; }
+  .tt-body {
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .tt-btn {
+    min-height: 34px;
+    padding: 8px 12px;
+  }
+}
