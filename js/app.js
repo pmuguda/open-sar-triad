@@ -649,6 +649,13 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
   });
 })();
 
+// ── Collapsible sidebar sections ─────────────────────────────
+document.querySelectorAll('.collapsible-hdr').forEach(hdr => {
+  hdr.addEventListener('click', () => {
+    hdr.closest('.panel-section').classList.toggle('sect-collapsed');
+  });
+});
+
 // ── Load data ────────────────────────────────────────────────
 fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })

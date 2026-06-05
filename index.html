@@ -51,18 +51,28 @@
     </div>
 
     <div class="panel-section" id="histogram-section">
-      <div class="section-title" id="hist-title">Scene Coverage</div>
-      <canvas id="histogram" height="90"></canvas>
-      <div class="hist-legend">
-        <span class="hist-dot iceye-dot"></span>ICEYE
-        <span class="hist-dot umbra-dot"></span>Umbra
-        <span class="hist-dot capella-dot"></span>Capella
+      <div class="section-title collapsible-hdr">
+        <span id="hist-title">Scene Coverage</span>
+        <svg class="sect-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+      </div>
+      <div class="collapsible-body">
+        <canvas id="histogram" height="90"></canvas>
+        <div class="hist-legend">
+          <span class="hist-dot iceye-dot"></span>ICEYE
+          <span class="hist-dot umbra-dot"></span>Umbra
+          <span class="hist-dot capella-dot"></span>Capella
+        </div>
       </div>
     </div>
 
     <div class="panel-section" id="mode-stats-section">
-      <div class="section-title">Mode Breakdown</div>
-      <div id="mode-stats"></div>
+      <div class="section-title collapsible-hdr">
+        <span>Mode Breakdown</span>
+        <svg class="sect-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+      </div>
+      <div class="collapsible-body">
+        <div id="mode-stats"></div>
+      </div>
     </div>
 
     <div class="panel-section">
