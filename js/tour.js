@@ -59,8 +59,8 @@
     },
     {
       target: null,
-      title:  “Scene Footprints — You're Ready!”,
-      body:   'Each coloured polygon on the map is a SAR scene. Click one for a quick popup with date and mode, then hit “Details” to open the right-side panel with a thumbnail preview, full metadata, and download links.',
+      title:  "Scene Footprints — You're Ready!",
+      body:   'Each coloured polygon on the map is a SAR scene. Click one for a quick popup with date and mode, then hit "Details" to open the right-side panel with a thumbnail preview, full metadata, and download links.',
       pos:    'center',
     },
   ];
