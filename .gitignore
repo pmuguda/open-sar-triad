@@ -10,3 +10,6 @@ index-offline.html
 index-record.html
 data/scenes-small.geojson
 js/app-record.js
+node_modules/
+package.json
+package-lock.json
