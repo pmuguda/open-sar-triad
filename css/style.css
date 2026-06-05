@@ -263,6 +263,7 @@ body {
 .leaflet-control-home a { display: flex !important; align-items: center; justify-content: center; }
 .leaflet-control-home svg { width: 15px; height: 15px; }
 .leaflet-bottom.leaflet-left { left: 0; bottom: 96px; }
+.leaflet-bottom.leaflet-right { bottom: 96px; }
 .leaflet-control-zoom { margin-left: 14px !important; }
 .leaflet-control-scale { margin: 0 0 100px 14px !important; }
 .leaflet-control-scale-line {
@@ -271,6 +272,7 @@ body {
   font-size: 10px !important; letter-spacing: .08em !important; padding: 1px 6px !important; border-radius: 0 !important;
 }
 .leaflet-control-attribution {
+  margin: 0 14px 10px 0 !important;
   background: oklch(from var(--bg) l c h / .72) !important; color: var(--ink-3) !important;
   font-family: var(--font-mono) !important; font-size: 9px !important; letter-spacing: .04em; border-radius: 0;
 }
