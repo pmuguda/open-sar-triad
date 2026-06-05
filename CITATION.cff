@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use open-sar-triad in research, teaching, reports, operational analysis, or derivative tools, please cite it."
+type: software
+title: "open-sar-triad: Browser-based discovery console for commercial open SAR"
+authors:
+  - family-names: "Muguda Sanjeevamurthy"
+    given-names: "Pavan"
+    website: "https://pmuguda.github.io/"
+version: "2.0.0"
+date-released: "2026-06-05"
+doi: "10.5281/zenodo.20562327"
+abstract: "open-sar-triad is a browser-based discovery console for exploring, filtering, previewing, sharing, and exporting open commercial SAR scene catalogs from ICEYE, Umbra, and Capella."
+keywords:
+  - "Synthetic Aperture Radar"
+  - "SAR"
+  - "remote sensing"
+  - "open data"
+  - "STAC"
+  - "ICEYE"
+  - "Umbra"
+  - "Capella"
+license: "MIT"
+repository-code: "https://github.com/pmuguda/open-sar-triad"
+url: "https://pmuguda.github.io/open-sar-triad"
+preferred-citation:
+  type: software
+  title: "open-sar-triad: Browser-based discovery console for commercial open SAR"
+  authors:
+    - family-names: "Muguda Sanjeevamurthy"
+      given-names: "Pavan"
+      website: "https://pmuguda.github.io/"
+  version: "2.0.0"
+  date-released: "2026-06-05"
+  doi: "10.5281/zenodo.20562327"
+  repository-code: "https://github.com/pmuguda/open-sar-triad"
+  url: "https://pmuguda.github.io/open-sar-triad"

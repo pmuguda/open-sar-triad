@@ -51,6 +51,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
 - [Dependencies](#dependencies)
+- [Citation](#citation)
 - [License](#license)
 
 ---
@@ -415,6 +416,32 @@ Steps performed by the workflow:
 |---------|---------|---------|
 | pyarrow | >=14.0 | Read Parquet files |
 | pandas | >=2.0 | DataFrame operations and deduplication |
+
+---
+
+## Citation
+
+If you use open-sar-triad in research, teaching, reports, operational analysis, or derivative tools, please cite it:
+
+> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.0.0). Zenodo. https://doi.org/10.5281/zenodo.20562327
+
+BibTeX:
+
+```bibtex
+@software{muguda_sanjeevamurthy_open_sar_triad_2026,
+  author = {Muguda Sanjeevamurthy, Pavan},
+  title = {open-sar-triad: Browser-based discovery console for commercial open SAR},
+  year = {2026},
+  version = {2.0.0},
+  doi = {10.5281/zenodo.20562327},
+  url = {https://github.com/pmuguda/open-sar-triad},
+  note = {Live application: https://pmuguda.github.io/open-sar-triad}
+}
+```
+
+The repository also includes [`CITATION.cff`](CITATION.cff), which GitHub can use to generate citation formats automatically.
+
+Scene metadata and imagery remain governed by the original provider open data terms. When publishing derived work, also credit the relevant providers and the upstream [Jack-Hayes/commerical-sar-stac](https://github.com/Jack-Hayes/commerical-sar-stac) data repository where appropriate.
 
 ---
 
