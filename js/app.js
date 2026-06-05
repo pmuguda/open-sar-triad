@@ -29,7 +29,7 @@ L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
 
 const HomeControl = L.Control.extend({
-  options: { position: 'bottomleft' },
+  options: { position: 'topleft' },
   onAdd() {
     const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-home');
     container.id = 'home-control';
