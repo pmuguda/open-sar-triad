@@ -168,9 +168,16 @@ function buildGeomCache(features) {
 // ── Zoom-dependent scale factor ────────────────────────────
 // At low zoom scenes are inflated so they're visible; above zoom 9 they
 // render at true geographic size.
+const UNSCALED_SENSOR_MODES = new Set(['stripmap', 'scan']);
+
 function sceneScaleFactor() {
   const z = map.getZoom();
   return z >= 9 ? 1 : Math.pow(2, (9 - z) * 0.75);
+}
+
+function featureScaleFactor(feat, zoomFactor) {
+  const mode = (feat.properties.sensor_mode || '').toLowerCase();
+  return UNSCALED_SENSOR_MODES.has(mode) ? 1 : zoomFactor;
 }
 
 function applyScale(geom, cx, cy, factor) {
@@ -203,7 +210,8 @@ function render() {
     const id = feat.properties.id;
     const g  = geomCache[id] || feat.geometry;
     const c  = centroidCache[id];
-    const geom = (factor > 1 && c) ? applyScale(g, c[0], c[1], factor) : g;
+    const featFactor = featureScaleFactor(feat, factor);
+    const geom = (featFactor > 1 && c) ? applyScale(g, c[0], c[1], featFactor) : g;
     byProvider[feat.properties.provider].push({ type: 'Feature', geometry: geom, properties: feat.properties });
     counts[feat.properties.provider]++;
   });
