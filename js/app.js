@@ -77,12 +77,13 @@ function getFilters() {
     dateFrom = tsToDate(+v[0]);
     dateTo   = tsToDate(+v[1]);
   }
-  const bbox = (selectedCountry && selectedCountry.bbox) || aoiBbox;
+  const bbox            = (selectedCountry && selectedCountry.bbox) || aoiBbox;
+  const countryGeometry = selectedCountry ? selectedCountry.geometry : null;
   return {
     iceye: providerActive.iceye, umbra: providerActive.umbra, capella: providerActive.capella,
     dateFrom, dateTo,
     mode:  document.getElementById('mode-filter').value,
-    bbox,
+    bbox, countryGeometry,
     orbit: orbitFilter,
     look:  lookFilter,
   };
@@ -117,7 +118,7 @@ function render() {
 
   const total = counts.iceye + counts.umbra + counts.capella;
   document.getElementById('total-vis').textContent = total;
-  drawHistogram(counts);
+  drawHistogram(counts, selectedCountry ? selectedCountry.name : null);
   drawModeBreakdown();
 }
 
@@ -128,6 +129,22 @@ function centroid(geom) {
              : geom.type === 'MultiPolygon' ? geom.coordinates[0][0] : null;
   if (!ring) return null;
   return [ring.reduce((s,c)=>s+c[0],0)/ring.length, ring.reduce((s,c)=>s+c[1],0)/ring.length];
+}
+
+function pointInPolygon(pt, geom) {
+  const [px, py] = pt;
+  const inRing = ring => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
+        inside = !inside;
+    }
+    return inside;
+  };
+  if (geom.type === 'Polygon')      return inRing(geom.coordinates[0]);
+  if (geom.type === 'MultiPolygon') return geom.coordinates.some(p => inRing(p[0]));
+  return false;
 }
 
 // ── Histogram ──────────────────────────────────────────────
@@ -164,23 +181,9 @@ function drawHistogram(counts, label) {
 
 // ── Mode breakdown (per-mode stacked bar) ──────────────────
 function drawModeBreakdown() {
-  const f = getFilters();
-  // Aggregate visible scenes by mode → provider
-  const modes = {};   // { modeName: { iceye, umbra, capella, total } }
-  allFeatures.forEach(feat => {
+  const modes = {};
+  getVisibleFeatures().forEach(feat => {
     const p = feat.properties;
-    if (!f[p.provider]) return;
-    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
-    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
-    if (f.orbit && p.orbit_state !== f.orbit) return;
-    if (f.look  && p.look_dir   !== f.look)  return;
-    if (f.bbox) {
-      const c = centroid(feat.geometry);
-      if (!c) return;
-      const [w, s, e, n] = f.bbox;
-      if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return;
-    }
     const m = (p.sensor_mode || 'unknown').toLowerCase();
     if (!modes[m]) modes[m] = { iceye: 0, umbra: 0, capella: 0, total: 0 };
     modes[m][p.provider]++;
@@ -455,18 +458,15 @@ async function loadCountries() {
           }
           const bbox = feat._bbox;
           layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
-          selectedCountry = { layer, bbox, name: feat.properties.name };
+          selectedCountry = { layer, bbox, name: feat.properties.name, geometry: feat.geometry };
 
-          // Fit bounds using safe leaflet bounds (clamped to ±180)
           const safeBounds = [
             [Math.max(-85, bbox[1]), Math.max(-180, bbox[0])],
             [Math.min(85,  bbox[3]), Math.min(180,  bbox[2])],
           ];
           map.fitBounds(safeBounds, { padding: [40,40], maxZoom: 8, duration: 700 });
-          setCountryMode(false);
+          showHint(`${feat.properties.name} selected · click another country to switch · × to clear`);
           render();
-          // Update histogram with country label
-          updateCountryHistogram(feat.properties.name, bbox);
         });
       },
     }).addTo(map);
@@ -474,24 +474,6 @@ async function loadCountries() {
   } catch(e) { console.error('Countries failed:', e); }
 }
 
-function updateCountryHistogram(name, bbox) {
-  const counts = { iceye: 0, umbra: 0, capella: 0 };
-  const f = getFilters();
-  allFeatures.forEach(feat => {
-    const p = feat.properties;
-    if (!providerActive[p.provider]) return;
-    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
-    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
-    if (f.orbit && p.orbit_state !== f.orbit) return;
-    if (f.look  && p.look_dir   !== f.look)  return;
-    const c = centroid(feat.geometry);
-    if (!c) return;
-    const [w,s,e,n] = bbox;
-    if (c[0] >= w && c[0] <= e && c[1] >= s && c[1] <= n) counts[p.provider]++;
-  });
-  drawHistogram(counts, name);
-}
 
 // ── Draw tools ──────────────────────────────────────────────
 let activeDrawTool = null;
@@ -614,8 +596,12 @@ function getVisibleFeatures() {
     if (f.bbox) {
       const c = centroid(feat.geometry);
       if (!c) return false;
-      const [w,s,e,n] = f.bbox;
-      if (c[0]<w || c[0]>e || c[1]<s || c[1]>n) return false;
+      if (f.countryGeometry) {
+        if (!pointInPolygon(c, f.countryGeometry)) return false;
+      } else {
+        const [w,s,e,n] = f.bbox;
+        if (c[0]<w || c[0]>e || c[1]<s || c[1]>n) return false;
+      }
     }
     return true;
   });
