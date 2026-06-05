@@ -402,20 +402,34 @@ Steps performed by the workflow:
 | Leaflet-Draw | 1.0.4 | Bounding box and polygon drawing tools | MIT |
 | topojson-client | 3.1.0 | Decodes TopoJSON country boundaries | BSD-3-Clause |
 
-**External services**
+**Fonts**
 
-| Service | Purpose |
-|---------|---------|
-| CartoDB (via OpenStreetMap) | Basemap tiles |
-| world-atlas (jsDelivr CDN) | Country boundary TopoJSON |
-| images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) |
+| Font | Purpose | License |
+|------|---------|---------|
+| IBM Plex Sans | UI text | SIL Open Font License 1.1 |
+| IBM Plex Sans Condensed | Compact labels | SIL Open Font License 1.1 |
+| IBM Plex Mono | Monospace text | SIL Open Font License 1.1 |
+
+**Icons**
+
+| Asset | Purpose | License |
+|-------|---------|---------|
+| Ko-fi icon (Simple Icons) | Ko-fi footer button | CC0 1.0 |
+
+**External services and data**
+
+| Service / Dataset | Purpose | License |
+|-------------------|---------|---------|
+| CartoDB (via OpenStreetMap) | Basemap tiles | © CARTO, © OSM contributors (ODbL) |
+| world-atlas by Mike Bostock | Country boundary TopoJSON | ISC |
+| images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) | Free service |
 
 **Python (data pipeline only)**
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| pyarrow | >=14.0 | Read Parquet files |
-| pandas | >=2.0 | DataFrame operations and deduplication |
+| Package | Version | Purpose | License |
+|---------|---------|---------|---------|
+| pyarrow | >=14.0 | Read Parquet files | Apache 2.0 |
+| pandas | >=2.0 | DataFrame operations and deduplication | BSD-3-Clause |
 
 ---
 
