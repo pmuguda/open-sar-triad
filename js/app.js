@@ -91,25 +91,14 @@ const tsToDate = ts => new Date(ts).toISOString().slice(0, 10);
 
 // ── Render ─────────────────────────────────────────────────
 function render() {
-  const f = getFilters();
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
   const counts = { iceye: 0, umbra: 0, capella: 0 };
+  const visible = getVisibleFeatures();
+  updateDownloadCount(visible);
 
-  allFeatures.forEach(feat => {
+  visible.forEach(feat => {
     const p = feat.properties;
-    if (!f[p.provider]) return;
-    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
-    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
-    if (f.orbit && p.orbit_state !== f.orbit) return;
-    if (f.look  && p.look_dir   !== f.look)  return;
-    if (f.bbox) {
-      const c = centroid(feat.geometry);
-      if (!c) return;
-      const [w, s, e, n] = f.bbox;
-      if (c[0] < w || c[0] > e || c[1] < s || c[1] > n) return;
-    }
     const color = PROVIDER_COLORS[p.provider];
     const layer = L.geoJSON(feat, {
       style: { color, weight: 1, opacity: .8, fillColor: color, fillOpacity: .08 },
@@ -596,18 +585,7 @@ document.getElementById('reset-btn').addEventListener('click', () => {
 
 // ── STAC export ─────────────────────────────────────────────
 document.getElementById('export-stac-btn').addEventListener('click', () => {
-  const f = getFilters();
-  const visible = allFeatures.filter(feat => {
-    const p = feat.properties;
-    if (!f[p.provider]) return false;
-    if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
-    if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
-    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
-    if (f.orbit && p.orbit_state !== f.orbit) return false;
-    if (f.look  && p.look_dir   !== f.look)  return false;
-    if (f.bbox) { const c = centroid(feat.geometry); if (!c) return false; const [w,s,e,n]=f.bbox; if(c[0]<w||c[0]>e||c[1]<s||c[1]>n) return false; }
-    return true;
-  });
+  const visible = getVisibleFeatures();
   const blob = new Blob([JSON.stringify({
     type:'FeatureCollection', stac_version:'1.0.0',
     id:'open-sar-triad-export',
@@ -621,6 +599,108 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
   a.href=url; a.download=`open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(url);
 });
+
+// ── Download script ──────────────────────────────────────────
+function getVisibleFeatures() {
+  const f = getFilters();
+  return allFeatures.filter(feat => {
+    const p = feat.properties;
+    if (!f[p.provider]) return false;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
+    if (f.orbit && p.orbit_state !== f.orbit) return false;
+    if (f.look  && p.look_dir   !== f.look)  return false;
+    if (f.bbox) {
+      const c = centroid(feat.geometry);
+      if (!c) return false;
+      const [w,s,e,n] = f.bbox;
+      if (c[0]<w || c[0]>e || c[1]<s || c[1]>n) return false;
+    }
+    return true;
+  });
+}
+
+function fileNameFromUrl(url, fallbackId) {
+  try {
+    const name = new URL(url).pathname.split('/').pop();
+    return name || fallbackId;
+  } catch { return fallbackId; }
+}
+
+document.getElementById('download-script-btn').addEventListener('click', () => {
+  const visible = getVisibleFeatures();
+  if (!visible.length) {
+    alert('No scenes match the current filters.');
+    return;
+  }
+
+  const byProvider = { iceye: [], umbra: [], capella: [] };
+  visible.forEach(feat => {
+    const p = feat.properties;
+    if (p.download && byProvider[p.provider]) byProvider[p.provider].push(p);
+  });
+
+  const counts = Object.fromEntries(
+    Object.entries(byProvider).map(([k, v]) => [k, v.length])
+  );
+  const total = counts.iceye + counts.umbra + counts.capella;
+  const date  = new Date().toISOString().slice(0, 10);
+
+  const lines = [
+    '#!/usr/bin/env bash',
+    `# open-sar-triad download script — generated ${new Date().toISOString()}`,
+    `# Total: ${total} scenes  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
+    '# Usage:  bash download.sh',
+    '# Dry run: bash download.sh --dry-run',
+    '# Requires: curl',
+    '',
+    'set -euo pipefail',
+    'DRY_RUN=false',
+    '[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true',
+    '',
+    'dl() {',
+    '  local url="$1" dest="$2"',
+    '  mkdir -p "$(dirname "$dest")"',
+    '  if $DRY_RUN; then',
+    '    echo "[dry-run] $dest"',
+    '  else',
+    '    echo "→ $dest"',
+    '    curl -fsSL --retry 3 -C - -o "$dest" "$url"',
+    '  fi',
+    '}',
+    '',
+  ];
+
+  for (const [pid, scenes] of Object.entries(byProvider)) {
+    if (!scenes.length) continue;
+    lines.push(`# ── ${PROVIDER_LABELS[pid]} (${scenes.length} scenes) ${'─'.repeat(40)}`);
+    scenes.forEach(p => {
+      const fname = fileNameFromUrl(p.download, p.id);
+      lines.push(`dl "${p.download}" "${pid}/${fname}"`);
+    });
+    lines.push('');
+  }
+
+  lines.push('echo ""');
+  lines.push(`echo "✓ Done — ${total} files"`);
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `open-sar-triad-download-${date}.sh`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Update download count label whenever render() runs
+function updateDownloadCount(visible) {
+  const el = document.getElementById('download-count');
+  if (!el) return;
+  const withUrl = visible.filter(f => f.properties.download).length;
+  el.textContent = withUrl ? `${withUrl} scene${withUrl !== 1 ? 's' : ''} with download links` : '';
+}
 
 // ── Draggable AOI toolbar ─────────────────────────────────────
 (function () {

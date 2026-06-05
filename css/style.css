@@ -97,7 +97,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .sidebar-header .tagline { font-size: 9.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; opacity: .7; }
 
 /* ── Panel sections ───────────────────────────────────────── */
-.panel-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.panel-section { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .section-title {
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .09em;
@@ -173,6 +173,7 @@ select#mode-filter:focus { border-color: var(--accent); }
   font-size: 12px; font-family: inherit; cursor: pointer; transition: all .15s;
 }
 .export-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(63,185,80,.06); }
+.download-count { font-size: 10px; color: var(--muted); text-align: center; min-height: 14px; }
 
 /* ── Sidebar footer ───────────────────────────────────────── */
 .sidebar-footer {
