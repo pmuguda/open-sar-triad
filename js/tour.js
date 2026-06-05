@@ -40,9 +40,9 @@
       },
     },
     {
-      target: '#export-stac-btn',
-      title:  'Export as STAC Collection',
-      body:   'Downloads all currently visible scenes as a STAC-compliant GeoJSON file — ready to open in QGIS, Python, or any GIS tool.',
+      target: '.panel-section',
+      title:  'Export & Share',
+      body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
       pos:    'right',
     },
     {
@@ -313,6 +313,10 @@
 
     // If already completed, don't auto-start
     if (localStorage.getItem(STORAGE_KEY)) return;
+
+    // Shared links carry state in the URL hash — skip tour so the
+    // recipient lands directly on the filtered view, not the tour.
+    if (window.location.hash.length > 1) return;
 
     var loading = document.getElementById('loading');
     if (!loading || loading.classList.contains('hidden')) {
