@@ -151,28 +151,44 @@ function getVisibleFeatures() {
   });
 }
 
+// ── Scene circle marker radius (zoom-dependent) ────────────
+function sceneRadius() {
+  return Math.max(3, 14 - map.getZoom());
+}
+
+// Update radii after zoom without re-rendering
+map.on('zoomend', () => {
+  const r = sceneRadius();
+  Object.values(activeLayers).forEach(m => { if (m.setStyle) m.setStyle({ radius: r }); });
+});
+
 // ── Render ─────────────────────────────────────────────────
 function render() {
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
   const counts = { iceye: 0, umbra: 0, capella: 0 };
   const visible = getVisibleFeatures();
+  const r = sceneRadius();
 
   visible.forEach(feat => {
     const p = feat.properties;
     const color = PROVIDER_COLORS[p.provider];
-    const layer = L.geoJSON(feat, {
-      style: { color, weight: 1, opacity: .8, fillColor: color, fillOpacity: .08 },
+    const c = centroid(feat.geometry);
+    if (!c) { counts[p.provider]++; return; }
+
+    const marker = L.circleMarker([c[1], c[0]], {
+      radius: r, color, weight: 1, opacity: 0.9,
+      fillColor: color, fillOpacity: 0.55,
       interactive: !countryMode,
     });
     if (!countryMode) {
-      layer.on('click',     () => showDetail(p));
-      layer.on('mouseover', function () { this.setStyle({ fillOpacity: .28, weight: 1.5 }); });
-      layer.on('mouseout',  function () { this.setStyle({ fillOpacity: .08, weight: 1 }); });
-      layer.bindPopup(makePopup(p), { maxWidth: 280 });
+      marker.on('click',     () => showDetail(p));
+      marker.on('mouseover', function () { this.setStyle({ radius: r * 1.6, fillOpacity: 0.9, weight: 1.5 }); });
+      marker.on('mouseout',  function () { this.setStyle({ radius: r, fillOpacity: 0.55, weight: 1 }); });
+      marker.bindPopup(makePopup(p), { maxWidth: 280 });
     }
-    layer.addTo(map);
-    activeLayers[p.id] = layer;
+    marker.addTo(map);
+    activeLayers[p.id] = marker;
     counts[p.provider]++;
   });
 
@@ -496,7 +512,7 @@ async function loadCountries() {
     geojson.features = geojson.features.filter(f => +f.id !== 10);
 
     countryLayer = L.geoJSON(geojson, {
-      style: () => ({ color: 'transparent', weight: 0, fillColor: 'transparent', fillOpacity: 0 }),
+      style: () => ({ color: 'transparent', weight: 0, fillColor: '#ffffff', fillOpacity: 0.001 }),
       onEachFeature(feat, layer) {
         layer.on('mousemove', e => {
           if (!countryMode) return;
@@ -515,14 +531,14 @@ async function loadCountries() {
         layer.on('mouseout', () => {
           tooltip.style.display = 'none';
           if (layer !== (selectedCountry && selectedCountry.layer)) {
-            layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+            layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
           }
           hoveredCountry = null;
         });
         layer.on('click', () => {
           if (!countryMode) return;
           if (selectedCountry) {
-            selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+            selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
           }
           const bbox = feat._bbox;
           layer.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
@@ -579,7 +595,7 @@ map.on(L.Draw.Event.CREATED, e => {
   const b = e.layer.getBounds();
   aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
   if (selectedCountry) {
-    selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+    selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
     selectedCountry = null;
   }
   map.removeControl(drawControl); activeDrawTool = null;
@@ -605,7 +621,7 @@ document.getElementById('tb-upload').addEventListener('change', e => {
       const b = layer.getBounds();
       aoiBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
       if (selectedCountry) {
-        selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+        selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
         selectedCountry = null;
       }
       map.fitBounds(b, { padding: [40,40] }); render();
@@ -619,7 +635,7 @@ document.getElementById('tb-clear').addEventListener('click', clearAll);
 function clearAll() {
   drawnItems.clearLayers(); aoiBbox = null;
   if (selectedCountry) {
-    selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
+    selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
     selectedCountry = null;
   }
   document.getElementById('tb-country').classList.remove('country-active');
