@@ -259,6 +259,8 @@ body {
 }
 .cfoot .icon-link:hover { background: var(--bg-3); color: var(--accent); border-color: var(--accent); }
 .cfoot .icon-link svg { width: 15px; height: 15px; }
+.cfoot .kofi-link { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; border: none; }
+.cfoot .kofi-link:hover { color: var(--accent); }
 
 /* collapse handle */
 .collapse {
