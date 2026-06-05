@@ -319,9 +319,9 @@ body {
 }
 @keyframes blip { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
 
-/* mode/sensor quick legend top-right */
+/* mode/sensor quick legend, after home control */
 .maplegend {
-  position: absolute; top: 16px; right: 54px; z-index: 500; display: flex; gap: 0; border: 1px solid var(--line);
+  position: absolute; top: 14px; left: 58px; z-index: 650; display: flex; gap: 0; border: 1px solid var(--line);
   background: oklch(from var(--bg-2) l c h /.86); backdrop-filter: blur(3px); height: 32px; pointer-events: auto;
   box-shadow: var(--shadow);
 }

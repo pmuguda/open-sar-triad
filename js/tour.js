@@ -14,7 +14,7 @@
       pos:    'center',
     },
     {
-      target: '#sensors',
+      target: '#mapLegend',
       title:  'Provider Toggles',
       body:   'Click any coloured row to show or hide scenes from that provider. ICEYE (green), Umbra (blue), and Capella (orange) are toggled independently.',
       pos:    'right',
