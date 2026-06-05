@@ -14,33 +14,25 @@
       pos:    'center',
     },
     {
-      target: '#provider-pills',
+      target: '#sensors',
       title:  'Provider Toggles',
-      body:   'Click any coloured pill to show or hide scenes from that provider. ICEYE (green), Umbra (blue), and Capella (orange) are toggled independently.',
-      pos:    'bottom',
+      body:   'Click any coloured row to show or hide scenes from that provider. ICEYE (green), Umbra (blue), and Capella (orange) are toggled independently.',
+      pos:    'right',
     },
     {
-      target: '#filters-tray',
+      target: '#filters-mod',
       title:  'Filters',
-      body:   'All scene filters live here in one collapsible tray. <b>Sensor Mode</b> narrows by acquisition type (Spotlight, Stripmap…). <b>Orbit</b> picks ascending or descending satellite passes. <b>Look</b> picks left or right radar illumination side. <b>Reset All Filters</b> clears every filter at once.',
+      body:   '<b>Sensor Mode</b> narrows by acquisition type (Spotlight, Stripmap…). <b>Orbit</b> picks ascending or descending satellite passes. <b>Look</b> picks left or right radar illumination side. <b>Reset All Filters</b> clears every filter at once.',
       pos:    'right',
-      before: function () {
-        var t = document.getElementById('filters-tray');
-        if (t) t.classList.remove('tray-collapsed');
-      },
     },
     {
-      target: '#stats-tray',
+      target: '#stats-mod',
       title:  'Stats',
-      body:   'A live bar chart shows visible scene counts per provider, and stacked bars break down sensor modes across all three providers. Both update instantly as you adjust any filter. Click the tray header to collapse when you need more sidebar space.',
+      body:   'A live coverage bar shows visible scene counts per provider, and a mode breakdown updates instantly as you adjust any filter.',
       pos:    'right',
-      before: function () {
-        var t = document.getElementById('stats-tray');
-        if (t) t.classList.remove('tray-collapsed');
-      },
     },
     {
-      target: '#export-section',
+      target: '#export-mod',
       title:  'Export & Share',
       body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
       pos:    'right',
@@ -52,9 +44,9 @@
       pos:    'bottom',
     },
     {
-      target: '#bottom-bar',
+      target: '#timeline',
       title:  'Date Range Slider',
-      body:   'Drag either handle to restrict scenes to a specific time window. The scene count on the right updates as you narrow the range.',
+      body:   'Drag either handle to restrict scenes to a specific time window. The scene count updates as you narrow the range.',
       pos:    'top',
     },
     {
@@ -264,7 +256,7 @@
     // Use 'instant' so the scroll completes synchronously — smooth scroll
     // is async and getBoundingClientRect would measure the pre-scroll position.
     var el = s.target ? document.querySelector(s.target) : null;
-    if (el && el.closest('#sidebar')) {
+    if (el && el.closest('.console')) {
       el.scrollIntoView({ block: 'center', behavior: 'instant' });
     }
 
@@ -305,12 +297,17 @@
 
   /* ── Help (?) button ──────────────────────────────────────── */
   function createHelpBtn() {
-    helpBtn          = document.createElement('button');
-    helpBtn.id       = 'tour-help-btn';
-    helpBtn.title    = 'Take the UI tour';
-    helpBtn.textContent = '?';
-    helpBtn.onclick  = start;
-    document.body.appendChild(helpBtn);
+    // Reuse the #helpBtn element already present in the HTML
+    helpBtn = document.getElementById('helpBtn');
+    if (!helpBtn) {
+      // Fallback: create the button if it somehow isn't in the DOM
+      helpBtn          = document.createElement('button');
+      helpBtn.id       = 'helpBtn';
+      helpBtn.title    = 'Take the UI tour';
+      helpBtn.textContent = '?';
+      document.body.appendChild(helpBtn);
+    }
+    helpBtn.onclick = start;
   }
 
   /* ── Init ─────────────────────────────────────────────────── */
