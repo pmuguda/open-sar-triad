@@ -373,17 +373,19 @@ function hideHint()    { hintBanner.classList.remove('visible'); }
 
 function setCountryMode(on) {
   countryMode = on;
-  document.getElementById('tb-country').classList.toggle('country-on', on);
+  const btn = document.getElementById('tb-country');
+  btn.classList.toggle('country-on', on);
+  btn.classList.toggle('country-active', !on && !!selectedCountry);
   if (on) {
     document.body.classList.add('mode-country');
     showHint('Hover and click a country to filter scenes');
-    render(); // rebuild scenes as non-interactive so clicks reach country layer
+    render();
     loadCountries();
   } else {
     document.body.classList.remove('mode-country');
     hideHint();
     tooltip.style.display = 'none';
-    render(); // rebuild scenes as interactive again
+    render();
   }
 }
 
@@ -465,7 +467,8 @@ async function loadCountries() {
             [Math.min(85,  bbox[3]), Math.min(180,  bbox[2])],
           ];
           map.fitBounds(safeBounds, { padding: [40,40], maxZoom: 8, duration: 700 });
-          showHint(`${feat.properties.name} selected · click another country to switch · × to clear`);
+          setCountryMode(false);
+          showHint(`Filtered by ${feat.properties.name} · click 🌐 to switch country · × to clear`);
           render();
         });
       },
@@ -541,6 +544,7 @@ function clearAll() {
     selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
     selectedCountry = null;
   }
+  document.getElementById('tb-country').classList.remove('country-active');
   setCountryMode(false);
   drawHistogram({ iceye:0, umbra:0, capella:0 });
   render();
