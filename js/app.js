@@ -34,6 +34,9 @@ const INITIAL_CENTER = [20, 0];
 const INITIAL_ZOOM = 2;
 const map = L.map('map', { center: INITIAL_CENTER, zoom: INITIAL_ZOOM, zoomControl: false, preferCanvas: true });
 const footprintRenderer = L.canvas({ padding: 0.5 });
+map.createPane('countryPane');
+map.getPane('countryPane').style.zIndex = 410;
+map.getPane('countryPane').style.pointerEvents = 'none';
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
 
@@ -607,6 +610,7 @@ function hideHint()    { hintBanner.classList.remove('visible'); }
 
 function setCountryMode(on) {
   countryMode = on;
+  map.getPane('countryPane').style.pointerEvents = on ? 'auto' : 'none';
   const btn = document.getElementById('tb-country');
   btn.classList.toggle('country-on', on);
   btn.classList.toggle('country-active', !on && !!selectedCountry);
@@ -687,7 +691,8 @@ async function loadCountries() {
     geojson.features = geojson.features.filter(f => +f.id !== 10);
 
     countryLayer = L.geoJSON(geojson, {
-      renderer: L.svg(),
+      renderer: L.svg({ pane: 'countryPane' }),
+      pane: 'countryPane',
       style: () => ({ color: 'transparent', weight: 0, fillColor: '#ffffff', fillOpacity: 0.001 }),
       onEachFeature(feat, layer) {
         layer.on('mousemove', e => {
