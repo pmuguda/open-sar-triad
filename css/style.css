@@ -136,7 +136,7 @@ body {
 /* sensor rows */
 .sensors { display: flex; flex-direction: column; }
 .srow {
-  display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 11px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px;
   padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; user-select: none;
 }
 .srow:first-child { border-top: 0; }
