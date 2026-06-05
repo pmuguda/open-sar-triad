@@ -158,7 +158,8 @@ body {
 .acq-card {
   margin: 0; padding: 10px; border: 1px solid var(--line); background: oklch(from var(--bg-3) l c h / .45);
 }
-.acq-card .selx select { height: 34px; font-size: 11.5px; }
+.acq-card .selx select { height: 32px; font-size: 10.5px; }
+.acq-card .selx::after { right: 10px; width: 6px; height: 6px; }
 .acq-card .seg-line { margin-bottom: 8px; gap: 10px; }
 .acq-card .seg button { height: 28px; font-size: 10.5px; }
 .compact-reset { margin-top: 0 !important; height: 32px; letter-spacing: .1em; }
@@ -175,18 +176,27 @@ body {
 .flabel .v { color: var(--accent); letter-spacing: .05em; }
 
 /* custom select */
-.selx { position: relative; }
-.selx select {
-  appearance: none; width: 100%; height: 38px; background: var(--bg-3); color: var(--ink);
-  border: 1px solid var(--line-2); padding: 0 34px 0 12px; font-family: var(--font-mono);
-  font-size: 12.5px; letter-spacing: .02em; cursor: pointer; border-radius: 0;
+.selx {
+  position: relative; border: 1px solid var(--line-2); background: var(--bg-3);
+  box-shadow: inset 0 0 0 1px oklch(from var(--bg) l c h / .42);
 }
+.selx select {
+  appearance: none; width: 100%; height: 38px; background: transparent; color: var(--ink);
+  border: 0; padding: 0 34px 0 11px; font-family: var(--font-mono); text-transform: uppercase;
+  font-size: 12.5px; letter-spacing: .08em; cursor: pointer; border-radius: 0;
+}
+.selx select option {
+  background: var(--bg-2); color: var(--ink); font-family: var(--font-mono);
+  letter-spacing: .05em;
+}
+.selx select option:checked { background: var(--accent); color: var(--bg); }
 .selx::after {
   content: ""; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px;
   border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent);
   transform: translateY(-65%) rotate(45deg); pointer-events: none;
 }
-.selx select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2); }
+.selx select:focus { outline: none; }
+.selx:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-2), inset 0 0 0 1px oklch(from var(--bg) l c h / .42); }
 
 /* segmented */
 .seg-line { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; margin-bottom: 11px; }
