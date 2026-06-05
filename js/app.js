@@ -856,57 +856,8 @@ document.querySelectorAll('[data-theme-btn]').forEach(b =>
   b.addEventListener('click', () => setTheme(b.dataset.themeBtn))
 );
 
-// ── Draggable AOI toolbar ──────────────────────────────────
-(function () {
-  const toolbar = document.getElementById('aoi-toolbar');
-  let dragging = false, ox = 0, oy = 0;
-
-  const saved = JSON.parse(localStorage.getItem('aoi-toolbar-pos') || 'null');
-  if (saved && typeof saved.top === 'number' && typeof saved.left === 'number') {
-    toolbar.style.right = 'auto';
-    toolbar.style.top   = saved.top  + 'px';
-    toolbar.style.left  = saved.left + 'px';
-  }
-
-  toolbar.addEventListener('mousedown', e => {
-    if (e.target.closest('.tb-btn') || e.target.closest('.tb-divider')) return;
-    dragging = true;
-    const rect = toolbar.getBoundingClientRect();
-    ox = e.clientX - rect.left;
-    oy = e.clientY - rect.top;
-    toolbar.style.cursor = 'grabbing';
-    toolbar.style.right  = 'auto';
-    e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    const vp = document.getElementById('viewport').getBoundingClientRect();
-    let left = e.clientX - vp.left - ox;
-    let top  = e.clientY - vp.top  - oy;
-    left = Math.max(0, Math.min(left, vp.width  - toolbar.offsetWidth));
-    top  = Math.max(0, Math.min(top,  vp.height - toolbar.offsetHeight));
-    toolbar.style.left = left + 'px';
-    toolbar.style.top  = top  + 'px';
-  });
-
-  document.addEventListener('mouseup', () => {
-    if (!dragging) return;
-    dragging = false;
-    toolbar.style.cursor = '';
-    localStorage.setItem('aoi-toolbar-pos', JSON.stringify({
-      left: parseInt(toolbar.style.left),
-      top:  parseInt(toolbar.style.top),
-    }));
-  });
-
-  toolbar.addEventListener('dblclick', () => {
-    toolbar.style.left  = '';
-    toolbar.style.top   = '56px';
-    toolbar.style.right = '60px';
-    localStorage.removeItem('aoi-toolbar-pos');
-  });
-})();
+// Remove persisted AOI toolbar positions from earlier draggable builds.
+localStorage.removeItem('aoi-toolbar-pos');
 
 // ── Custom timeline scrubber ───────────────────────────────
 function initTimeline(features) {

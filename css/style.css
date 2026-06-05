@@ -321,13 +321,13 @@ body {
 
 /* mode/sensor quick legend, after home control */
 .maplegend {
-  position: absolute; top: 14px; left: 58px; z-index: 650; display: flex; gap: 0; border: 1px solid var(--line);
+  position: absolute; top: 16px; left: 58px; z-index: 650; display: flex; gap: 0; border: 1px solid var(--line);
   background: oklch(from var(--bg-2) l c h /.86); backdrop-filter: blur(3px); height: 32px; pointer-events: auto;
   box-shadow: var(--shadow);
 }
 .maplegend .lg {
-  display: flex; align-items: center; gap: 7px; padding: 0 12px; border-left: 1px solid var(--line);
-  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); cursor: pointer;
+  display: flex; align-items: center; gap: 7px; padding: 0 13px; border-left: 1px solid var(--line);
+  font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); cursor: pointer;
 }
 .maplegend .lg:first-child { border-left: 0; }
 .maplegend .lg .d { width: 8px; height: 8px; border-radius: 50%; background: var(--sc); box-shadow: 0 0 7px -1px var(--sc); }
@@ -430,18 +430,17 @@ body {
 @media (max-width: 860px) {
   :root { --rail: 300px; }
   .app { grid-template-columns: 0 1fr; }
-  .maplegend { right: 54px; }
+  .maplegend { left: 58px; }
 }
 
 /* ── AOI toolbar ── */
 #aoi-toolbar {
-  position: absolute; top: 56px; right: 60px; z-index: 700;
+  position: absolute; left: 54px; bottom: 107px; z-index: 700;
   display: flex; align-items: center; gap: 1px;
   background: oklch(from var(--bg-2) l c h / .9); border: 1px solid var(--line);
-  padding: 3px; cursor: grab; user-select: none;
+  padding: 3px; user-select: none;
   box-shadow: var(--shadow);
 }
-#aoi-toolbar:active { cursor: grabbing; }
 .tb-btn {
   width: 30px; height: 30px; border: 1px solid transparent; background: transparent;
   color: var(--ink-3); cursor: pointer;

@@ -44,7 +44,7 @@
       target: '#aoi-toolbar',
       title:  'Area of Interest Toolbar',
       body:   'Draw a bounding box or polygon to spatially filter scenes. Upload a custom GeoJSON boundary, or use the globe icon to select a country. The × clears the active AOI.',
-      pos:    'bottom',
+      pos:    'right',
     },
     {
       target: '#home-control',
