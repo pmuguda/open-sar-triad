@@ -60,6 +60,12 @@
       pos:    'top',
     },
     {
+      target: '.cfoot',
+      title:  'GitHub & Ko-fi',
+      body:   'Source code and issue tracker live on GitHub — contributions and bug reports welcome. If open-sar-triad has saved you time, you can support its development on Ko-fi.',
+      pos:    'top',
+    },
+    {
       target: null,
       title:  "Scene Footprints — You're Ready!",
       body:   'Each coloured polygon on the map is a SAR scene. Click one for a quick popup with date and mode, then hit "Details" to open the right-side panel with a thumbnail preview, full metadata, and download links.',
@@ -128,6 +134,15 @@
       title:  'Map Space',
       body:   'Use this handle to collapse or expand the bottom sheet.',
       pos:    'top',
+    },
+    {
+      target: '.cfoot',
+      title:  'GitHub & Ko-fi',
+      body:   'Source code and issue tracker on GitHub. If open-sar-triad has been useful, support it on Ko-fi.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.remove('collapsed');
+      },
     },
     {
       target: null,
