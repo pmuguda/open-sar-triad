@@ -91,10 +91,13 @@ The three providers represented in this tool each operate public open data progr
 
 **Onboarding tour**
 - Step-by-step UI tour that auto-starts for first-time visitors
+- Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 
-**Export**
+**Export & Share**
 - Export all currently visible scenes as a STAC-compliant GeoJSON collection
+- Generate a bash download script that saves scene assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
+- Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
 
 **Automation**
 - Scene catalog refreshed every Monday at 03:00 UTC via GitHub Actions
@@ -280,10 +283,20 @@ pandas>=2.0
 | Orbit state | Three-way pill in Filters tray → Geometry | Filters to `ascending` or `descending` passes; "All" disables. Scenes with no recorded orbit state are excluded when a direction is selected |
 | Look direction | Three-way pill in Filters tray → Geometry | Filters to `left` or `right` radar look; "All" disables |
 | Bounding box | Draw rectangle or polygon on the AOI toolbar | Filters to scenes whose centroid falls within the drawn area |
-| Country | Country picker on the AOI toolbar, then click a country | Filters to scenes whose centroid falls within the country's bounding box |
+| Country | Country picker on the AOI toolbar, then click a country | Filters to scenes whose centroid falls within the actual country polygon (point-in-polygon, not just the bounding box). Globe button stays amber when a country filter is active; click it again to switch countries |
 | GeoJSON upload | File input on the AOI toolbar | Extracts the bounding box of the uploaded geometry and uses it as an area-of-interest filter |
 
 All filters are combined with AND logic: a scene must pass every active filter to appear on the map and in the statistics.
+
+### Shareable URL
+
+Every filter change updates `window.location.hash` automatically via `history.replaceState`. The hash encodes: hidden providers, date range, sensor mode, orbit, look direction, drawn bbox or selected country name, and map centre + zoom. Example:
+
+```
+https://pmuguda.github.io/open-sar-triad#from=2024-01-01&to=2025-06-01&mode=spotlight&country=India&lat=20.59&lng=78.96&z=5
+```
+
+Clicking **Copy Share Link** in the Export panel copies the current URL to the clipboard. Opening a shared URL restores all filters immediately (country and date range are applied after their respective async dependencies load). The onboarding tour is suppressed when a shared URL is detected so the recipient lands directly on the filtered view.
 
 ---
 
