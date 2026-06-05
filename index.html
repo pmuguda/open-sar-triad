@@ -73,25 +73,9 @@
         </div>
       </div>
 
-      <!-- 01 · SENSORS -->
-      <div class="mod" id="sensors-mod">
-        <div class="mod-h"><span class="ix">01</span><span class="ttl">Constellations</span><span class="rule"></span><span class="meta" id="sensorMeta">3 / 3 ONLINE</span></div>
-        <div class="sensors" id="sensors">
-          <div class="srow" data-sensor="iceye"   aria-pressed="true" style="--sc:var(--iceye)">
-            <span class="led"></span><span class="nm">ICEYE</span><span class="ct" data-ct></span>
-          </div>
-          <div class="srow" data-sensor="umbra"   aria-pressed="true" style="--sc:var(--umbra)">
-            <span class="led"></span><span class="nm">Umbra</span><span class="ct" data-ct></span>
-          </div>
-          <div class="srow" data-sensor="capella" aria-pressed="true" style="--sc:var(--capella)">
-            <span class="led"></span><span class="nm">Capella</span><span class="ct" data-ct></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 02 · FILTERS -->
+      <!-- 01 · FILTERS -->
       <div class="mod" id="filters-mod">
-        <div class="mod-h"><span class="ix">02</span><span class="ttl">Acquisition</span><span class="rule"></span><span class="meta">FILTERS</span></div>
+        <div class="mod-h"><span class="ix">01</span><span class="ttl">Acquisition</span><span class="rule"></span><span class="meta">FILTERS</span></div>
 
         <div class="field">
           <div class="flabel"><span>Sensor mode</span><span class="v" id="modeVal">ALL</span></div>
@@ -125,9 +109,9 @@
         <button class="btn reset" id="resetBtn">↺ Reset all filters</button>
       </div>
 
-      <!-- 03 · COVERAGE / STATS -->
+      <!-- 02 · COVERAGE / STATS -->
       <div class="mod" id="stats-mod">
-        <div class="mod-h"><span class="ix">03</span><span class="ttl">Coverage</span><span class="rule"></span><span class="meta" id="covTotal">— SCENES</span></div>
+        <div class="mod-h"><span class="ix">02</span><span class="ttl">Coverage</span><span class="rule"></span><span class="meta" id="covTotal">— SCENES</span></div>
         <div class="cov">
           <div class="cell" style="--sc:var(--iceye)">
             <div class="num" data-cov="iceye">—</div>
@@ -150,9 +134,9 @@
         <div class="modes" id="modes"></div>
       </div>
 
-      <!-- 04 · EXPORT -->
+      <!-- 03 · EXPORT -->
       <div class="mod" id="export-mod">
-        <div class="mod-h"><span class="ix">04</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC</span></div>
+        <div class="mod-h"><span class="ix">03</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC</span></div>
         <button class="btn ghost" data-export="stac">
           <span class="gi"><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" stroke="currentColor" stroke-width="1.3"/><line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.1"/><line x1="6" y1="6" x2="6" y2="14" stroke="currentColor" stroke-width="1.1"/></svg></span>
           Export as STAC collection

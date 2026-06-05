@@ -151,44 +151,32 @@ function getVisibleFeatures() {
   });
 }
 
-// ── Scene circle marker radius (zoom-dependent) ────────────
-function sceneRadius() {
-  return Math.max(3, 14 - map.getZoom());
-}
-
-// Update radii after zoom without re-rendering
-map.on('zoomend', () => {
-  const r = sceneRadius();
-  Object.values(activeLayers).forEach(m => { if (m.setStyle) m.setStyle({ radius: r }); });
-});
-
 // ── Render ─────────────────────────────────────────────────
 function render() {
   Object.values(activeLayers).forEach(l => map.removeLayer(l));
   activeLayers = {};
   const counts = { iceye: 0, umbra: 0, capella: 0 };
   const visible = getVisibleFeatures();
-  const r = sceneRadius();
 
   visible.forEach(feat => {
     const p = feat.properties;
     const color = PROVIDER_COLORS[p.provider];
-    const c = centroid(feat.geometry);
-    if (!c) { counts[p.provider]++; return; }
+    const geomCopy = JSON.parse(JSON.stringify(feat.geometry));
+    unwrapAntimeridian(geomCopy);
 
-    const marker = L.circleMarker([c[1], c[0]], {
-      radius: r, color, weight: 1, opacity: 0.9,
-      fillColor: color, fillOpacity: 0.55,
+    const layer = L.geoJSON({ type: 'Feature', geometry: geomCopy, properties: p }, {
+      style: { color, weight: 1, opacity: 0.85, fillColor: color, fillOpacity: 0.15 },
       interactive: !countryMode,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
     });
     if (!countryMode) {
-      marker.on('click',     () => showDetail(p));
-      marker.on('mouseover', function () { this.setStyle({ radius: r * 1.6, fillOpacity: 0.9, weight: 1.5 }); });
-      marker.on('mouseout',  function () { this.setStyle({ radius: r, fillOpacity: 0.55, weight: 1 }); });
-      marker.bindPopup(makePopup(p), { maxWidth: 280 });
+      layer.on('click',     () => showDetail(p));
+      layer.on('mouseover', function () { this.setStyle({ fillOpacity: 0.45, weight: 2 }); });
+      layer.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.15, weight: 1 }); });
+      layer.bindPopup(makePopup(p), { maxWidth: 280 });
     }
-    marker.addTo(map);
-    activeLayers[p.id] = marker;
+    layer.addTo(map);
+    activeLayers[p.id] = layer;
     counts[p.provider]++;
   });
 
@@ -371,19 +359,12 @@ document.getElementById('detail-toggle').addEventListener('click', () => {
   setTimeout(() => map.invalidateSize(), 220);
 });
 
-// ── Provider toggles (sidebar rows + map legend) ───────────
+// ── Provider toggles (map legend) ─────────────────────────
 function setSensor(s, on) {
   providerActive[s] = on;
-  document.querySelectorAll(`.srow[data-sensor="${s}"]`).forEach(el => el.setAttribute('aria-pressed', on));
   document.querySelectorAll(`.lg[data-sensor="${s}"]`).forEach(el => el.setAttribute('aria-pressed', on));
-  const online = ['iceye','umbra','capella'].filter(id => providerActive[id]).length;
-  const meta = document.getElementById('sensorMeta');
-  if (meta) meta.textContent = `${online} / 3 ONLINE`;
   render();
 }
-document.querySelectorAll('.srow[data-sensor]').forEach(el =>
-  el.addEventListener('click', () => setSensor(el.dataset.sensor, el.getAttribute('aria-pressed') !== 'true'))
-);
 document.querySelectorAll('.lg[data-sensor]').forEach(el =>
   el.addEventListener('click', () => setSensor(el.dataset.sensor, el.getAttribute('aria-pressed') !== 'true'))
 );
@@ -437,9 +418,7 @@ function showToast(msg) {
 // ── Reset ──────────────────────────────────────────────────
 document.getElementById('resetBtn').addEventListener('click', () => {
   ['iceye','umbra','capella'].forEach(id => { providerActive[id] = true; });
-  document.querySelectorAll('.srow[data-sensor],.lg[data-sensor]').forEach(el => el.setAttribute('aria-pressed', 'true'));
-  const meta = document.getElementById('sensorMeta');
-  if (meta) meta.textContent = '3 / 3 ONLINE';
+  document.querySelectorAll('.lg[data-sensor]').forEach(el => el.setAttribute('aria-pressed', 'true'));
 
   if (MONTHS.length) setTimelineRange(Math.max(0, MONTHS.length - 24), MONTHS.length - 1);
 
@@ -1016,12 +995,9 @@ function restoreState() {
   (p.get('hide') || '').split(',').filter(Boolean).forEach(id => {
     if (id in providerActive) {
       providerActive[id] = false;
-      document.querySelectorAll(`.srow[data-sensor="${id}"],.lg[data-sensor="${id}"]`).forEach(el => el.setAttribute('aria-pressed', 'false'));
+      document.querySelectorAll(`.lg[data-sensor="${id}"]`).forEach(el => el.setAttribute('aria-pressed', 'false'));
     }
   });
-  const online = ['iceye','umbra','capella'].filter(id => providerActive[id]).length;
-  const meta = document.getElementById('sensorMeta');
-  if (meta && online < 3) meta.textContent = `${online} / 3 ONLINE`;
 
   const setSegVal = (group, val) => {
     document.querySelectorAll(`.seg[data-group="${group}"] button`).forEach(btn => {
