@@ -261,7 +261,7 @@ body {
 .cfoot .icon-link svg { width: 15px; height: 15px; }
 .cfoot .kofi-link { color: var(--ink-3); white-space: nowrap; border: none; }
 .cfoot .kofi-link:hover { color: var(--accent); border-color: transparent; }
-.cfoot .kofi-cup { font-size: 14px; line-height: 1; vertical-align: middle; }
+.cfoot .kofi-cup { font-size: 18px; line-height: 1; vertical-align: -3px; }
 
 /* collapse handle */
 .collapse {
