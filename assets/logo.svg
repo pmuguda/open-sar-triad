@@ -1,30 +1,77 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="300" viewBox="0 0 1080 300" role="img" aria-labelledby="title desc">
   <title id="title">open-sar-triad</title>
-  <desc id="desc">Logo for the open SAR triad discovery console.</desc>
-  <rect width="960" height="240" fill="#0d1117"/>
-  <g transform="translate(56 48)" color="#f0b94f">
-    <rect x="0" y="0" width="144" height="144" fill="none" stroke="currentColor" stroke-opacity=".58" stroke-width="3"/>
-    <line x1="49" y1="-4" x2="49" y2="12" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
-    <line x1="72" y1="-4" x2="72" y2="18" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
-    <line x1="95" y1="-4" x2="95" y2="12" stroke="currentColor" stroke-width="4" stroke-linecap="square"/>
-    <line x1="28" y1="112" x2="92" y2="36" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
-    <line x1="43" y1="122" x2="107" y2="46" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
-    <line x1="58" y1="132" x2="122" y2="56" stroke="currentColor" stroke-opacity=".32" stroke-width="3"/>
-    <line x1="72" y1="132" x2="128" y2="28" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="72" cy="132" r="7" fill="currentColor"/>
-    <circle cx="128" cy="28" r="5" fill="currentColor"/>
+  <desc id="desc">Repository logo for an open SAR scene discovery console across ICEYE, Umbra, and Capella.</desc>
+
+  <defs>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#121820"/>
+      <stop offset="1" stop-color="#0a0f14"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#49e68d"/>
+      <stop offset=".52" stop-color="#5dd2ff"/>
+      <stop offset="1" stop-color="#ff7848"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1080" height="300" rx="0" fill="#0d1117"/>
+  <rect x="18" y="18" width="1044" height="264" fill="url(#panel)" stroke="#26313d" stroke-width="2"/>
+
+  <g transform="translate(64 46)">
+    <rect x="0" y="0" width="208" height="208" fill="#0b1117" stroke="#303b46" stroke-width="2"/>
+    <path d="M28 48h152M28 104h152M28 160h152M48 28v152M104 28v152M160 28v152" stroke="#22303b" stroke-width="1.2"/>
+
+    <polygon points="58,142 144,104 168,136 82,174" fill="#f0b94f" fill-opacity=".12" stroke="#f0b94f" stroke-width="2.2"/>
+    <polygon points="72,126 128,101 145,124 88,150" fill="#f0b94f" fill-opacity=".18" stroke="#f0b94f" stroke-width="1.4" stroke-opacity=".65"/>
+
+    <path d="M44 44C86 18 139 18 178 46" fill="none" stroke="#f0b94f" stroke-width="2" stroke-opacity=".55"/>
+    <path d="M42 50l118 92" fill="none" stroke="#49e68d" stroke-width="3" stroke-linecap="round" stroke-opacity=".85"/>
+    <path d="M104 28l42 116" fill="none" stroke="#5dd2ff" stroke-width="3" stroke-linecap="round" stroke-opacity=".85"/>
+    <path d="M178 48l-64 112" fill="none" stroke="#ff7848" stroke-width="3" stroke-linecap="round" stroke-opacity=".85"/>
+
+    <circle cx="42" cy="50" r="8" fill="#49e68d" filter="url(#softGlow)"/>
+    <circle cx="104" cy="28" r="8" fill="#5dd2ff" filter="url(#softGlow)"/>
+    <circle cx="178" cy="48" r="8" fill="#ff7848" filter="url(#softGlow)"/>
+    <circle cx="124" cy="138" r="5" fill="#f0b94f"/>
+
+    <path d="M44 184h120" stroke="#f0b94f" stroke-width="2" stroke-opacity=".7"/>
+    <path d="M54 196h100" stroke="#f0b94f" stroke-width="1.3" stroke-opacity=".35"/>
   </g>
-  <g transform="translate(248 74)">
-    <text x="0" y="46" font-family="IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif" font-size="64" font-weight="700" fill="#f0f3f6" letter-spacing="1">
-      open<tspan fill="#f0b94f"> . </tspan>sar<tspan fill="#f0b94f"> . </tspan>triad
+
+  <g transform="translate(326 82)">
+    <text x="0" y="50" font-family="IBM Plex Sans Condensed, Arial Narrow, Arial, sans-serif" font-size="70" font-weight="700" fill="#f0f3f6" letter-spacing="1">
+      open<tspan fill="#f0b94f">.</tspan>sar<tspan fill="#f0b94f">.</tspan>triad
     </text>
-    <g transform="translate(2 92)" font-family="IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" letter-spacing="7" fill="#8b949e">
-      <circle cx="10" cy="-7" r="8" fill="#49e68d"/>
-      <text x="30" y="0">ICEYE</text>
-      <circle cx="172" cy="-7" r="8" fill="#5dd2ff"/>
-      <text x="192" y="0">UMBRA</text>
-      <circle cx="352" cy="-7" r="8" fill="#ff7848"/>
-      <text x="372" y="0">CAPELLA</text>
+    <text x="2" y="91" font-family="IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#9aa4af" letter-spacing="3">
+      OPEN COMMERCIAL SAR DISCOVERY CONSOLE
+    </text>
+
+    <g transform="translate(2 132)" font-family="IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" letter-spacing="4" fill="#c4ccd4">
+      <rect x="0" y="-24" width="548" height="48" fill="#0b1117" stroke="#303b46" stroke-width="1.6"/>
+      <g transform="translate(28 0)">
+        <circle cx="0" cy="-5" r="7" fill="#49e68d" filter="url(#softGlow)"/>
+        <text x="20" y="2">ICEYE</text>
+      </g>
+      <g transform="translate(202 0)">
+        <circle cx="0" cy="-5" r="7" fill="#5dd2ff" filter="url(#softGlow)"/>
+        <text x="20" y="2">UMBRA</text>
+      </g>
+      <g transform="translate(388 0)">
+        <circle cx="0" cy="-5" r="7" fill="#ff7848" filter="url(#softGlow)"/>
+        <text x="20" y="2">CAPELLA</text>
+      </g>
     </g>
+
+    <path d="M2 196h548" stroke="url(#beam)" stroke-width="3" stroke-linecap="round"/>
+    <text x="2" y="226" font-family="IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#7f8b96" letter-spacing="2">
+      FIND OPEN SAR FOOTPRINTS - FILTER AOIS - EXPORT STAC
+    </text>
   </g>
 </svg>
