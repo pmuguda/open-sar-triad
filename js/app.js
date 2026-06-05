@@ -37,6 +37,10 @@ const footprintRenderer = L.canvas({ padding: 0.5 });
 map.createPane('countryPane');
 map.getPane('countryPane').style.zIndex = 410;
 map.getPane('countryPane').style.pointerEvents = 'none';
+
+map.createPane('drawnPane');
+map.getPane('drawnPane').style.zIndex = 420;   // above scene footprints
+map.getPane('drawnPane').style.pointerEvents = 'none'; // clicks pass through
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
 
@@ -127,8 +131,8 @@ initCollapsibleTrays();
 const drawnItems = new L.FeatureGroup().addTo(map);
 const drawControl = new L.Control.Draw({
   draw: {
-    rectangle: { shapeOptions: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } },
-    polygon:   { shapeOptions: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } },
+    rectangle: { shapeOptions: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05, pane: 'drawnPane' } },
+    polygon:   { shapeOptions: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05, pane: 'drawnPane' } },
     polyline: false, circle: false, marker: false, circlemarker: false,
   },
   edit: { featureGroup: drawnItems, remove: false, edit: false },
@@ -610,7 +614,13 @@ function hideHint()    { hintBanner.classList.remove('visible'); }
 
 function setCountryMode(on) {
   countryMode = on;
-  map.getPane('countryPane').style.pointerEvents = on ? 'auto' : 'none';
+  const _cPane = map.getPane('countryPane');
+  _cPane.style.pointerEvents = on ? 'auto' : 'none';
+  // pointer-events on an HTML div does NOT cascade into SVG children, and
+  // Leaflet sets the attribute directly on each <path>, overriding CSS inheritance.
+  // Use inline CSS (higher priority than SVG presentation attributes) on every
+  // SVG element inside the pane so they are truly click-transparent when off.
+  _cPane.querySelectorAll('svg, svg *').forEach(s => { s.style.pointerEvents = on ? '' : 'none'; });
   const btn = document.getElementById('tb-country');
   btn.classList.toggle('country-on', on);
   btn.classList.toggle('country-active', !on && !!selectedCountry);
@@ -795,7 +805,7 @@ document.getElementById('tb-upload').addEventListener('change', e => {
     try {
       const geojson = JSON.parse(ev.target.result);
       drawnItems.clearLayers();
-      const layer = L.geoJSON(geojson, { style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 } });
+      const layer = L.geoJSON(geojson, { style: { color: '#3fb950', weight: 1.5, fillOpacity: 0.05 }, pane: 'drawnPane' });
       layer.addTo(drawnItems);
       drawnItems.eachLayer(l => makeDrawnLayerPassthrough(l));
       const b = layer.getBounds();
@@ -838,6 +848,7 @@ function restoreBboxAoi(parts) {
     color: '#3fb950',
     weight: 1.5,
     fillOpacity: 0.05,
+    pane: 'drawnPane',
   });
   rect.addTo(drawnItems);
   makeDrawnLayerPassthrough(rect);
