@@ -35,13 +35,14 @@ const HomeControl = L.Control.extend({
     container.id = 'home-control';
     const link = L.DomUtil.create('a', '', container);
     link.href = '#';
-    link.title = 'Reset map view';
+    link.title = 'Reset map view and AOI';
     link.setAttribute('role', 'button');
-    link.setAttribute('aria-label', 'Reset map view');
+    link.setAttribute('aria-label', 'Reset map view and AOI');
     link.innerHTML = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 7.2 8 3l5 4.2V13H9.5V9.4h-3V13H3V7.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
     L.DomEvent.disableClickPropagation(container);
     L.DomEvent.on(link, 'click', e => {
       L.DomEvent.preventDefault(e);
+      clearAll();
       map.setView(INITIAL_CENTER, INITIAL_ZOOM);
     });
     return container;
@@ -734,13 +735,18 @@ document.getElementById('tb-upload').addEventListener('change', e => {
 // ── Clear all ──────────────────────────────────────────────
 document.getElementById('tb-clear').addEventListener('click', clearAll);
 function clearAll() {
+  if (activeDrawTool) { activeDrawTool.disable(); activeDrawTool = null; }
+  map.removeControl(drawControl);
   drawnItems.clearLayers(); aoiBbox = null;
   if (selectedCountry) {
     selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
     selectedCountry = null;
   }
   document.getElementById('tb-country').classList.remove('country-active');
+  document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
+  document.body.classList.remove('mode-draw');
   setCountryMode(false);
+  hideHint();
   render();
 }
 

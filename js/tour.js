@@ -49,7 +49,7 @@
     {
       target: '#home-control',
       title:  'Home View',
-      body:   'Use the home button to return the map to its opening world view without changing active filters.',
+      body:   'Use the home button to clear AOI or country filters and return the map to its opening world view.',
       pos:    'right',
     },
     {

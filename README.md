@@ -64,7 +64,7 @@ The three providers represented in this tool each operate public open data progr
 **Map and visualization**
 - Leaflet map with a CartoDB dark basemap
 - Scene footprints rendered as colored polygons, one per acquisition
-- Home button returns the map to the opening world view without changing filters
+- Home button clears AOI/country filters and returns the map to the opening world view
 - Clickable scenes open a detail panel with a numbered Preview section, thumbnail, metadata, and a direct download link
 
 **Filtering** — collapsible Filters tray in the sidebar
