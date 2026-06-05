@@ -176,6 +176,14 @@ def normalize_row(row, provider_id):
     if "footprint" in item_id.lower() or "collection" in item_id.lower():
         return None
 
+    def clean_str(v):
+        if v is None: return None
+        s = str(v).strip().lower()
+        return None if s in ('', 'nan', 'none') else s
+
+    orbit = clean_str(row.get("sat:orbit_state"))
+    look  = clean_str(row.get("sar:observation_direction"))
+
     return {
         "type": "Feature",
         "geometry": geometry,
@@ -195,6 +203,8 @@ def normalize_row(row, provider_id):
             "download":        download,
             "provider_url":    info["provider_url"],
             "collection":      str(row.get("collection") or row.get("sar:product_type") or ""),
+            "orbit_state":     orbit,
+            "look_dir":        look,
         },
     }
 

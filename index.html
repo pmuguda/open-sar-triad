@@ -46,6 +46,26 @@
       <select id="mode-filter"><option value="">All modes</option></select>
     </div>
 
+    <div class="panel-section" id="geometry-section">
+      <div class="section-title">Geometry</div>
+      <div class="geo-row">
+        <span class="geo-label">Orbit</span>
+        <div class="geo-pills" id="orbit-pills">
+          <button class="geo-pill active" data-val="">All</button>
+          <button class="geo-pill" data-val="ascending" title="Satellite moving south → north">↑ Asc</button>
+          <button class="geo-pill" data-val="descending" title="Satellite moving north → south">↓ Desc</button>
+        </div>
+      </div>
+      <div class="geo-row">
+        <span class="geo-label">Look</span>
+        <div class="geo-pills" id="look-pills">
+          <button class="geo-pill active" data-val="">All</button>
+          <button class="geo-pill" data-val="left" title="Radar beam points left of flight path">← Left</button>
+          <button class="geo-pill" data-val="right" title="Radar beam points right of flight path">→ Right</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel-section">
       <button id="reset-btn" class="reset-btn">Reset All Filters</button>
     </div>

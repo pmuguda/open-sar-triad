@@ -14,6 +14,8 @@ let selectedCountry = null;   // { layer, bbox, name }
 let dateSlider      = null;
 let dateMin = 0, dateMax = 0;
 const providerActive = { iceye: true, umbra: true, capella: true };
+let orbitFilter = '';   // '' | 'ascending' | 'descending'
+let lookFilter  = '';   // '' | 'left' | 'right'
 
 // ── Map ────────────────────────────────────────────────────
 const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: false });
@@ -79,8 +81,10 @@ function getFilters() {
   return {
     iceye: providerActive.iceye, umbra: providerActive.umbra, capella: providerActive.capella,
     dateFrom, dateTo,
-    mode: document.getElementById('mode-filter').value,
+    mode:  document.getElementById('mode-filter').value,
     bbox,
+    orbit: orbitFilter,
+    look:  lookFilter,
   };
 }
 const tsToDate = ts => new Date(ts).toISOString().slice(0, 10);
@@ -97,7 +101,9 @@ function render() {
     if (!f[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.orbit && p.orbit_state !== f.orbit) return;
+    if (f.look  && p.look_dir   !== f.look)  return;
     if (f.bbox) {
       const c = centroid(feat.geometry);
       if (!c) return;
@@ -177,7 +183,9 @@ function drawModeBreakdown() {
     if (!f[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.orbit && p.orbit_state !== f.orbit) return;
+    if (f.look  && p.look_dir   !== f.look)  return;
     if (f.bbox) {
       const c = centroid(feat.geometry);
       if (!c) return;
@@ -473,7 +481,9 @@ function updateCountryHistogram(name, bbox) {
     if (!providerActive[p.provider]) return;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return;
-    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.orbit && p.orbit_state !== f.orbit) return;
+    if (f.look  && p.look_dir   !== f.look)  return;
     const c = centroid(feat.geometry);
     if (!c) return;
     const [w,s,e,n] = bbox;
@@ -564,6 +574,11 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     dateSlider.set([twoYearsBack, dateMax]);
   }
   document.getElementById('mode-filter').value = '';
+  orbitFilter = '';
+  lookFilter  = '';
+  ['orbit-pills', 'look-pills'].forEach(id => {
+    document.querySelectorAll(`#${id} .geo-pill`).forEach((p, i) => p.classList.toggle('active', i === 0));
+  });
   clearAll();
 });
 
@@ -575,7 +590,9 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
     if (!f[p.provider]) return false;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
-    if (f.mode && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
+    if (f.orbit && p.orbit_state !== f.orbit) return false;
+    if (f.look  && p.look_dir   !== f.look)  return false;
     if (f.bbox) { const c = centroid(feat.geometry); if (!c) return false; const [w,s,e,n]=f.bbox; if(c[0]<w||c[0]>e||c[1]<s||c[1]>n) return false; }
     return true;
   });
@@ -648,6 +665,20 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
     localStorage.removeItem('aoi-toolbar-pos');
   });
 })();
+
+// ── Geometry filters (orbit state / look direction) ───────────
+function initGeoPills(groupId, onChange) {
+  document.querySelectorAll(`#${groupId} .geo-pill`).forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll(`#${groupId} .geo-pill`).forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      onChange(pill.dataset.val);
+      render();
+    });
+  });
+}
+initGeoPills('orbit-pills', val => { orbitFilter = val; });
+initGeoPills('look-pills',  val => { lookFilter  = val; });
 
 // ── Collapsible sidebar sections ─────────────────────────────
 document.querySelectorAll('.collapsible-hdr').forEach(hdr => {
