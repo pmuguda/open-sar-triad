@@ -24,18 +24,21 @@
       title:  'Filters',
       body:   '<b>Sensor Mode</b> narrows by acquisition type (Spotlight, Stripmap…). <b>Orbit</b> picks ascending or descending satellite passes. <b>Look</b> picks left or right radar illumination side. <b>Reset All Filters</b> clears every filter at once.',
       pos:    'right',
+      before: function () { if (window.expandTray) window.expandTray('#filters-mod'); },
     },
     {
       target: '#stats-mod',
       title:  'Stats',
       body:   'A live coverage bar shows visible scene counts per provider, and a mode breakdown updates instantly as you adjust any filter.',
       pos:    'right',
+      before: function () { if (window.expandTray) window.expandTray('#stats-mod'); },
     },
     {
       target: '#export-mod',
       title:  'Export & Share',
       body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
       pos:    'right',
+      before: function () { if (window.expandTray) window.expandTray('#export-mod'); },
     },
     {
       target: '#aoi-toolbar',

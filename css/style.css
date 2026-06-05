@@ -128,10 +128,26 @@ body {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
   color: var(--ink-3);
 }
+.tray-toggle {
+  appearance: none; width: 100%; padding: 0; border: 0; background: transparent;
+  cursor: pointer; text-align: left;
+}
+.tray-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .mod-h .ix { color: var(--accent); font-weight: 600; }
 .mod-h .ttl { color: var(--ink-2); font-weight: 500; }
 .mod-h .rule { flex: 1; height: 1px; background: var(--line); }
 .mod-h .meta { color: var(--ink-3); font-size: 9.5px; letter-spacing: .12em; }
+.mod-h .chev {
+  width: 7px; height: 7px; border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent);
+  transform: translateY(-2px) rotate(45deg); transition: transform .16s ease;
+}
+.mod.is-collapsed { padding-bottom: 16px; }
+.mod.is-collapsed .mod-h { margin-bottom: 0; }
+.mod.is-collapsed .chev { transform: translateY(2px) rotate(-135deg); }
+.tray-body {
+  display: block; overflow: hidden;
+}
+.mod.is-collapsed .tray-body { display: none; }
 
 
 /* generic field */
@@ -473,6 +489,10 @@ body.detail-collapsed #detail-toggle svg { transform: rotate(180deg); }
 body.detail-collapsed #detail-toggle { right: 0; }
 
 /* Detail content */
+.detail-section-title {
+  margin: 0 0 9px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--ink-3);
+}
 .detail-thumbnail { width: 100%; margin-bottom: 14px; border: 1px solid var(--line); background: var(--bg); display: block; }
 .detail-thumb-placeholder {
   width: 100%; aspect-ratio: 1; margin-bottom: 14px;

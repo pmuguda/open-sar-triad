@@ -62,6 +62,31 @@ function updateCoords() {
 }
 map.on('move zoom', updateCoords); updateCoords();
 
+// ── Collapsible sidebar trays ──────────────────────────────
+function setTrayCollapsed(mod, collapsed) {
+  const btn = mod.querySelector('.tray-toggle');
+  const body = btn ? document.getElementById(btn.getAttribute('aria-controls')) : null;
+  if (!btn || !body) return;
+  mod.classList.toggle('is-collapsed', collapsed);
+  btn.setAttribute('aria-expanded', String(!collapsed));
+  body.hidden = collapsed;
+}
+
+function expandTray(selector) {
+  const mod = document.querySelector(selector);
+  if (mod) setTrayCollapsed(mod, false);
+}
+window.expandTray = expandTray;
+
+function initCollapsibleTrays() {
+  document.querySelectorAll('.mod .tray-toggle').forEach(btn => {
+    const mod = btn.closest('.mod');
+    btn.addEventListener('click', () => setTrayCollapsed(mod, !mod.classList.contains('is-collapsed')));
+  });
+}
+
+initCollapsibleTrays();
+
 // ── Drawn items (Leaflet-Draw) ─────────────────────────────
 const drawnItems = new L.FeatureGroup().addTo(map);
 const drawControl = new L.Control.Draw({
@@ -402,7 +427,8 @@ function showDetail(p) {
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
   document.getElementById('detail-content').innerHTML =
-    `${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
+    `<div class="detail-section-title">Preview</div>
+${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
 <div class="detail-actions">${dl}${pv}</div>`;
