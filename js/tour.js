@@ -12,6 +12,7 @@
       title:  'Welcome to open-sar-triad',
       body:   'A browser-based discovery portal for open SAR satellite imagery from ICEYE, Umbra, and Capella. This quick tour walks you through every control — or skip it if you already know the ropes.',
       pos:    'center',
+      logo:   true,
     },
     {
       target: '#mapLegend',
@@ -72,6 +73,7 @@
       title:  'open-sar-triad on mobile',
       body:   'The mobile layout keeps the map first. Use the bottom sheet for filters, stats, and exports, then collapse it when you want more map space.',
       pos:    'center',
+      logo:   true,
     },
     {
       target: '#mapLegend',
@@ -320,6 +322,7 @@
         counterHtml +
         '<button class="tt-skip" id="tt-skip">Skip tour</button>' +
       '</div>' +
+      (s.logo ? '<img class="tt-logo" src="assets/logo.svg" alt="open-sar-triad" />' : '') +
       '<h3 class="tt-heading">' + s.title + '</h3>' +
       '<p class="tt-body">'    + s.body  + '</p>' +
       '<div class="tt-actions">' +

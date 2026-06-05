@@ -74,6 +74,13 @@
 .tt-skip:hover { color: oklch(0.65 0.22 20); }
 
 /* ── Tooltip body ─────────────────────────────────────────────── */
+.tt-logo {
+  display: block;
+  width: min(220px, 100%);
+  height: auto;
+  margin: 0 auto 14px;
+}
+
 .tt-heading {
   font-family: var(--font-cond);
   font-size: 15px;
