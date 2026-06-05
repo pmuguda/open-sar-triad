@@ -598,8 +598,34 @@ const ISO_NAMES = {
   858:'Uruguay',860:'Uzbekistan',862:'Venezuela',704:'Vietnam',887:'Yemen',894:'Zambia',716:'Zimbabwe',
 };
 
+function applyPendingCountryRestore() {
+  if (!pendingCountryRestore || !countryLayer) return;
+  const name = pendingCountryRestore;
+  const target = name.toLowerCase();
+  let matched = false;
+  countryLayer.eachLayer(l => {
+    const featureName = l.feature && l.feature.properties.name;
+    if (!featureName || featureName.toLowerCase() !== target) return;
+    if (selectedCountry && selectedCountry.layer && selectedCountry.layer !== l) {
+      selectedCountry.layer.setStyle({ fillColor: '#ffffff', fillOpacity: 0.001, color: 'transparent', weight: 0 });
+    }
+    l.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
+    selectedCountry = { layer: l, bbox: l.feature._bbox, name: featureName, geometry: l.feature.geometry };
+    document.getElementById('tb-country').classList.add('country-active');
+    showHint(`Filtered by ${featureName} · click 🌐 to switch country · × to clear`);
+    matched = true;
+  });
+  if (matched) {
+    pendingCountryRestore = null;
+    render();
+  }
+}
+
 async function loadCountries() {
-  if (countriesLoaded) return;
+  if (countriesLoaded) {
+    applyPendingCountryRestore();
+    return;
+  }
   try {
     const res    = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
     const topo   = await res.json();
@@ -659,19 +685,7 @@ async function loadCountries() {
     }).addTo(map);
     countriesLoaded = true;
 
-    if (pendingCountryRestore) {
-      const name = pendingCountryRestore;
-      pendingCountryRestore = null;
-      countryLayer.eachLayer(l => {
-        if (l.feature && l.feature.properties.name === name) {
-          l.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
-          selectedCountry = { layer: l, bbox: l.feature._bbox, name, geometry: l.feature.geometry };
-          document.getElementById('tb-country').classList.add('country-active');
-          showHint(`Filtered by ${name} · click 🌐 to switch country · × to clear`);
-          render();
-        }
-      });
-    }
+    applyPendingCountryRestore();
   } catch(e) { console.error('Countries failed:', e); }
 }
 
@@ -1101,7 +1115,10 @@ function restoreState() {
   }
 
   const country = p.get('country');
-  if (country) pendingCountryRestore = country;
+  if (country) {
+    pendingCountryRestore = country;
+    loadCountries();
+  }
 
   const lat = parseFloat(p.get('lat'));
   const lng = parseFloat(p.get('lng'));
