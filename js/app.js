@@ -682,13 +682,15 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   const counts = Object.fromEntries(
     Object.entries(byProvider).map(([k, v]) => [k, v.length])
   );
-  const total = counts.iceye + counts.umbra + counts.capella;
-  const date  = new Date().toISOString().slice(0, 10);
+  const total   = counts.iceye + counts.umbra + counts.capella;
+  const omitted = visible.length - total;
+  const date    = new Date().toISOString().slice(0, 10);
 
   const lines = [
     '#!/usr/bin/env bash',
     `# open-sar-triad download script — generated ${new Date().toISOString()}`,
-    `# Total: ${total} scenes  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
+    `# Visible: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
+    ...(omitted ? [`# Note: ${omitted} scene(s) omitted — no download URL in catalog`] : []),
     '# Usage:  bash download.sh',
     '# Dry run: bash download.sh --dry-run',
     '# Requires: curl',
@@ -730,7 +732,10 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   a.download = `open-sar-triad-download-${date}.sh`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`download.sh ready · ${total} scenes`);
+  const toastMsg = omitted
+    ? `download.sh ready · ${total} of ${visible.length} scenes (${omitted} have no download URL)`
+    : `download.sh ready · ${total} scenes`;
+  showToast(toastMsg);
 });
 
 // ── Copy share link ────────────────────────────────────────
