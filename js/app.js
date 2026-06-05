@@ -750,6 +750,20 @@ function clearAll() {
   render();
 }
 
+function restoreBboxAoi(parts) {
+  if (parts.length !== 4 || parts.some(n => !isFinite(n))) return false;
+  const [w, s, e, n] = parts;
+  if (w >= e || s >= n) return false;
+  aoiBbox = parts;
+  drawnItems.clearLayers();
+  L.rectangle([[s, w], [n, e]], {
+    color: '#3fb950',
+    weight: 1.5,
+    fillOpacity: 0.05,
+  }).addTo(drawnItems);
+  return true;
+}
+
 // ── STAC export ────────────────────────────────────────────
 document.querySelector('[data-export="stac"]').addEventListener('click', () => {
   const visible = getVisibleFeatures();
@@ -1083,7 +1097,7 @@ function restoreState() {
   const bbox = p.get('bbox');
   if (bbox) {
     const parts = bbox.split(',').map(Number);
-    if (parts.length === 4 && parts.every(n => !isNaN(n))) aoiBbox = parts;
+    restoreBboxAoi(parts);
   }
 
   const country = p.get('country');

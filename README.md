@@ -291,7 +291,7 @@ Every filter change updates `window.location.hash` automatically via `history.re
 https://pmuguda.github.io/open-sar-triad#from=2024-01-01&to=2025-06-01&mode=spotlight&country=India&lat=20.59&lng=78.96&z=5
 ```
 
-Clicking **Copy Share Link** in the Export panel copies the current URL to the clipboard. Opening a shared URL restores all filters immediately (country and date range are applied after their respective async dependencies load). The onboarding tour is suppressed when a shared URL is detected so the recipient lands directly on the filtered view.
+Clicking **Copy Share Link** in the Export panel copies the current URL to the clipboard. Opening a shared URL restores all filters immediately: bbox AOIs redraw as visible rectangles, selected countries are highlighted after country boundaries load, and date range is applied after the timeline initializes. The onboarding tour is suppressed when a shared URL is detected so the recipient lands directly on the filtered view.
 
 ---
 
