@@ -260,15 +260,21 @@
     // Run optional pre-step hook (e.g. expand a collapsed tray)
     if (s.before) s.before();
 
-    // Scroll sidebar targets into view so they aren't clipped
-    var el   = s.target ? document.querySelector(s.target) : null;
+    // Scroll sidebar targets into view so they aren't clipped.
+    // Use 'instant' so the scroll completes synchronously — smooth scroll
+    // is async and getBoundingClientRect would measure the pre-scroll position.
+    var el = s.target ? document.querySelector(s.target) : null;
     if (el && el.closest('#sidebar')) {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.scrollIntoView({ block: 'center', behavior: 'instant' });
     }
 
-    var rect = el ? el.getBoundingClientRect() : null;
-    setSpotlight(rect);
-    requestAnimationFrame(function () { placeTooltip(s, rect); });
+    // Measure rect and place spotlight/tooltip after the browser has
+    // processed the scroll and any before() layout changes.
+    requestAnimationFrame(function () {
+      var rect = el ? el.getBoundingClientRect() : null;
+      setSpotlight(rect);
+      placeTooltip(s, rect);
+    });
   }
 
   function go(i) {
