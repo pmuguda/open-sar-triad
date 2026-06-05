@@ -150,6 +150,14 @@ body {
   display: block; overflow: hidden;
 }
 .mod.is-collapsed .tray-body { display: none; }
+.acq-tray { display: flex; flex-direction: column; gap: 10px; }
+.acq-card {
+  margin: 0; padding: 10px; border: 1px solid var(--line); background: oklch(from var(--bg-3) l c h / .45);
+}
+.acq-card .selx select { height: 34px; font-size: 11.5px; }
+.acq-card .seg-line { margin-bottom: 8px; gap: 10px; }
+.acq-card .seg button { height: 28px; font-size: 10.5px; }
+.compact-reset { margin-top: 0 !important; height: 32px; letter-spacing: .1em; }
 
 
 /* generic field */
@@ -159,6 +167,7 @@ body {
   display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px;
   font-size: 10px; letter-spacing: .15em; text-transform: uppercase; color: var(--ink-3);
 }
+.flabel.compact { margin-bottom: 6px; letter-spacing: .12em; }
 .flabel .v { color: var(--accent); letter-spacing: .05em; }
 
 /* custom select */
@@ -229,7 +238,13 @@ body {
 }
 .cfoot a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 1px; }
 .cfoot a:hover { color: var(--accent); border-color: var(--accent); }
-.cfoot .links { display: flex; gap: 13px; }
+.cfoot .links { display: flex; gap: 8px; }
+.cfoot .icon-link {
+  width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
+  background: var(--bg-2); color: var(--ink-2);
+}
+.cfoot .icon-link:hover { background: var(--bg-3); color: var(--accent); border-color: var(--accent); }
+.cfoot .icon-link svg { width: 15px; height: 15px; }
 
 /* collapse handle */
 .collapse {
@@ -258,7 +273,10 @@ body {
 .leaflet-control-zoom a:hover,
 .leaflet-control-home a:hover { color: var(--accent) !important; background: var(--bg-3) !important; }
 .leaflet-control-home {
-  border: 1px solid var(--line) !important; box-shadow: none !important; margin: 14px 0 0 14px !important;
+  border: 1px solid var(--line) !important; box-shadow: none !important; margin: 16px 0 0 14px !important;
+}
+.leaflet-control-home a {
+  width: 32px !important; height: 32px !important; line-height: 30px !important;
 }
 .leaflet-control-home a { display: flex !important; align-items: center; justify-content: center; }
 .leaflet-control-home svg { width: 15px; height: 15px; }
