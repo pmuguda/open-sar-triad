@@ -398,6 +398,41 @@ body.detail-collapsed #detail-panel { transform: translateX(100%); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Geometry filter (orbit / look direction) ─────────────── */
+.geo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.geo-row:last-child { margin-bottom: 0; }
+.geo-label {
+  font-size: 10.5px;
+  color: var(--muted);
+  width: 30px;
+  flex-shrink: 0;
+}
+.geo-pills { display: flex; gap: 4px; }
+.geo-pill {
+  font-size: 10.5px;
+  font-family: inherit;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.geo-pill:hover { border-color: var(--muted); color: var(--text); }
+.geo-pill.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(63, 185, 80, 0.08);
+}
+
 /* ── Collapsible sidebar sections ─────────────────────────── */
 .section-title.collapsible-hdr {
   display: flex;
