@@ -73,7 +73,8 @@ The three providers represented in this tool each operate public open data progr
 **Map and visualization**
 - Leaflet map with a CartoDB dark basemap
 - Scene footprints rendered as colored polygons, one per acquisition
-- Clickable scenes open a detail panel showing thumbnail, metadata, and a direct download link
+- Home button returns the map to the opening world view without changing filters
+- Clickable scenes open a detail panel with a numbered Preview section, thumbnail, metadata, and a direct download link
 
 **Filtering** — collapsible Filters tray in the sidebar
 - Toggle individual providers on or off
@@ -94,7 +95,7 @@ The three providers represented in this tool each operate public open data progr
 - Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 
-**Export & Share**
+**Export & Share** — collapsible Export tray in the sidebar
 - Export all currently visible scenes as a STAC-compliant GeoJSON collection
 - Generate a bash download script that saves scene assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
@@ -196,10 +197,11 @@ Key functions in `app.js`:
 |----------|---------|
 | `getFilters()` | Reads all UI controls and returns the current filter state |
 | `render()` | Applies filters to `allFeatures`, rebuilds map layers, updates stats |
+| `initCollapsibleTrays()` | Wires the numbered sidebar trays so Acquisition, Coverage, and Export can collapse independently |
 | `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
 | `drawHistogram()` | Renders the provider scene-count bar chart on a canvas element |
 | `drawModeBreakdown()` | Renders the stacked sensor-mode bar chart |
-| `showDetail()` | Populates the right-side detail panel with scene metadata |
+| `showDetail()` | Populates the right-side `04 Preview` detail panel with scene metadata |
 | `bboxFromGeometry()` | Extracts a bounding box from any GeoJSON geometry |
 | `unwrapAntimeridian()` | Corrects polygon coordinates that cross the ±180° meridian |
 | `loadCountries()` | Fetches world-atlas TopoJSON and creates interactive country polygons |

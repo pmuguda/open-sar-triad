@@ -22,9 +22,32 @@ let MONTHS = [];
 let tlFrom = 0, tlTo = 0;
 
 // ── Map ────────────────────────────────────────────────────
-const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: false });
+const INITIAL_CENTER = [20, 0];
+const INITIAL_ZOOM = 2;
+const map = L.map('map', { center: INITIAL_CENTER, zoom: INITIAL_ZOOM, zoomControl: false });
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
+
+const HomeControl = L.Control.extend({
+  options: { position: 'bottomleft' },
+  onAdd() {
+    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-home');
+    container.id = 'home-control';
+    const link = L.DomUtil.create('a', '', container);
+    link.href = '#';
+    link.title = 'Reset map view';
+    link.setAttribute('role', 'button');
+    link.setAttribute('aria-label', 'Reset map view');
+    link.innerHTML = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 7.2 8 3l5 4.2V13H9.5V9.4h-3V13H3V7.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.on(link, 'click', e => {
+      L.DomEvent.preventDefault(e);
+      map.setView(INITIAL_CENTER, INITIAL_ZOOM);
+    });
+    return container;
+  }
+});
+new HomeControl().addTo(map);
 
 const TILE = {
   dark:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
@@ -427,7 +450,7 @@ function showDetail(p) {
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
   document.getElementById('detail-content').innerHTML =
-    `<div class="detail-section-title">Preview</div>
+    `<div class="mod-h detail-h"><span class="ix">04</span><span class="ttl">Preview</span><span class="rule"></span><span class="meta">SCENE</span></div>
 ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>

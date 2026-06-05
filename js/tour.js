@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'sar-tour-v2';
+  var STORAGE_KEY = 'sar-tour-v3';
   var PAD    = 10;   // spotlight padding around target
   var MARGIN = 14;   // tooltip margin from edge / target
   var TT_W   = 290;  // tooltip width (matches CSS)
@@ -45,6 +45,12 @@
       title:  'Area of Interest Toolbar',
       body:   'Draw a bounding box or polygon to spatially filter scenes. Upload a custom GeoJSON boundary, or use the globe icon to select a country. The × clears the active AOI.',
       pos:    'bottom',
+    },
+    {
+      target: '#home-control',
+      title:  'Home View',
+      body:   'Use the home button to return the map to its opening world view without changing active filters.',
+      pos:    'right',
     },
     {
       target: '#timeline',
