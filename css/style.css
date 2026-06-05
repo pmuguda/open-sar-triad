@@ -250,7 +250,7 @@ body {
   display: flex; flex-direction: column; gap: 6px;
   font-size: 10px; letter-spacing: .06em; color: var(--ink-3);
 }
-.cfoot-row { display: flex; align-items: center; gap: 8px; }
+.cfoot-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 .cfoot a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--line-2); padding-bottom: 1px; }
 .cfoot a:hover { color: var(--accent); border-color: var(--accent); }
 .cfoot .icon-link {
@@ -259,9 +259,8 @@ body {
 }
 .cfoot .icon-link:hover { background: var(--bg-3); color: var(--accent); border-color: var(--accent); }
 .cfoot .icon-link svg { width: 15px; height: 15px; }
-.cfoot .kofi-link { color: var(--ink-3); white-space: nowrap; border: none; }
+.cfoot .kofi-link { color: var(--ink-3); white-space: nowrap; border: none; font-size: 10px; }
 .cfoot .kofi-link:hover { color: var(--accent); border-color: transparent; }
-.cfoot .kofi-cup { font-size: 18px; line-height: 1; vertical-align: -3px; }
 
 /* collapse handle */
 .collapse {
