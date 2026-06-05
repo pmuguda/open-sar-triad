@@ -9,6 +9,7 @@ Credit: https://github.com/Jack-Hayes/commerical-sar-stac
 
 import io
 import json
+import re
 import sys
 import urllib.request
 import warnings
@@ -181,6 +182,18 @@ def normalize_row(row, provider_id):
         s = str(v).strip().lower()
         return None if s in ('', 'nan', 'none') else s
 
+    def sanitize_str(v):
+        """Strip HTML tags and normalize; returns None for empty/nan values."""
+        if v is None: return None
+        s = re.sub(r'<[^>]*>', '', str(v)).strip()
+        return None if s.lower() in ('', 'nan', 'none') else s
+
+    def safe_url(v):
+        """Accept only http(s) URLs; reject anything else (javascript:, data:, etc.)."""
+        if v is None: return None
+        s = str(v).strip()
+        return s if s.startswith(('https://', 'http://')) else None
+
     orbit = clean_str(row.get("sat:orbit_state"))
     look  = clean_str(row.get("sar:observation_direction"))
 
@@ -188,21 +201,21 @@ def normalize_row(row, provider_id):
         "type": "Feature",
         "geometry": geometry,
         "properties": {
-            "id":              str(row.get("id", "")),
+            "id":              sanitize_str(row.get("id")) or "",
             "provider":        provider_id,
             "provider_label":  info["label"],
             "color":           info["color"],
             "date":            date_str,
             "year":            year,
-            "sensor_mode":     (str(sensor_mode).lower() if sensor_mode else "n/a"),
+            "sensor_mode":     sanitize_str(sensor_mode) or "n/a",
             "resolution":      resolution,
-            "polarization":    str(polarization) if polarization else None,
+            "polarization":    sanitize_str(polarization),
             "incidence_angle": incidence_angle,
             "off_nadir":       off_nadir,
-            "thumbnail":       thumbnail,
-            "download":        download,
+            "thumbnail":       safe_url(thumbnail),
+            "download":        safe_url(download),
             "provider_url":    info["provider_url"],
-            "collection":      str(row.get("collection") or row.get("sar:product_type") or ""),
+            "collection":      sanitize_str(row.get("collection") or row.get("sar:product_type")) or "",
             "orbit_state":     orbit,
             "look_dir":        look,
         },
