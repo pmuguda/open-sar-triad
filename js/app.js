@@ -10,12 +10,14 @@ let countryLayer    = null;
 let countriesLoaded = false;
 let countryMode     = false;
 let hoveredCountry  = null;
-let selectedCountry = null;   // { layer, bbox, name }
+let selectedCountry = null;   // { layer, bbox, name, geometry }
 let dateSlider      = null;
 let dateMin = 0, dateMax = 0;
 const providerActive = { iceye: true, umbra: true, capella: true };
 let orbitFilter = '';   // '' | 'ascending' | 'descending'
 let lookFilter  = '';   // '' | 'left' | 'right'
+let dataLoaded  = false;
+let pendingCountryRestore = null;
 
 // ── Map ────────────────────────────────────────────────────
 const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: false });
@@ -120,6 +122,7 @@ function render() {
   document.getElementById('total-vis').textContent = total;
   drawHistogram(counts, selectedCountry ? selectedCountry.name : null);
   drawModeBreakdown();
+  if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
 }
 
 function centroid(geom) {
@@ -361,7 +364,19 @@ function initDateSlider(features) {
   };
   dateSlider.on('update', update);
   dateSlider.on('change', () => render());
-  update([defaultStart, dateMax]);
+
+  // Apply date range from URL hash if present
+  const dr = window._pendingDateRestore;
+  if (dr && dr.from && dr.to) {
+    const ts0 = new Date(dr.from).getTime();
+    const ts1 = new Date(dr.to).getTime();
+    if (!isNaN(ts0) && !isNaN(ts1) && ts0 >= dateMin && ts1 <= dateMax) {
+      dateSlider.set([ts0, ts1]);
+    }
+    window._pendingDateRestore = null;
+  }
+
+  update(dateSlider.get());
 }
 
 // ── Country picker ──────────────────────────────────────────
@@ -474,6 +489,21 @@ async function loadCountries() {
       },
     }).addTo(map);
     countriesLoaded = true;
+
+    // Restore country filter from URL hash if pending
+    if (pendingCountryRestore) {
+      const name = pendingCountryRestore;
+      pendingCountryRestore = null;
+      countryLayer.eachLayer(l => {
+        if (l.feature && l.feature.properties.name === name) {
+          l.setStyle({ fillColor: '#d29922', fillOpacity: 0.1, color: '#d29922', weight: 1.5 });
+          selectedCountry = { layer: l, bbox: l.feature._bbox, name, geometry: l.feature.geometry };
+          document.getElementById('tb-country').classList.add('country-active');
+          showHint(`Filtered by ${name} · click 🌐 to switch country · × to clear`);
+          render();
+        }
+      });
+    }
   } catch(e) { console.error('Countries failed:', e); }
 }
 
@@ -769,14 +799,104 @@ document.querySelectorAll('.tray-header').forEach(hdr => {
   });
 });
 
+// ── Shareable URL state ───────────────────────────────────────
+function encodeState() {
+  const p = new URLSearchParams();
+  const hidden = ['iceye','umbra','capella'].filter(id => !providerActive[id]);
+  if (hidden.length) p.set('hide', hidden.join(','));
+  if (dateSlider) {
+    const v = dateSlider.get();
+    p.set('from', tsToDate(+v[0]));
+    p.set('to',   tsToDate(+v[1]));
+  }
+  const mode = document.getElementById('mode-filter').value;
+  if (mode)        p.set('mode',  mode);
+  if (orbitFilter) p.set('orbit', orbitFilter);
+  if (lookFilter)  p.set('look',  lookFilter);
+  if (selectedCountry) {
+    p.set('country', selectedCountry.name);
+  } else if (aoiBbox) {
+    p.set('bbox', aoiBbox.map(v => Math.round(v * 1000) / 1000).join(','));
+  }
+  const c = map.getCenter();
+  p.set('lat', Math.round(c.lat * 100) / 100);
+  p.set('lng', Math.round(c.lng * 100) / 100);
+  p.set('z',   map.getZoom());
+  return p.toString();
+}
+
+function restoreState() {
+  const raw = window.location.hash.slice(1);
+  if (!raw) return;
+  let p;
+  try { p = new URLSearchParams(raw); } catch { return; }
+
+  // Providers
+  (p.get('hide') || '').split(',').filter(Boolean).forEach(id => {
+    if (id in providerActive) {
+      providerActive[id] = false;
+      document.getElementById(`pill-${id}`)?.classList.remove('active');
+    }
+  });
+
+  // Geo-pills helper
+  const setGeopill = (groupId, val) => {
+    document.querySelectorAll(`#${groupId} .geo-pill`).forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.val === val);
+    });
+  };
+
+  const orbit = p.get('orbit');
+  if (orbit) { orbitFilter = orbit; setGeopill('orbit-pills', orbit); }
+
+  const look = p.get('look');
+  if (look)  { lookFilter  = look;  setGeopill('look-pills',  look);  }
+
+  const mode = p.get('mode');
+  if (mode) document.getElementById('mode-filter').value = mode;
+
+  // AOI bbox (drawn)
+  const bbox = p.get('bbox');
+  if (bbox) {
+    const parts = bbox.split(',').map(Number);
+    if (parts.length === 4 && parts.every(n => !isNaN(n))) aoiBbox = parts;
+  }
+
+  // Country — deferred until loadCountries() finishes
+  const country = p.get('country');
+  if (country) pendingCountryRestore = country;
+
+  // Map view
+  const lat = parseFloat(p.get('lat'));
+  const lng = parseFloat(p.get('lng'));
+  const z   = parseInt(p.get('z'), 10);
+  if (!isNaN(lat) && !isNaN(lng) && !isNaN(z)) map.setView([lat, lng], z);
+
+  // Date — deferred until initDateSlider() runs
+  window._pendingDateRestore = { from: p.get('from'), to: p.get('to') };
+}
+
+document.getElementById('copy-link-btn').addEventListener('click', () => {
+  history.replaceState(null, '', '#' + encodeState());
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    const btn = document.getElementById('copy-link-btn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    btn.style.color = 'var(--accent)';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+  });
+});
+
 // ── Load data ────────────────────────────────────────────────
 fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     allFeatures = geojson.features || [];
     populateModes(allFeatures);
+    restoreState();          // parse hash before slider init so date gets applied
     initDateSlider(allFeatures);
     document.getElementById('loading').classList.add('hidden');
+    dataLoaded = true;
     render();
   })
   .catch(() => {
