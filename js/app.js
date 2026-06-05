@@ -1,4 +1,4 @@
-/* open-sar-triad */
+/* open-sar-triad — app.js */
 
 const PROVIDER_COLORS = { iceye: '#00FF87', umbra: '#00C9FF', capella: '#FF6B35' };
 const PROVIDER_LABELS = { iceye: 'ICEYE', umbra: 'Umbra', capella: 'Capella' };
@@ -11,22 +11,58 @@ let countriesLoaded = false;
 let countryMode     = false;
 let hoveredCountry  = null;
 let selectedCountry = null;   // { layer, bbox, name, geometry }
-let dateSlider      = null;
-let dateMin = 0, dateMax = 0;
 const providerActive = { iceye: true, umbra: true, capella: true };
 let orbitFilter = '';   // '' | 'ascending' | 'descending'
 let lookFilter  = '';   // '' | 'left' | 'right'
 let dataLoaded  = false;
 let pendingCountryRestore = null;
 
+// ── Custom timeline scrubber state ─────────────────────────
+let MONTHS = [];
+let tlFrom = 0, tlTo = 0;
+
 // ── Map ────────────────────────────────────────────────────
 const map = L.map('map', { center: [20, 0], zoom: 2, zoomControl: false });
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
-  subdomains: 'abcd', maxZoom: 19,
-}).addTo(map);
+L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map);
 
+const TILE = {
+  dark:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+  paper: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+  labels: {
+    dark:  'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    paper: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+  }
+};
+const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+let baseLayer  = L.tileLayer(TILE.dark,  { subdomains: 'abcd', attribution: ATTR, detectRetina: true }).addTo(map);
+let labelLayer = L.tileLayer(TILE.labels.dark, { subdomains: 'abcd', detectRetina: true, opacity: 0.55, pane: 'overlayPane' }).addTo(map);
+
+// ── Graticule ──────────────────────────────────────────────
+const gridLayer = L.layerGroup().addTo(map);
+function drawGraticule() {
+  gridLayer.clearLayers();
+  const col = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || 'rgba(150,160,180,.15)';
+  for (let lng = -180; lng <= 180; lng += 20)
+    L.polyline([[-85,lng],[85,lng]], { color: col, weight: 1, interactive: false }).addTo(gridLayer);
+  for (let lat = -80; lat <= 80; lat += 20)
+    L.polyline([[lat,-180],[lat,180]], { color: col, weight: 1, interactive: false }).addTo(gridLayer);
+}
+drawGraticule();
+
+// ── Coordinate readout ─────────────────────────────────────
+function updateCoords() {
+  const c = map.getCenter();
+  const rdLat = document.getElementById('rdLat');
+  const rdLng = document.getElementById('rdLng');
+  const rdZ   = document.getElementById('rdZ');
+  if (rdLat) rdLat.textContent = c.lat.toFixed(4);
+  if (rdLng) rdLng.textContent = c.lng.toFixed(4);
+  if (rdZ)   rdZ.textContent   = map.getZoom().toFixed(map.getZoom() % 1 ? 1 : 0);
+}
+map.on('move zoom', updateCoords); updateCoords();
+
+// ── Drawn items (Leaflet-Draw) ─────────────────────────────
 const drawnItems = new L.FeatureGroup().addTo(map);
 const drawControl = new L.Control.Draw({
   draw: {
@@ -37,24 +73,24 @@ const drawControl = new L.Control.Draw({
   edit: { featureGroup: drawnItems, remove: false, edit: false },
 });
 
-// ── Antimeridian helpers (from bboxer) ─────────────────────
+// ── Antimeridian helpers ───────────────────────────────────
 function unwrapAntimeridian(geom) {
   if (!geom) return;
   const fixRing = ring => {
     for (let i = 1; i < ring.length; i++) {
       const d = ring[i][0] - ring[i-1][0];
-      if (d > 180)  ring[i][0] -= 360;
+      if (d > 180)      ring[i][0] -= 360;
       else if (d < -180) ring[i][0] += 360;
     }
   };
-  if (geom.type === 'Polygon')      geom.coordinates.forEach(fixRing);
+  if (geom.type === 'Polygon')           geom.coordinates.forEach(fixRing);
   else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(p => p.forEach(fixRing));
 }
 
 function flatCoords(geom) {
   if (!geom) return [];
-  if (geom.type === 'Polygon')      return geom.coordinates.flat();
-  if (geom.type === 'MultiPolygon') return geom.coordinates.flat(2);
+  if (geom.type === 'Polygon')           return geom.coordinates.flat();
+  if (geom.type === 'MultiPolygon')      return geom.coordinates.flat(2);
   return [];
 }
 
@@ -74,23 +110,46 @@ function bboxFromGeometry(geom) {
 // ── Filters ────────────────────────────────────────────────
 function getFilters() {
   let dateFrom = null, dateTo = null;
-  if (dateSlider) {
-    const v = dateSlider.get();
-    dateFrom = tsToDate(+v[0]);
-    dateTo   = tsToDate(+v[1]);
+  if (MONTHS.length) {
+    dateFrom = MONTHS[tlFrom] + '-01';
+    dateTo   = MONTHS[tlTo]   + '-31';
   }
   const bbox            = (selectedCountry && selectedCountry.bbox) || aoiBbox;
   const countryGeometry = selectedCountry ? selectedCountry.geometry : null;
   return {
     iceye: providerActive.iceye, umbra: providerActive.umbra, capella: providerActive.capella,
     dateFrom, dateTo,
-    mode:  document.getElementById('mode-filter').value,
+    mode:  document.getElementById('modeSel') ? document.getElementById('modeSel').value : '',
     bbox, countryGeometry,
     orbit: orbitFilter,
     look:  lookFilter,
   };
 }
-const tsToDate = ts => new Date(ts).toISOString().slice(0, 10);
+
+// ── Visible features ───────────────────────────────────────
+function getVisibleFeatures() {
+  const f = getFilters();
+  return allFeatures.filter(feat => {
+    const p = feat.properties;
+    if (!f[p.provider]) return false;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
+    if (f.orbit && p.orbit_state !== f.orbit) return false;
+    if (f.look  && p.look_dir   !== f.look)  return false;
+    if (f.bbox) {
+      const c = centroid(feat.geometry);
+      if (!c) return false;
+      if (f.countryGeometry) {
+        if (!pointInPolygon(c, f.countryGeometry)) return false;
+      } else {
+        const [w,s,e,n] = f.bbox;
+        if (c[0]<w || c[0]>e || c[1]<s || c[1]>n) return false;
+      }
+    }
+    return true;
+  });
+}
 
 // ── Render ─────────────────────────────────────────────────
 function render() {
@@ -98,14 +157,13 @@ function render() {
   activeLayers = {};
   const counts = { iceye: 0, umbra: 0, capella: 0 };
   const visible = getVisibleFeatures();
-  updateDownloadCount(visible);
 
   visible.forEach(feat => {
     const p = feat.properties;
     const color = PROVIDER_COLORS[p.provider];
     const layer = L.geoJSON(feat, {
       style: { color, weight: 1, opacity: .8, fillColor: color, fillOpacity: .08 },
-      interactive: !countryMode,  // pass-through clicks when country mode active
+      interactive: !countryMode,
     });
     if (!countryMode) {
       layer.on('click',     () => showDetail(p));
@@ -119,12 +177,15 @@ function render() {
   });
 
   const total = counts.iceye + counts.umbra + counts.capella;
-  document.getElementById('total-vis').textContent = total;
-  drawHistogram(counts, selectedCountry ? selectedCountry.name : null);
-  drawModeBreakdown();
+  const visEl = document.getElementById('visCount');
+  if (visEl) visEl.textContent = total.toLocaleString('en-US');
+  updateCoverage(counts, total);
+  updateModes();
+  updateTimelineHistogram();
   if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
 }
 
+// ── Geometry helpers ───────────────────────────────────────
 function centroid(geom) {
   if (!geom) return null;
   if (geom.type === 'Point') return geom.coordinates;
@@ -145,45 +206,27 @@ function pointInPolygon(pt, geom) {
     }
     return inside;
   };
-  if (geom.type === 'Polygon')      return inRing(geom.coordinates[0]);
-  if (geom.type === 'MultiPolygon') return geom.coordinates.some(p => inRing(p[0]));
+  if (geom.type === 'Polygon')           return inRing(geom.coordinates[0]);
+  if (geom.type === 'MultiPolygon')      return geom.coordinates.some(p => inRing(p[0]));
   return false;
 }
 
-// ── Histogram ──────────────────────────────────────────────
-function drawHistogram(counts, label) {
-  const canvas = document.getElementById('histogram');
-  const W = canvas.offsetWidth || 240;
-  const H = 110;
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, W, H);
-  const providers = ['iceye','umbra','capella'];
-  const vals = providers.map(p => counts[p]);
-  const max  = Math.max(...vals, 1);
-  const barW = Math.floor((W - 32) / 3);
-  const gap  = (W - barW * 3) / 4;
+// ── Coverage stats ─────────────────────────────────────────
+function updateCoverage(counts, total) {
+  const totalEl = document.getElementById('covTotal');
+  if (totalEl) totalEl.textContent = total.toLocaleString('en-US') + ' SCENES';
 
-  // Update section title
-  const titleEl = document.getElementById('hist-title');
-  titleEl.textContent = label ? `Coverage — ${label}` : 'Scene Coverage';
-
-  providers.forEach((pid, i) => {
-    const x = gap + i * (barW + gap);
-    const barH = Math.max(2, Math.round((vals[i] / max) * (H - 42)));
-    const y = H - 18 - barH;
-    const color = PROVIDER_COLORS[pid];
-    ctx.fillStyle = color + '33'; ctx.strokeStyle = color; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(x, y, barW, barH, 3); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = color; ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(vals[i], x + barW / 2, y - 4);
-    ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui,sans-serif';
-    ctx.fillText(PROVIDER_LABELS[pid], x + barW / 2, H - 4);
+  const maxCount = Math.max(counts.iceye, counts.umbra, counts.capella, 1);
+  ['iceye', 'umbra', 'capella'].forEach(pid => {
+    const numEl = document.querySelector(`.cov .num[data-cov="${pid}"]`);
+    const barEl = document.querySelector(`.cov .bar i[data-covbar="${pid}"]`);
+    if (numEl) numEl.textContent = counts[pid].toLocaleString('en-US');
+    if (barEl) barEl.style.width = (counts[pid] / maxCount * 100) + '%';
   });
 }
 
-// ── Mode breakdown (per-mode stacked bar) ──────────────────
-function drawModeBreakdown() {
+// ── Mode breakdown ─────────────────────────────────────────
+function updateModes() {
   const modes = {};
   getVisibleFeatures().forEach(feat => {
     const p = feat.properties;
@@ -193,31 +236,24 @@ function drawModeBreakdown() {
     modes[m].total++;
   });
 
-  const container = document.getElementById('mode-stats');
+  const container = document.getElementById('modes');
+  if (!container) return;
   const sorted = Object.entries(modes).sort((a, b) => b[1].total - a[1].total);
 
   if (!sorted.length) {
-    container.innerHTML = '<div style="font-size:11px;color:var(--muted)">No scenes match filters</div>';
+    container.innerHTML = '<div style="font-size:11px;color:var(--ink-3)">No scenes match filters</div>';
     return;
   }
 
-  const maxTotal = Math.max(...sorted.map(([, v]) => v.total));
-
   container.innerHTML = sorted.map(([name, v]) => {
-    const widthPct = (v.total / maxTotal) * 100;
     const segs = ['iceye', 'umbra', 'capella'].map(pid => {
       if (!v[pid]) return '';
-      const pct = (v[pid] / v.total) * 100;
-      const label = pct > 14 ? v[pid] : '';
-      return `<div class="mode-bar-seg ${pid}" style="flex:${v[pid]}" title="${PROVIDER_LABELS[pid]}: ${v[pid]}">${label}</div>`;
+      const pct = (v[pid] / v.total * 100).toFixed(1);
+      return `<i style="width:${pct}%;background:var(--${pid});opacity:.85"></i>`;
     }).join('');
-
-    return `<div class="mode-row">
-      <div class="mode-row-label">
-        <span class="mode-name">${esc(name.replace(/_/g, ' '))}</span>
-        <span class="mode-total">${v.total.toLocaleString()}</span>
-      </div>
-      <div class="mode-bar" style="width:${widthPct}%; min-width: 40px">${segs}</div>
+    return `<div class="mline">
+      <div class="top"><span class="mn">${esc(name.replace(/_/g,' '))}</span><span class="mv">${v.total.toLocaleString('en-US')}</span></div>
+      <div class="track">${segs}</div>
     </div>`;
   }).join('');
 }
@@ -235,6 +271,7 @@ function makePopup(p) {
 <div class="popup-mode">⚡ ${esc(p.sensor_mode||'—')}</div>
 <div class="popup-actions">${det}${dl}${pv}</div>`;
 }
+
 const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function safeUrl(url) {
@@ -253,7 +290,6 @@ window.showDetailById = id => {
 
 function proxyThumb(url, provider) {
   if (!safeUrl(url)) return null;
-  // ICEYE S3 has no CORS headers — route through weserv.nl (free CDN proxy)
   if (provider === 'iceye') {
     return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=600&output=jpg&q=80`;
   }
@@ -299,28 +335,35 @@ function showDetail(p) {
   document.getElementById('detail-toggle').classList.remove('hidden');
 }
 
-// ── Sidebar / detail panel toggles ─────────────────────────
-document.getElementById('sidebar-toggle').addEventListener('click', () => {
-  document.body.classList.toggle('sidebar-collapsed');
-  setTimeout(() => map.invalidateSize(), 300);
-});
-
+// ── Detail toggle ───────────────────────────────────────────
 document.getElementById('detail-toggle').addEventListener('click', () => {
   document.body.classList.toggle('detail-collapsed');
   setTimeout(() => map.invalidateSize(), 220);
 });
 
-// ── Provider pills ─────────────────────────────────────────
-['iceye','umbra','capella'].forEach(pid => {
-  document.getElementById(`pill-${pid}`).addEventListener('click', () => {
-    providerActive[pid] = !providerActive[pid];
-    document.getElementById(`pill-${pid}`).classList.toggle('active', providerActive[pid]);
-    render();
-  });
-});
+// ── Provider toggles (sidebar rows + map legend) ───────────
+function setSensor(s, on) {
+  providerActive[s] = on;
+  document.querySelectorAll(`.srow[data-sensor="${s}"]`).forEach(el => el.setAttribute('aria-pressed', on));
+  document.querySelectorAll(`.lg[data-sensor="${s}"]`).forEach(el => el.setAttribute('aria-pressed', on));
+  const online = ['iceye','umbra','capella'].filter(id => providerActive[id]).length;
+  const meta = document.getElementById('sensorMeta');
+  if (meta) meta.textContent = `${online} / 3 ONLINE`;
+  render();
+}
+document.querySelectorAll('.srow[data-sensor]').forEach(el =>
+  el.addEventListener('click', () => setSensor(el.dataset.sensor, el.getAttribute('aria-pressed') !== 'true'))
+);
+document.querySelectorAll('.lg[data-sensor]').forEach(el =>
+  el.addEventListener('click', () => setSensor(el.dataset.sensor, el.getAttribute('aria-pressed') !== 'true'))
+);
 
-// ── Sensor mode ─────────────────────────────────────────────
-document.getElementById('mode-filter').addEventListener('change', render);
+// ── Mode select ─────────────────────────────────────────────
+document.getElementById('modeSel').addEventListener('change', e => {
+  const modeVal = document.getElementById('modeVal');
+  if (modeVal) modeVal.textContent = e.target.value ? e.target.value.toUpperCase() : 'ALL';
+  render();
+});
 
 function populateModes(features) {
   const modes = new Set();
@@ -328,59 +371,70 @@ function populateModes(features) {
     const m = f.properties.sensor_mode;
     if (m && m.toLowerCase() !== 'n/a') modes.add(m.toLowerCase());
   });
-  const sel = document.getElementById('mode-filter');
+  const sel = document.getElementById('modeSel');
+  if (!sel) return;
   [...modes].sort().forEach(m => {
     const o = document.createElement('option');
-    o.value = m;
-    o.textContent = m.replace(/_/g, ' ');
+    o.value = m; o.textContent = m.replace(/_/g, ' ');
     sel.appendChild(o);
   });
 }
 
-// ── Date slider ─────────────────────────────────────────────
-function initDateSlider(features) {
-  const ts = features.map(f => f.properties.date).filter(Boolean)
-    .map(d => new Date(d).getTime()).filter(t => !isNaN(t));
-  if (!ts.length) return;
-  dateMin = Math.min(...ts); dateMax = Math.max(...ts);
-
-  // Default start: 2 years back from max, or dateMin if data is shorter
-  const twoYearsBack = dateMax - 2 * 365.25 * 24 * 3600 * 1000;
-  const defaultStart = Math.max(dateMin, twoYearsBack);
-
-  dateSlider = noUiSlider.create(document.getElementById('date-slider'), {
-    start: [defaultStart, dateMax], connect: true,
-    range: { min: dateMin, max: dateMax },
-    tooltips: [
-      { to: v => new Date(+v).toISOString().slice(0,7) },
-      { to: v => new Date(+v).toISOString().slice(0,7) },
-    ],
-    step: 30 * 24 * 3600 * 1000,
+// ── Orbit/look segmented controls ─────────────────────────
+document.querySelectorAll('.seg[data-group]').forEach(seg => {
+  seg.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b === btn));
+    if (seg.dataset.group === 'orbit') orbitFilter = btn.dataset.v === 'all' ? '' : (btn.dataset.v === 'asc' ? 'ascending' : 'descending');
+    if (seg.dataset.group === 'look')  lookFilter  = btn.dataset.v === 'all' ? '' : btn.dataset.v;
+    render();
   });
+});
 
-  const update = vals => {
-    document.getElementById('date-label-from').textContent = new Date(+vals[0]).toISOString().slice(0,7);
-    document.getElementById('date-label-to').textContent   = new Date(+vals[1]).toISOString().slice(0,7);
-  };
-  dateSlider.on('update', update);
-  dateSlider.on('change', () => render());
-
-  // Apply date range from URL hash if present
-  const dr = window._pendingDateRestore;
-  if (dr && dr.from && dr.to) {
-    const ts0 = new Date(dr.from).getTime();
-    const ts1 = new Date(dr.to).getTime();
-    if (!isNaN(ts0) && !isNaN(ts1) && ts0 >= dateMin && ts1 <= dateMax) {
-      dateSlider.set([ts0, ts1]);
-    }
-    window._pendingDateRestore = null;
-  }
-
-  update(dateSlider.get());
+// ── Toast ──────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  const msgEl = document.getElementById('toastMsg');
+  if (!el || !msgEl) return;
+  msgEl.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 }
 
+// ── Reset ──────────────────────────────────────────────────
+document.getElementById('resetBtn').addEventListener('click', () => {
+  ['iceye','umbra','capella'].forEach(id => { providerActive[id] = true; });
+  document.querySelectorAll('.srow[data-sensor],.lg[data-sensor]').forEach(el => el.setAttribute('aria-pressed', 'true'));
+  const meta = document.getElementById('sensorMeta');
+  if (meta) meta.textContent = '3 / 3 ONLINE';
+
+  if (MONTHS.length) setTimelineRange(Math.max(0, MONTHS.length - 24), MONTHS.length - 1);
+
+  const modeSel = document.getElementById('modeSel');
+  if (modeSel) modeSel.value = '';
+  const modeVal = document.getElementById('modeVal');
+  if (modeVal) modeVal.textContent = 'ALL';
+
+  orbitFilter = ''; lookFilter = '';
+  document.querySelectorAll('.seg[data-group] button').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.v === 'all');
+  });
+
+  clearAll();
+  showToast('Filters reset');
+});
+
+// ── Collapse console ───────────────────────────────────────
+document.getElementById('collapseBtn').addEventListener('click', () => {
+  document.getElementById('app').classList.toggle('collapsed');
+  setTimeout(() => map.invalidateSize(), 340);
+});
+
 // ── Country picker ──────────────────────────────────────────
-const tooltip   = document.getElementById('country-tooltip');
+const tooltip    = document.getElementById('country-tooltip');
 const hintBanner = document.getElementById('hint-banner');
 
 function showHint(msg) { hintBanner.textContent = msg; hintBanner.classList.add('visible'); }
@@ -406,7 +460,6 @@ function setCountryMode(on) {
 
 document.getElementById('tb-country').addEventListener('click', () => setCountryMode(!countryMode));
 
-// ISO numeric → name (subset of commonly needed countries)
 const ISO_NAMES = {
   4:'Afghanistan',8:'Albania',12:'Algeria',24:'Angola',32:'Argentina',36:'Australia',
   40:'Austria',50:'Bangladesh',56:'Belgium',64:'Bhutan',68:'Bolivia',76:'Brazil',
@@ -430,18 +483,16 @@ const ISO_NAMES = {
 async function loadCountries() {
   if (countriesLoaded) return;
   try {
-    const res   = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
-    const topo  = await res.json();
+    const res    = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    const topo   = await res.json();
     const geojson = topojson.feature(topo, topo.objects.countries);
 
-    // Assign names + unwrap antimeridian for every feature
     geojson.features.forEach(f => {
       f.properties = f.properties || {};
       if (!f.properties.name) f.properties.name = ISO_NAMES[+f.id] || `Country ${f.id}`;
       unwrapAntimeridian(f.geometry);
-      f._bbox = bboxFromGeometry(f.geometry); // cache bbox
+      f._bbox = bboxFromGeometry(f.geometry);
     });
-    // Drop Antarctica
     geojson.features = geojson.features.filter(f => +f.id !== 10);
 
     countryLayer = L.geoJSON(geojson, {
@@ -490,7 +541,6 @@ async function loadCountries() {
     }).addTo(map);
     countriesLoaded = true;
 
-    // Restore country filter from URL hash if pending
     if (pendingCountryRestore) {
       const name = pendingCountryRestore;
       pendingCountryRestore = null;
@@ -507,8 +557,7 @@ async function loadCountries() {
   } catch(e) { console.error('Countries failed:', e); }
 }
 
-
-// ── Draw tools ──────────────────────────────────────────────
+// ── Draw tools ─────────────────────────────────────────────
 let activeDrawTool = null;
 
 function startDraw(ToolClass, options, btnId) {
@@ -532,7 +581,6 @@ map.on(L.Draw.Event.CREATED, e => {
   if (selectedCountry) {
     selectedCountry.layer.setStyle({ fillColor: 'transparent', fillOpacity: 0, color: 'transparent', weight: 0 });
     selectedCountry = null;
-    drawHistogram({ iceye:0, umbra:0, capella:0 });
   }
   map.removeControl(drawControl); activeDrawTool = null;
   document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
@@ -544,7 +592,7 @@ map.on(L.Draw.Event.DRAWSTOP, () => {
   document.body.classList.remove('mode-draw'); hideHint();
 });
 
-// ── Upload GeoJSON ──────────────────────────────────────────
+// ── Upload GeoJSON ─────────────────────────────────────────
 document.getElementById('tb-upload').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
@@ -561,12 +609,12 @@ document.getElementById('tb-upload').addEventListener('change', e => {
         selectedCountry = null;
       }
       map.fitBounds(b, { padding: [40,40] }); render();
-    } catch { alert('Invalid GeoJSON file.'); }
+    } catch { showToast('Invalid GeoJSON file.'); }
   };
   reader.readAsText(file); e.target.value = '';
 });
 
-// ── Clear all ───────────────────────────────────────────────
+// ── Clear all ──────────────────────────────────────────────
 document.getElementById('tb-clear').addEventListener('click', clearAll);
 function clearAll() {
   drawnItems.clearLayers(); aoiBbox = null;
@@ -576,31 +624,11 @@ function clearAll() {
   }
   document.getElementById('tb-country').classList.remove('country-active');
   setCountryMode(false);
-  drawHistogram({ iceye:0, umbra:0, capella:0 });
   render();
 }
 
-// ── Reset ───────────────────────────────────────────────────
-document.getElementById('reset-btn').addEventListener('click', () => {
-  ['iceye','umbra','capella'].forEach(pid => {
-    providerActive[pid] = true;
-    document.getElementById(`pill-${pid}`).classList.add('active');
-  });
-  if (dateSlider) {
-    const twoYearsBack = Math.max(dateMin, dateMax - 2 * 365.25 * 24 * 3600 * 1000);
-    dateSlider.set([twoYearsBack, dateMax]);
-  }
-  document.getElementById('mode-filter').value = '';
-  orbitFilter = '';
-  lookFilter  = '';
-  ['orbit-pills', 'look-pills'].forEach(id => {
-    document.querySelectorAll(`#${id} .geo-pill`).forEach((p, i) => p.classList.toggle('active', i === 0));
-  });
-  clearAll();
-});
-
-// ── STAC export ─────────────────────────────────────────────
-document.getElementById('export-stac-btn').addEventListener('click', () => {
+// ── STAC export ────────────────────────────────────────────
+document.querySelector('[data-export="stac"]').addEventListener('click', () => {
   const visible = getVisibleFeatures();
   const blob = new Blob([JSON.stringify({
     type:'FeatureCollection', stac_version:'1.0.0',
@@ -612,35 +640,12 @@ document.getElementById('export-stac-btn').addEventListener('click', () => {
   }, null, 2)], { type:'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href=url; a.download=`open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
+  a.href = url; a.download = `open-sar-triad-${new Date().toISOString().slice(0,10)}.json`;
   a.click(); URL.revokeObjectURL(url);
+  showToast(`STAC exported · ${visible.length.toLocaleString()} scenes`);
 });
 
-// ── Download script ──────────────────────────────────────────
-function getVisibleFeatures() {
-  const f = getFilters();
-  return allFeatures.filter(feat => {
-    const p = feat.properties;
-    if (!f[p.provider]) return false;
-    if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
-    if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
-    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
-    if (f.orbit && p.orbit_state !== f.orbit) return false;
-    if (f.look  && p.look_dir   !== f.look)  return false;
-    if (f.bbox) {
-      const c = centroid(feat.geometry);
-      if (!c) return false;
-      if (f.countryGeometry) {
-        if (!pointInPolygon(c, f.countryGeometry)) return false;
-      } else {
-        const [w,s,e,n] = f.bbox;
-        if (c[0]<w || c[0]>e || c[1]<s || c[1]>n) return false;
-      }
-    }
-    return true;
-  });
-}
-
+// ── Download script ────────────────────────────────────────
 function fileNameFromUrl(url, fallbackId) {
   try {
     const name = new URL(url).pathname.split('/').pop();
@@ -648,12 +653,9 @@ function fileNameFromUrl(url, fallbackId) {
   } catch { return fallbackId; }
 }
 
-document.getElementById('download-script-btn').addEventListener('click', () => {
+document.querySelector('[data-export="script"]').addEventListener('click', () => {
   const visible = getVisibleFeatures();
-  if (!visible.length) {
-    alert('No scenes match the current filters.');
-    return;
-  }
+  if (!visible.length) { showToast('No scenes match current filters'); return; }
 
   const byProvider = { iceye: [], umbra: [], capella: [] };
   visible.forEach(feat => {
@@ -712,31 +714,42 @@ document.getElementById('download-script-btn').addEventListener('click', () => {
   a.download = `open-sar-triad-download-${date}.sh`;
   a.click();
   URL.revokeObjectURL(url);
+  showToast(`download.sh ready · ${total} scenes`);
 });
 
-// Update download count label whenever render() runs
-function updateDownloadCount(visible) {
-  const el = document.getElementById('download-count');
-  if (!el) return;
-  const withUrl = visible.filter(f => f.properties.download).length;
-  el.textContent = withUrl ? `${withUrl} scene${withUrl !== 1 ? 's' : ''} with download links` : '';
-}
+// ── Copy share link ────────────────────────────────────────
+document.querySelector('[data-export="link"]').addEventListener('click', () => {
+  history.replaceState(null, '', '#' + encodeState());
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    showToast('Share link copied to clipboard');
+  });
+});
 
-// ── Draggable AOI toolbar ─────────────────────────────────────
+// ── Theme toggle ───────────────────────────────────────────
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelectorAll('[data-theme-btn]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeBtn === t));
+  baseLayer.setUrl(TILE[t]);
+  labelLayer.setUrl(TILE.labels[t]);
+  setTimeout(() => drawGraticule(), 30);
+}
+document.querySelectorAll('[data-theme-btn]').forEach(b =>
+  b.addEventListener('click', () => setTheme(b.dataset.themeBtn))
+);
+
+// ── Draggable AOI toolbar ──────────────────────────────────
 (function () {
   const toolbar = document.getElementById('aoi-toolbar');
   let dragging = false, ox = 0, oy = 0;
 
-  // Restore saved position
   const saved = JSON.parse(localStorage.getItem('aoi-toolbar-pos') || 'null');
   if (saved && typeof saved.top === 'number' && typeof saved.left === 'number') {
-    toolbar.style.right  = 'auto';
-    toolbar.style.top    = saved.top  + 'px';
-    toolbar.style.left   = saved.left + 'px';
+    toolbar.style.right = 'auto';
+    toolbar.style.top   = saved.top  + 'px';
+    toolbar.style.left  = saved.left + 'px';
   }
 
   toolbar.addEventListener('mousedown', e => {
-    // Only drag on the toolbar background, not button clicks
     if (e.target.closest('.tb-btn') || e.target.closest('.tb-divider')) return;
     dragging = true;
     const rect = toolbar.getBoundingClientRect();
@@ -749,12 +762,11 @@ function updateDownloadCount(visible) {
 
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
-    const mapArea = document.getElementById('map-area').getBoundingClientRect();
-    let left = e.clientX - mapArea.left - ox;
-    let top  = e.clientY - mapArea.top  - oy;
-    // Clamp within map-area
-    left = Math.max(0, Math.min(left, mapArea.width  - toolbar.offsetWidth));
-    top  = Math.max(0, Math.min(top,  mapArea.height - toolbar.offsetHeight));
+    const vp = document.getElementById('viewport').getBoundingClientRect();
+    let left = e.clientX - vp.left - ox;
+    let top  = e.clientY - vp.top  - oy;
+    left = Math.max(0, Math.min(left, vp.width  - toolbar.offsetWidth));
+    top  = Math.max(0, Math.min(top,  vp.height - toolbar.offsetHeight));
     toolbar.style.left = left + 'px';
     toolbar.style.top  = top  + 'px';
   });
@@ -769,47 +781,184 @@ function updateDownloadCount(visible) {
     }));
   });
 
-  // Double-click to reset position
   toolbar.addEventListener('dblclick', () => {
     toolbar.style.left  = '';
-    toolbar.style.top   = '12px';
-    toolbar.style.right = '14px';
+    toolbar.style.top   = '56px';
+    toolbar.style.right = '60px';
     localStorage.removeItem('aoi-toolbar-pos');
   });
 })();
 
-// ── Geometry filters (orbit state / look direction) ───────────
-function initGeoPills(groupId, onChange) {
-  document.querySelectorAll(`#${groupId} .geo-pill`).forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll(`#${groupId} .geo-pill`).forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      onChange(pill.dataset.val);
-      render();
+// ── Custom timeline scrubber ───────────────────────────────
+function initTimeline(features) {
+  const ts = features.map(f => f.properties.date).filter(Boolean)
+    .map(d => new Date(d).getTime()).filter(t => !isNaN(t));
+  if (!ts.length) return;
+
+  const minMs = Math.min(...ts);
+  const maxMs = Math.max(...ts);
+
+  let y = new Date(minMs).getFullYear(), m = new Date(minMs).getMonth() + 1;
+  const endY = new Date(maxMs).getFullYear(), endM = new Date(maxMs).getMonth() + 1;
+  MONTHS = [];
+  while (y < endY || (y === endY && m <= endM)) {
+    MONTHS.push(`${y}-${String(m).padStart(2,'0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+
+  const defaultFromIdx = Math.max(0, MONTHS.length - 24);
+  tlFrom = defaultFromIdx;
+  tlTo   = MONTHS.length - 1;
+
+  buildTimelineHist(features);
+  buildTimelineAxis();
+  setTimelineRange(tlFrom, tlTo);
+
+  const track = document.getElementById('track');
+  if (!track) return;
+
+  function dragHandle(which) {
+    return function(e) {
+      e.preventDefault();
+      const rect = track.getBoundingClientRect();
+      const move = ev => {
+        const x = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left) / rect.width;
+        const idx = Math.round(Math.max(0, Math.min(1, x)) * (MONTHS.length - 1));
+        if (which === 'from') setTimelineRange(Math.min(idx, tlTo), tlTo);
+        else setTimelineRange(tlFrom, Math.max(idx, tlFrom));
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        render();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    };
+  }
+
+  const hFrom = document.getElementById('hFrom');
+  const hTo   = document.getElementById('hTo');
+  if (hFrom) hFrom.addEventListener('pointerdown', dragHandle('from'));
+  if (hTo)   hTo.addEventListener('pointerdown',   dragHandle('to'));
+
+  track.addEventListener('pointerdown', e => {
+    if (e.target.closest('.tl-h')) return;
+    const rect = track.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(Math.max(0, Math.min(1, x)) * (MONTHS.length - 1));
+    if (Math.abs(idx - tlFrom) <= Math.abs(idx - tlTo)) setTimelineRange(Math.min(idx, tlTo), tlTo);
+    else setTimelineRange(tlFrom, Math.max(idx, tlFrom));
+    render();
+  });
+
+  // Apply pending date restore from URL hash
+  const dr = window._pendingDateRestore;
+  if (dr && dr.from && dr.to) {
+    const fromM = dr.from.slice(0, 7);
+    const toM   = dr.to.slice(0, 7);
+    const fi = MONTHS.indexOf(fromM);
+    const ti = MONTHS.indexOf(toM);
+    if (fi >= 0) tlFrom = fi;
+    if (ti >= 0) tlTo   = ti;
+    setTimelineRange(tlFrom, tlTo);
+    window._pendingDateRestore = null;
+  }
+}
+
+function pct(i) { return MONTHS.length > 1 ? i / (MONTHS.length - 1) * 100 : 0; }
+
+function setTimelineRange(from, to) {
+  tlFrom = Math.max(0, Math.min(from, to));
+  tlTo   = Math.min(MONTHS.length - 1, Math.max(from, to));
+  const a = pct(tlFrom), b = pct(tlTo);
+
+  const sel   = document.getElementById('sel');
+  const hFrom = document.getElementById('hFrom');
+  const hTo   = document.getElementById('hTo');
+  const gFrom = document.getElementById('gFrom');
+  const gTo   = document.getElementById('gTo');
+  const rFrom = document.getElementById('rngFrom');
+  const rTo   = document.getElementById('rngTo');
+  const rDur  = document.getElementById('rngDur');
+
+  if (sel)   { sel.style.left = a + '%'; sel.style.width = (b - a) + '%'; }
+  if (hFrom)  hFrom.style.left = a + '%';
+  if (hTo)    hTo.style.left   = b + '%';
+  if (gFrom)  gFrom.textContent = MONTHS[tlFrom] || '';
+  if (gTo)    gTo.textContent   = MONTHS[tlTo]   || '';
+  if (rFrom)  rFrom.textContent = MONTHS[tlFrom] || '';
+  if (rTo)    rTo.textContent   = MONTHS[tlTo]   || '';
+  if (rDur)  { const d = tlTo - tlFrom + 1; rDur.textContent = d + ' month' + (d > 1 ? 's' : ''); }
+
+  document.querySelectorAll('#hist .b').forEach((b, i) => b.classList.toggle('out', i < tlFrom || i > tlTo));
+}
+
+function buildTimelineHist(features) {
+  const hist = document.getElementById('hist');
+  if (!hist || !MONTHS.length) return;
+  hist.innerHTML = '';
+
+  const data = MONTHS.map(() => ({ iceye: 0, umbra: 0, capella: 0 }));
+  features.forEach(feat => {
+    const d = feat.properties.date;
+    if (!d) return;
+    const m = d.slice(0, 7);
+    const idx = MONTHS.indexOf(m);
+    if (idx < 0) return;
+    const pid = feat.properties.provider;
+    if (data[idx][pid] !== undefined) data[idx][pid]++;
+  });
+  const max = Math.max(...data.map(d => d.iceye + d.umbra + d.capella), 1);
+
+  data.forEach((d, i) => {
+    const tot = d.iceye + d.umbra + d.capella;
+    const bar = document.createElement('div');
+    bar.className = 'b'; bar.dataset.i = i;
+    bar.style.height = (tot / max * 100) + '%';
+    let acc = 0, inner = '';
+    ['capella', 'umbra', 'iceye'].forEach(s => {
+      const h = tot ? d[s] / tot * 100 : 0;
+      inner += `<div class="seg" style="height:${h}%;bottom:${acc}%;background:var(--${s});opacity:.8"></div>`;
+      acc += h;
     });
+    bar.innerHTML = inner;
+    hist.appendChild(bar);
   });
 }
-initGeoPills('orbit-pills', val => { orbitFilter = val; });
-initGeoPills('look-pills',  val => { lookFilter  = val; });
 
-// ── Collapsible sidebar trays ─────────────────────────────────
-document.querySelectorAll('.tray-header').forEach(hdr => {
-  hdr.addEventListener('click', () => {
-    hdr.closest('.sidebar-tray').classList.toggle('tray-collapsed');
-  });
-});
+function buildTimelineAxis() {
+  const axis = document.getElementById('axis');
+  if (!axis || !MONTHS.length) return;
+  axis.innerHTML = '';
+  const step = MONTHS.length > 24 ? 6 : MONTHS.length > 12 ? 3 : 1;
+  for (let i = 0; i < MONTHS.length; i += step) {
+    const t = document.createElement('div'); t.className = 'tl-tick';
+    t.style.left = pct(i) + '%';
+    t.innerHTML = `<span class="tx">${MONTHS[i]}</span>`;
+    axis.appendChild(t);
+  }
+  const last = document.createElement('div'); last.className = 'tl-tick';
+  last.style.left = '100%';
+  last.innerHTML = `<span class="tx">${MONTHS[MONTHS.length - 1]}</span>`;
+  axis.appendChild(last);
+}
 
-// ── Shareable URL state ───────────────────────────────────────
+function updateTimelineHistogram() {
+  document.querySelectorAll('#hist .b').forEach((b, i) => b.classList.toggle('out', i < tlFrom || i > tlTo));
+}
+
+// ── Shareable URL state ────────────────────────────────────
 function encodeState() {
   const p = new URLSearchParams();
   const hidden = ['iceye','umbra','capella'].filter(id => !providerActive[id]);
   if (hidden.length) p.set('hide', hidden.join(','));
-  if (dateSlider) {
-    const v = dateSlider.get();
-    p.set('from', tsToDate(+v[0]));
-    p.set('to',   tsToDate(+v[1]));
+  if (MONTHS.length) {
+    p.set('from', MONTHS[tlFrom]);
+    p.set('to',   MONTHS[tlTo]);
   }
-  const mode = document.getElementById('mode-filter').value;
+  const modeSel = document.getElementById('modeSel');
+  const mode = modeSel ? modeSel.value : '';
   if (mode)        p.set('mode',  mode);
   if (orbitFilter) p.set('orbit', orbitFilter);
   if (lookFilter)  p.set('look',  lookFilter);
@@ -835,71 +984,60 @@ function restoreState() {
   (p.get('hide') || '').split(',').filter(Boolean).forEach(id => {
     if (id in providerActive) {
       providerActive[id] = false;
-      document.getElementById(`pill-${id}`)?.classList.remove('active');
+      document.querySelectorAll(`.srow[data-sensor="${id}"],.lg[data-sensor="${id}"]`).forEach(el => el.setAttribute('aria-pressed', 'false'));
     }
   });
+  const online = ['iceye','umbra','capella'].filter(id => providerActive[id]).length;
+  const meta = document.getElementById('sensorMeta');
+  if (meta && online < 3) meta.textContent = `${online} / 3 ONLINE`;
 
-  // Geo-pills helper
-  const setGeopill = (groupId, val) => {
-    document.querySelectorAll(`#${groupId} .geo-pill`).forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.val === val);
+  const setSegVal = (group, val) => {
+    document.querySelectorAll(`.seg[data-group="${group}"] button`).forEach(btn => {
+      btn.setAttribute('aria-pressed', btn.dataset.v === val);
     });
   };
 
   const orbit = p.get('orbit');
-  if (orbit) { orbitFilter = orbit; setGeopill('orbit-pills', orbit); }
+  if (orbit) { orbitFilter = orbit; setSegVal('orbit', orbit === 'ascending' ? 'asc' : 'desc'); }
 
   const look = p.get('look');
-  if (look)  { lookFilter  = look;  setGeopill('look-pills',  look);  }
+  if (look) { lookFilter = look; setSegVal('look', look); }
 
   const mode = p.get('mode');
-  if (mode) document.getElementById('mode-filter').value = mode;
+  const modeSel = document.getElementById('modeSel');
+  if (mode && modeSel) modeSel.value = mode;
 
-  // AOI bbox (drawn)
   const bbox = p.get('bbox');
   if (bbox) {
     const parts = bbox.split(',').map(Number);
     if (parts.length === 4 && parts.every(n => !isNaN(n))) aoiBbox = parts;
   }
 
-  // Country — deferred until loadCountries() finishes
   const country = p.get('country');
   if (country) pendingCountryRestore = country;
 
-  // Map view
   const lat = parseFloat(p.get('lat'));
   const lng = parseFloat(p.get('lng'));
   const z   = parseInt(p.get('z'), 10);
   if (!isNaN(lat) && !isNaN(lng) && !isNaN(z)) map.setView([lat, lng], z);
 
-  // Date — deferred until initDateSlider() runs
+  // Date — deferred until initTimeline() builds MONTHS
   window._pendingDateRestore = { from: p.get('from'), to: p.get('to') };
 }
 
-document.getElementById('copy-link-btn').addEventListener('click', () => {
-  history.replaceState(null, '', '#' + encodeState());
-  navigator.clipboard.writeText(window.location.href).then(() => {
-    const btn = document.getElementById('copy-link-btn');
-    const orig = btn.innerHTML;
-    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
-    btn.style.color = 'var(--accent)';
-    setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
-  });
-});
-
-// ── Load data ────────────────────────────────────────────────
+// ── Load data ──────────────────────────────────────────────
 fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(geojson => {
     allFeatures = geojson.features || [];
     populateModes(allFeatures);
-    restoreState();          // parse hash before slider init so date gets applied
-    initDateSlider(allFeatures);
+    restoreState();
+    initTimeline(allFeatures);
     document.getElementById('loading').classList.add('hidden');
     dataLoaded = true;
     render();
   })
   .catch(() => {
     document.getElementById('loading').innerHTML =
-      `<p style="color:#FF6B35">No scene data found.<br>Run <code>scripts/fetch_catalog.py</code> to generate it.</p>`;
+      `<p style="color:var(--capella)">No scene data found.<br>Run <code>scripts/fetch_catalog.py</code> to generate it.</p>`;
   });
