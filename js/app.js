@@ -311,11 +311,10 @@ function render(options = {}) {
       interactive:  !countryMode,
       pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
       onEachFeature: countryMode ? undefined : (feat, lyr) => {
-        const p = feat.properties;
-        lyr.on('click', () => showDetail(p));
+        // Click is handled centrally on the map (see handleSceneClick) so that
+        // overlapping footprints can be disambiguated; here we only do hover.
         lyr.on('mouseover', function () { this.setStyle({ fillOpacity: 0.5, weight: 2 }); });
         lyr.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.18, weight: 1 }); });
-        lyr.bindPopup(makePopup(p), { maxWidth: 280 });
       },
     });
     layer.addTo(map);
@@ -436,6 +435,53 @@ function makePopup(p) {
 
 const esc = s => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// ── Overlapping-footprint disambiguation ───────────────────
+// A click can land on many stacked footprints (e.g. repeated Umbra tasks over
+// the same AOI). Collect every visible scene whose displayed polygon contains
+// the click; one → open it, several → show a "N scenes here" picker.
+function scenesAtLatLng(latlng) {
+  const factor = sceneScaleFactor();
+  const pt = [latlng.lng, latlng.lat];
+  const hits = [];
+  for (const f of getVisibleFeatures()) {
+    if (pointInPolygon(pt, getDisplayGeometry(f, factor))) hits.push(f);
+  }
+  // Newest first so the most recent acquisition is at the top.
+  hits.sort((a, b) => (b.properties.date || '').localeCompare(a.properties.date || ''));
+  return hits;
+}
+
+function openScenePicker(latlng, hits) {
+  const CAP = 60;
+  const rows = hits.slice(0, CAP).map(f => {
+    const p = f.properties;
+    return `<button class="picker-row" data-detail-id="${esc(p.id)}">
+      <span class="picker-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
+      <span class="picker-body">
+        <span class="picker-id">${esc(p.id || '—')}</span>
+        <span class="picker-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
+      </span></button>`;
+  }).join('');
+  const more = hits.length > CAP
+    ? `<div class="picker-more">+${hits.length - CAP} more — zoom in to narrow</div>` : '';
+  const html =
+    `<div class="scene-picker">
+       <div class="picker-head">${hits.length} scenes here</div>
+       <div class="picker-list">${rows}</div>${more}
+     </div>`;
+  L.popup({ maxWidth: 300, minWidth: 240, className: 'scene-picker-popup', autoPan: true })
+    .setLatLng(latlng).setContent(html).openOn(map);
+}
+
+function handleSceneClick(e) {
+  if (countryMode) return;                 // country picker owns clicks in that mode
+  const hits = scenesAtLatLng(e.latlng);
+  if (!hits.length) return;
+  if (hits.length === 1) { showDetail(hits[0].properties); return; }
+  openScenePicker(e.latlng, hits);
+}
+map.on('click', handleSceneClick);
+
 function safeUrl(url) {
   if (!url) return null;
   try {
@@ -454,6 +500,7 @@ document.getElementById('map').addEventListener('click', e => {
   const btn = e.target.closest('[data-detail-id]');
   if (!btn) return;
   window.showDetailById(btn.dataset.detailId);
+  map.closePopup();
 });
 
 function proxyThumb(url, provider) {
