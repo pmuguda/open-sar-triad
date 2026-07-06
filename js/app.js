@@ -1267,14 +1267,14 @@ function renderRecent() {
     return;
   }
 
-  // No ingestion history yet: fall back to the most recent acquisitions so the
-  // panel is useful now, and it switches to "new this week" once tracking fills.
+  // No ingestion history yet: fall back to the last 30 days of acquisitions so
+  // the panel is useful now, and it switches to "new this week" once tracking fills.
   if (!recent.length) {
     const latest = allFeatures
-      .filter(f => f.properties.date)
+      .filter(f => f.properties.date && f.properties.date >= cutoff)
       .sort((a, b) => b.properties.date.localeCompare(a.properties.date))
-      .slice(0, 25);
-    meta.textContent = 'LATEST CAPTURES';
+      .slice(0, 200);
+    meta.textContent = latest.length ? `${latest.length} · LAST 30 DAYS` : 'LATEST CAPTURES';
     const rowLatest = f => {
       const p = f.properties;
       return `<button class="recent-row" data-recent-id="${esc(p.id)}">
