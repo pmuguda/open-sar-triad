@@ -464,11 +464,95 @@ function proxyThumb(url, provider) {
   return url;
 }
 
+// ── Umbra on-the-fly preview from Cloud-Optimized GeoTIFF ──────
+// Umbra publishes no thumbnails, but its GeoTIFFs are COGs on a CORS-enabled,
+// range-capable S3 bucket. We fetch only the smallest overview (a few hundred
+// KB, not the full multi-hundred-MB file) and render a stretched grayscale
+// preview client-side. geotiff.js is loaded lazily on first use.
+let _geotiffPromise = null;
+function loadGeoTIFF() {
+  if (window.GeoTIFF) return Promise.resolve(window.GeoTIFF);
+  if (!_geotiffPromise) {
+    _geotiffPromise = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js';
+      s.onload = () => res(window.GeoTIFF);
+      s.onerror = () => rej(new Error('geotiff.js failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+  return _geotiffPromise;
+}
+
+function umbraCogUrl(download) {
+  if (!download) return null;
+  // Prefer the geocoded (GEC) product — it's north-up and map-aligned.
+  if (/_CSI\.tif$/.test(download)) return download.replace(/_CSI\.tif$/, '_GEC.tif');
+  return /\.tif$/.test(download) ? download : null;
+}
+
+function _pctile(sorted, p) {
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
+  return sorted[i];
+}
+
+const _fsBtnHtml =
+  `<button class="detail-fullscreen-btn" title="View fullscreen" aria-label="View fullscreen">
+     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+   </button>`;
+
+async function renderUmbraPreview(slot, url) {
+  try {
+    const GT = await loadGeoTIFF();
+    const tiff = await GT.fromUrl(url);
+    const n = await tiff.getImageCount();
+    const image = await tiff.getImage(Math.max(0, n - 1));  // smallest overview
+    const w = image.getWidth(), h = image.getHeight();
+    const band = (await image.readRasters())[0];
+
+    // Robust 2–98 percentile stretch on a subsample of non-zero pixels.
+    const sample = [];
+    const step = Math.max(1, Math.floor(band.length / 40000));
+    for (let i = 0; i < band.length; i += step) { const v = band[i]; if (v > 0) sample.push(v); }
+    sample.sort((a, b) => a - b);
+    const lo = _pctile(sample, 0.02), hi = _pctile(sample, 0.98), range = (hi - lo) || 1;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const id = ctx.createImageData(w, h);
+    for (let i = 0; i < band.length; i++) {
+      let t = (band[i] - lo) / range; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const g = (t * 255) | 0;
+      id.data[i*4] = g; id.data[i*4+1] = g; id.data[i*4+2] = g; id.data[i*4+3] = 255;
+    }
+    ctx.putImageData(id, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    // A later showDetail() replaces #detail-content, detaching stale slots.
+    if (!slot.isConnected) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'detail-thumb-wrap';
+    wrap.innerHTML =
+      `<img class="detail-thumbnail" src="${dataUrl}" alt="Umbra SAR preview rendered from COG" />
+       ${_fsBtnHtml}
+       <span class="detail-thumb-tag">RENDERED FROM COG</span>`;
+    slot.replaceWith(wrap);
+  } catch (e) {
+    if (slot.isConnected) {
+      slot.classList.remove('umbra-rendering');
+      slot.textContent = 'Preview unavailable — could not render this Umbra COG.';
+    }
+  }
+}
+
 function showDetail(p) {
   const thumbSrc = proxyThumb(p.thumbnail, p.provider);
   const noPreviewMsg = p.provider === 'umbra'
-    ? 'Umbra open data does not include preview images'
+    ? 'No image asset listed for this scene'
     : 'Preview unavailable';
+  // Umbra ships no thumbnail, but its GeoTIFFs are COGs — render one on the fly.
+  const umbraCog = (!thumbSrc && p.provider === 'umbra') ? umbraCogUrl(p.download) : null;
   const thumbHtml = thumbSrc
     ? `<div class="detail-thumb-wrap">
          <img class="detail-thumbnail" src="${esc(thumbSrc)}" alt="SAR thumbnail" data-preview-fallback="${esc(noPreviewMsg)}" />
@@ -476,6 +560,8 @@ function showDetail(p) {
            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
          </button>
        </div>`
+    : umbraCog
+    ? `<div class="detail-thumb-placeholder umbra-rendering" data-umbra-slot><span class="spin"></span>Rendering preview from COG…</div>`
     : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
 
   const rows = [
@@ -512,6 +598,11 @@ ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_lab
       placeholder.textContent = img.dataset.previewFallback || 'Preview unavailable';
       img.replaceWith(placeholder);
     }, { once: true });
+  }
+
+  if (umbraCog) {
+    const slot = document.querySelector('#detail-content [data-umbra-slot]');
+    if (slot) renderUmbraPreview(slot, umbraCog);
   }
 
   const panel = document.getElementById('detail-panel');
