@@ -1319,8 +1319,12 @@ fetch('data/scenes.geojson')
   document.getElementById('lb-zoom-out').addEventListener('click', () => zoom(0.8));
   document.getElementById('lb-reset').addEventListener('click', resetView);
 
-  // Close on backdrop click
-  lb.addEventListener('click', e => { if (e.target === lb || e.target === viewport) close(); });
+  // Close on backdrop click — but not when the click is the tail end of a pan.
+  let moved = false;
+  lb.addEventListener('click', e => {
+    if (moved) { moved = false; return; }
+    if (e.target === lb || e.target === viewport) close();
+  });
 
   // Keyboard
   document.addEventListener('keydown', e => {
@@ -1341,12 +1345,13 @@ fetch('data/scenes.geojson')
   // Drag to pan
   viewport.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    dragging = true; startX = e.clientX; startY = e.clientY;
+    dragging = true; moved = false; startX = e.clientX; startY = e.clientY;
     startOx = ox; startOy = oy;
     viewport.classList.add('dragging');
   });
   window.addEventListener('mousemove', e => {
     if (!dragging) return;
+    if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) moved = true;
     ox = startOx + (e.clientX - startX);
     oy = startOy + (e.clientY - startY);
     clampOffset();
