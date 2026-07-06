@@ -562,12 +562,11 @@ body.detail-collapsed #detail-toggle { right: 0; }
 #lb-spacer { flex: 1; }
 #lb-viewport {
   flex: 1; overflow: hidden; position: relative;
-  display: flex; align-items: center; justify-content: center;
   cursor: grab;
 }
 #lb-viewport.dragging { cursor: grabbing; }
 #lb-img {
-  position: absolute; transform-origin: 0 0;
+  position: absolute; top: 0; left: 0; transform-origin: 0 0;
   max-width: none; max-height: none;
   user-select: none; pointer-events: none;
 }
