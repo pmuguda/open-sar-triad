@@ -541,10 +541,18 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .detail-fullscreen-btn:hover { background: var(--accent); color: #0d1117; border-color: var(--accent); }
 
 /* Recent activity list */
-.recent-list { display: flex; flex-direction: column; }
+.recent-list {
+  display: flex; flex-direction: column;
+  max-height: 320px; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+.recent-list::-webkit-scrollbar { width: 6px; }
+.recent-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.recent-list::-webkit-scrollbar-track { background: transparent; }
 .recent-group {
   font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase;
   color: var(--ink-3); margin: 10px 0 6px;
+  position: sticky; top: 0; background: var(--bg); padding: 4px 0; z-index: 1;
 }
 .recent-group:first-child { margin-top: 2px; }
 .recent-row {
