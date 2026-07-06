@@ -470,7 +470,12 @@ function showDetail(p) {
     ? 'Umbra open data does not include preview images'
     : 'Preview unavailable';
   const thumbHtml = thumbSrc
-    ? `<img class="detail-thumbnail" src="${esc(thumbSrc)}" alt="SAR thumbnail" data-preview-fallback="${esc(noPreviewMsg)}" />`
+    ? `<div class="detail-thumb-wrap">
+         <img class="detail-thumbnail" src="${esc(thumbSrc)}" alt="SAR thumbnail" data-preview-fallback="${esc(noPreviewMsg)}" />
+         <button class="detail-fullscreen-btn" title="View fullscreen" aria-label="View fullscreen">
+           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+         </button>
+       </div>`
     : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
 
   const rows = [
@@ -1299,9 +1304,11 @@ fetch('data/scenes.geojson')
     lbImg.src = '';
   }
 
-  // Open on thumbnail click (delegated — thumbnail injected dynamically)
+  // Open via fullscreen button or thumbnail click (delegated — injected dynamically)
   document.getElementById('detail-content').addEventListener('click', e => {
-    const img = e.target.closest('.detail-thumbnail');
+    const wrap = e.target.closest('.detail-thumb-wrap');
+    if (!wrap) return;
+    const img = wrap.querySelector('.detail-thumbnail');
     if (img) open(img.src);
   });
 
