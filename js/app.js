@@ -1235,3 +1235,152 @@ fetch('data/scenes.geojson')
     document.getElementById('loading').innerHTML =
       `<p style="color:var(--capella)">No scene data found.<br>Run <code>scripts/fetch_catalog.py</code> to generate it.</p>`;
   });
+
+// ── Image lightbox ────────────────────────────────────────────
+(function () {
+  const lb       = document.getElementById('img-lightbox');
+  const lbImg    = document.getElementById('lb-img');
+  const viewport = document.getElementById('lb-viewport');
+  const zoomLabel = document.getElementById('lb-zoom-label');
+
+  let scale = 1, ox = 0, oy = 0;
+  let dragging = false, startX = 0, startY = 0, startOx = 0, startOy = 0;
+  let naturalW = 0, naturalH = 0;
+
+  function applyTransform() {
+    lbImg.style.transform = `translate(${ox}px,${oy}px) scale(${scale})`;
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function clampOffset() {
+    const vw = viewport.clientWidth, vh = viewport.clientHeight;
+    const iw = naturalW * scale, ih = naturalH * scale;
+    const maxX = Math.max(0, (iw - vw) / 2 + vw / 2);
+    const maxY = Math.max(0, (ih - vh) / 2 + vh / 2);
+    const minX = Math.min(0, vw / 2 - iw / 2);
+    const minY = Math.min(0, vh / 2 - ih / 2);
+    ox = Math.min(maxX, Math.max(minX, ox));
+    oy = Math.min(maxY, Math.max(minY, oy));
+  }
+
+  function resetView() {
+    const vw = viewport.clientWidth, vh = viewport.clientHeight;
+    scale = Math.min(vw / naturalW, vh / naturalH, 1);
+    ox = (vw - naturalW * scale) / 2;
+    oy = (vh - naturalH * scale) / 2;
+    applyTransform();
+  }
+
+  function zoom(factor, cx, cy) {
+    const vw = viewport.clientWidth, vh = viewport.clientHeight;
+    const px = (cx ?? vw / 2), py = (cy ?? vh / 2);
+    const newScale = Math.min(8, Math.max(0.1, scale * factor));
+    ox = px - (px - ox) * (newScale / scale);
+    oy = py - (py - oy) * (newScale / scale);
+    scale = newScale;
+    clampOffset();
+    applyTransform();
+  }
+
+  function open(src) {
+    lbImg.src = src;
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    lbImg.onload = () => {
+      naturalW = lbImg.naturalWidth;
+      naturalH = lbImg.naturalHeight;
+      resetView();
+    };
+  }
+
+  function close() {
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    lbImg.src = '';
+  }
+
+  // Open on thumbnail click (delegated — thumbnail injected dynamically)
+  document.getElementById('detail-content').addEventListener('click', e => {
+    const img = e.target.closest('.detail-thumbnail');
+    if (img) open(img.src);
+  });
+
+  document.getElementById('lb-close').addEventListener('click', close);
+  document.getElementById('lb-zoom-in').addEventListener('click', () => zoom(1.25));
+  document.getElementById('lb-zoom-out').addEventListener('click', () => zoom(0.8));
+  document.getElementById('lb-reset').addEventListener('click', resetView);
+
+  // Close on backdrop click
+  lb.addEventListener('click', e => { if (e.target === lb || e.target === viewport) close(); });
+
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (!lb.classList.contains('open')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === '+' || e.key === '=') zoom(1.25);
+    if (e.key === '-') zoom(0.8);
+    if (e.key === '0') resetView();
+  });
+
+  // Mouse wheel zoom
+  viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    zoom(e.deltaY < 0 ? 1.12 : 0.88, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  // Drag to pan
+  viewport.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true; startX = e.clientX; startY = e.clientY;
+    startOx = ox; startOy = oy;
+    viewport.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    ox = startOx + (e.clientX - startX);
+    oy = startOy + (e.clientY - startY);
+    clampOffset();
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    viewport.classList.remove('dragging');
+  });
+
+  // Touch pan + pinch zoom
+  let lastTouchDist = null;
+  viewport.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      dragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      startOx = ox; startOy = oy;
+    }
+    if (e.touches.length === 2) {
+      dragging = false;
+      lastTouchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+  viewport.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && dragging) {
+      ox = startOx + (e.touches[0].clientX - startX);
+      oy = startOy + (e.touches[0].clientY - startY);
+      clampOffset(); applyTransform();
+    }
+    if (e.touches.length === 2 && lastTouchDist) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const rect = viewport.getBoundingClientRect();
+      zoom(dist / lastTouchDist, cx - rect.left, cy - rect.top);
+      lastTouchDist = dist;
+    }
+  }, { passive: false });
+  viewport.addEventListener('touchend', () => { dragging = false; lastTouchDist = null; });
+})();

@@ -313,6 +313,19 @@
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"
         integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67"
         crossorigin="anonymous"></script>
+<div id="img-lightbox" role="dialog" aria-modal="true" aria-label="Image preview">
+  <div id="lb-toolbar">
+    <button id="lb-zoom-in"  title="Zoom in">+</button>
+    <button id="lb-zoom-out" title="Zoom out">−</button>
+    <button id="lb-reset"    title="Reset zoom">⊡</button>
+    <span   id="lb-zoom-label">100%</span>
+    <span   id="lb-spacer"></span>
+    <button id="lb-close"    title="Close (Esc)">✕</button>
+  </div>
+  <div id="lb-viewport">
+    <img id="lb-img" alt="SAR scene preview" />
+  </div>
+</div>
 <script src="js/app.js?v=fix-aoi-clicks-2"></script>
 <script src="js/tour.js?v=tour-logo-1"></script>
 </body>
