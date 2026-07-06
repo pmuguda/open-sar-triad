@@ -446,7 +446,7 @@ BibTeX:
   author = {Muguda Sanjeevamurthy, Pavan},
   title = {open-sar-triad: Browser-based discovery console for commercial open SAR},
   year = {2026},
-  version = {2.0.0},
+  version = {2.1.0},
   doi = {10.5281/zenodo.20562327},
   url = {https://github.com/pmuguda/open-sar-triad},
   note = {Live application: https://pmuguda.github.io/open-sar-triad}
