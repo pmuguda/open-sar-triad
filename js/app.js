@@ -1257,15 +1257,14 @@ fetch('data/scenes.geojson')
     zoomLabel.textContent = Math.round(scale * 100) + '%';
   }
 
+  // transform-origin is 0 0, so the image spans screen [ox, ox+iw] × [oy, oy+ih].
+  // When the image is smaller than the viewport on an axis, lock it centered;
+  // when larger, clamp so it can't be dragged past its own edges.
   function clampOffset() {
     const vw = viewport.clientWidth, vh = viewport.clientHeight;
     const iw = naturalW * scale, ih = naturalH * scale;
-    const maxX = Math.max(0, (iw - vw) / 2 + vw / 2);
-    const maxY = Math.max(0, (ih - vh) / 2 + vh / 2);
-    const minX = Math.min(0, vw / 2 - iw / 2);
-    const minY = Math.min(0, vh / 2 - ih / 2);
-    ox = Math.min(maxX, Math.max(minX, ox));
-    oy = Math.min(maxY, Math.max(minY, oy));
+    ox = iw <= vw ? (vw - iw) / 2 : Math.min(0, Math.max(vw - iw, ox));
+    oy = ih <= vh ? (vh - ih) / 2 : Math.min(0, Math.max(vh - ih, oy));
   }
 
   function resetView() {
@@ -1288,14 +1287,17 @@ fetch('data/scenes.geojson')
   }
 
   function open(src) {
-    lbImg.src = src;
     lb.classList.add('open');
     document.body.style.overflow = 'hidden';
-    lbImg.onload = () => {
+    const ready = () => {
       naturalW = lbImg.naturalWidth;
       naturalH = lbImg.naturalHeight;
       resetView();
     };
+    lbImg.onload = ready;
+    lbImg.src = src;
+    // Cached images may not fire onload — fit immediately if already decoded.
+    if (lbImg.complete && lbImg.naturalWidth) ready();
   }
 
   function close() {
