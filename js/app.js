@@ -611,6 +611,10 @@ function showDetail(p) {
     ? `<div class="detail-thumb-placeholder umbra-rendering" data-umbra-slot><span class="spin"></span>Rendering preview from COG…</div>`
     : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
 
+  // One acquisition may be published in several data formats (Capella). Offer a
+  // picker instead of listing "Collection".
+  const products = (p.products && Object.keys(p.products).length > 1) ? p.products : null;
+
   const rows = [
     ['Date',            p.date             || '—'],
     ['Provider',        p.provider_label   || '—'],
@@ -619,23 +623,49 @@ function showDetail(p) {
     ['Resolution',      p.resolution != null ? p.resolution + ' m' : '—'],
     ['Incidence angle', p.incidence_angle != null ? p.incidence_angle + '°' : '—'],
     ['Off-nadir',       p.off_nadir != null ? p.off_nadir + '°' : '—'],
-    ['Collection',      p.collection       || '—'],
+    ['Collection',      products ? '—' : (p.collection || '—')],
   ].filter(([,v]) => v !== '—')
    .map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
 
-  const dlUrl = safeUrl(p.download);
   const pvUrl = safeUrl(p.provider_url);
-  const dl = dlUrl
-    ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
   const pv = pvUrl
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
+
+  let formatBlock = '';
+  let dl = '';
+  if (products) {
+    const fmts = (p.formats || Object.keys(p.products)).filter(f => safeUrl(p.products[f]));
+    const first = fmts[0];
+    const chips = fmts.map((f, i) =>
+      `<button class="fmt-chip${i === 0 ? ' is-active' : ''}" data-fmt="${esc(f)}" data-url="${esc(p.products[f])}">${esc(f)}</button>`
+    ).join('');
+    formatBlock = `<div class="format-select"><div class="format-label">Data format</div><div class="format-chips">${chips}</div></div>`;
+    dl = `<a class="detail-action-btn primary" id="dl-asset" href="${esc(p.products[first])}" target="_blank" rel="noopener noreferrer">Download ${esc(first)}</a>`;
+  } else {
+    const dlUrl = safeUrl(p.download);
+    dl = dlUrl
+      ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
+  }
 
   document.getElementById('detail-content').innerHTML =
     `<div class="mod-h detail-h"><span class="ix">05</span><span class="ttl">Preview</span><span class="rule"></span><span class="meta">SCENE</span></div>
 ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
-<div class="detail-actions">${dl}${pv}</div>`;
+${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
+
+  if (products) {
+    const chipsEl = document.querySelector('#detail-content .format-chips');
+    const dlBtn = document.getElementById('dl-asset');
+    chipsEl.addEventListener('click', e => {
+      const chip = e.target.closest('.fmt-chip');
+      if (!chip) return;
+      chipsEl.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      dlBtn.href = chip.dataset.url;
+      dlBtn.textContent = `Download ${chip.dataset.fmt}`;
+    });
+  }
 
   const img = document.querySelector('#detail-content .detail-thumbnail[data-preview-fallback]');
   if (img) {

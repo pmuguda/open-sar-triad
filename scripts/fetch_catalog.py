@@ -257,6 +257,48 @@ def fetch_provider(provider_id):
     return features
 
 
+# Capella publishes each acquisition in several data formats (GEC, GEO, SLC,
+# SICD, SIDD, CPHD, CSI) as separate upstream parquets, so the same scene shows
+# up 6–7 times. Collapse those into one feature per acquisition that carries a
+# {format: download_url} map, so users pick the format in the detail panel
+# instead of seeing duplicate footprints on the map.
+_CAPELLA_TOKEN = re.compile(r"_(GEC|GEO|SLC|SICD|SIDD|CPHD|CSI)_")
+_FORMAT_ORDER = ["GEC", "GEO", "SLC", "SICD", "SIDD", "CPHD", "CSI"]
+
+def collapse_capella_products(features):
+    groups = {}   # acquisition key -> list of (format, feature)
+    passthrough = []
+    for f in features:
+        p = f["properties"]
+        m = _CAPELLA_TOKEN.search(p.get("id") or "")
+        if p.get("provider") != "capella" or not m:
+            passthrough.append(f)
+            continue
+        key = _CAPELLA_TOKEN.sub("_<P>_", p["id"])
+        groups.setdefault(key, []).append((m.group(1), f))
+
+    collapsed = []
+    for items in groups.values():
+        items.sort(key=lambda t: _FORMAT_ORDER.index(t[0]) if t[0] in _FORMAT_ORDER else 99)
+        base = items[0][1]                       # preferred format's feature
+        bp = base["properties"]
+        products = {}
+        for fmt, f in items:
+            url = f["properties"].get("download")
+            if url and fmt not in products:
+                products[fmt] = url
+        bp["products"] = products                 # {format: download_url}
+        bp["formats"] = [fmt for fmt, _ in items] # ordered available formats
+        bp["collection"] = ", ".join(bp["formats"])
+        bp["id"] = _CAPELLA_TOKEN.sub("_", bp["id"])  # clean, format-agnostic id
+        collapsed.append(base)
+
+    if collapsed:
+        print(f"  Capella: collapsed {sum(len(v) for v in groups.values())} "
+              f"format-variants into {len(collapsed)} acquisitions")
+    return passthrough + collapsed
+
+
 def main():
     run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -297,6 +339,9 @@ def main():
     for pid, feats in all_features.items():
         merged.extend(feats)
         print(f"  {PROVIDER_META[pid]['label']}: {len(feats)} scenes")
+
+    # Merge Capella's per-format duplicates into one scene per acquisition.
+    merged = collapse_capella_products(merged)
 
     # Stamp first_seen: preserve for known scenes, mark this run's date for new
     # ones. Scenes present before tracking began stay None (unknown ingest date).
