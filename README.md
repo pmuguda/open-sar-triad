@@ -77,6 +77,16 @@ The three providers represented in this tool each operate public open data progr
 - Scene footprints rendered as colored polygons, one per acquisition
 - Home button clears AOI/country filters and returns the map to the opening world view
 - Clickable scenes open a detail panel with a numbered Preview section, thumbnail, metadata, and a direct download link
+- Where several footprints overlap the same spot, a click opens a "N scenes here" picker to choose among the stacked acquisitions instead of only the topmost
+
+**Scene previews**
+- Fullscreen preview lightbox with fit-to-screen centering, zoom (buttons, mouse wheel, pinch), drag-to-pan, and reset
+- Umbra publishes no thumbnails, so previews are rendered in the browser from its Cloud-Optimized GeoTIFFs: only the smallest overview is fetched (a few hundred KB) and stretched to a grayscale image — no backend, no stored thumbnails, marked "RENDERED FROM COG"
+- Capella acquisitions offer a data-format selector (GEC, GEO, SLC, SICD, SIDD, CPHD, CSI) that swaps the download link
+
+**Recent activity**
+- A Recent tray lists newly-ingested scenes, grouped into "This week" and "Earlier this month" (scrollable, newest first)
+- The weekly refresh stamps a `first_seen` date on new arrivals; until that history builds up the tray shows the last 30 days of acquisitions
 
 **Filtering** — collapsible Filters tray in the sidebar
 - Toggle individual providers on or off
@@ -147,6 +157,8 @@ The specific Parquet files consumed are:
 | | `parquets/viz/capella/capella_SIDD.parquet` |
 | | `parquets/viz/capella/capella_CSI.parquet` |
 | | `parquets/viz/capella/capella_CPHD.parquet` |
+
+Capella publishes each acquisition in several data formats, one Parquet file per format. The fetch script **collapses these into a single scene per acquisition** carrying a `{format: download_url}` map, so an acquisition appears once on the map (with a format selector in the detail panel) rather than as 6–7 duplicate footprints. Scene counts therefore reflect distinct acquisitions.
 
 All scene data credit goes to Jack-Hayes/commerical-sar-stac and the original providers.
 
@@ -401,6 +413,7 @@ Steps performed by the workflow:
 | Leaflet | 1.9.4 | Interactive map | BSD-2-Clause |
 | Leaflet-Draw | 1.0.4 | Bounding box and polygon drawing tools | MIT |
 | topojson-client | 3.1.0 | Decodes TopoJSON country boundaries | BSD-3-Clause |
+| geotiff.js | 2.1.3 | Reads Umbra Cloud-Optimized GeoTIFF overviews for on-the-fly previews (lazy-loaded on first Umbra preview) | MIT |
 
 **Fonts**
 
@@ -423,6 +436,7 @@ Steps performed by the workflow:
 | CartoDB (via OpenStreetMap) | Basemap tiles | © CARTO, © OSM contributors (ODbL) |
 | world-atlas by Mike Bostock | Country boundary TopoJSON | ISC |
 | images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) | Free service |
+| Umbra open data S3 bucket | Direct CORS/range reads of Cloud-Optimized GeoTIFF overviews for Umbra previews | CC-BY 4.0 |
 
 **Python (data pipeline only)**
 
