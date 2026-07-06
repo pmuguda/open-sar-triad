@@ -218,6 +218,9 @@ def normalize_row(row, provider_id):
             "collection":      sanitize_str(row.get("collection") or row.get("sar:product_type")) or "",
             "orbit_state":     orbit,
             "look_dir":        look,
+            # Date this scene first appeared in our catalog. Filled in by main()
+            # by diffing against the previous run; None for pre-tracking scenes.
+            "first_seen":      None,
         },
     }
 
@@ -255,14 +258,25 @@ def fetch_provider(provider_id):
 
 
 def main():
-    # Load existing data as fallback
+    run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Load existing data — used both as a fetch fallback and to preserve the
+    # first_seen date of scenes we've already catalogued.
     existing = {}
+    prev_ids = set()            # every id present in the previous run
+    prev_first_seen = {}        # id -> first_seen date, when already known
     if OUT_PATH.exists():
         try:
             old = json.loads(OUT_PATH.read_text())
             for f in old.get("features", []):
-                p = f["properties"]["provider"]
+                props = f["properties"]
+                p = props["provider"]
                 existing.setdefault(p, []).append(f)
+                fid = props.get("id")
+                if fid:
+                    prev_ids.add(fid)
+                    if props.get("first_seen"):
+                        prev_first_seen[fid] = props["first_seen"]
             print(f"Loaded {sum(len(v) for v in existing.values())} existing scenes as fallback.")
         except Exception:
             pass
@@ -284,9 +298,29 @@ def main():
         merged.extend(feats)
         print(f"  {PROVIDER_META[pid]['label']}: {len(feats)} scenes")
 
+    # Stamp first_seen: preserve for known scenes, mark this run's date for new
+    # ones. Scenes present before tracking began stay None (unknown ingest date).
+    new_count = 0
+    for feat in merged:
+        props = feat["properties"]
+        if props.get("first_seen"):
+            continue  # already stamped (e.g. fallback-cached feature)
+        fid = props.get("id")
+        prev = prev_first_seen.get(fid)
+        if prev:
+            props["first_seen"] = prev
+        elif fid in prev_ids:
+            props["first_seen"] = None  # existed before tracking; leave unknown
+        else:
+            props["first_seen"] = run_date
+            new_count += 1
+    print(f"\n  New scenes this run: {new_count}")
+
     geojson = {
         "type": "FeatureCollection",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "last_updated": run_date,
+        "new_this_run": new_count,
         "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
         "features": merged,
     }

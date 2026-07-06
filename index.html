@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=lightbox-fs-4" />
+  <link rel="stylesheet" href="css/style.css?v=recent-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -144,10 +144,20 @@
         </div>
       </div>
 
-      <!-- 03 · EXPORT -->
+      <!-- 03 · RECENT ACTIVITY -->
+      <div class="mod" id="recent-mod">
+        <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="recent-tray">
+          <span class="ix">03</span><span class="ttl">Recent</span><span class="rule"></span><span class="meta" id="recentMeta">NEWLY ADDED</span><span class="chev" aria-hidden="true"></span>
+        </button>
+        <div class="tray-body" id="recent-tray">
+          <div class="recent-list" id="recentList"></div>
+        </div>
+      </div>
+
+      <!-- 04 · EXPORT -->
       <div class="mod" id="export-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="export-tray">
-          <span class="ix">03</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC · SH · LINK</span><span class="chev" aria-hidden="true"></span>
+          <span class="ix">04</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC · SH · LINK</span><span class="chev" aria-hidden="true"></span>
         </button>
         <div class="tray-body" id="export-tray">
           <button class="btn ghost" data-export="stac">
@@ -326,7 +336,7 @@
     <img id="lb-img" alt="SAR scene preview" />
   </div>
 </div>
-<script src="js/app.js?v=lightbox-fs-4"></script>
+<script src="js/app.js?v=recent-1"></script>
 <script src="js/tour.js?v=tour-logo-1"></script>
 </body>
 </html>

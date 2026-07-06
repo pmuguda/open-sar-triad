@@ -498,7 +498,7 @@ function showDetail(p) {
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
   document.getElementById('detail-content').innerHTML =
-    `<div class="mod-h detail-h"><span class="ix">04</span><span class="ttl">Preview</span><span class="rule"></span><span class="meta">SCENE</span></div>
+    `<div class="mod-h detail-h"><span class="ix">05</span><span class="ttl">Preview</span><span class="rule"></span><span class="meta">SCENE</span></div>
 ${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
@@ -1223,6 +1223,103 @@ function restoreState() {
   window._pendingDateRestore = { from: p.get('from'), to: p.get('to') };
 }
 
+// ── Recent activity ────────────────────────────────────────
+const DAY_MS = 86400000;
+
+function relDays(fromStr, nowMs) {
+  const d = Math.floor((nowMs - Date.parse(fromStr + 'T00:00:00Z')) / DAY_MS);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 7) return d + 'd ago';
+  if (d < 14) return '1w ago';
+  return Math.floor(d / 7) + 'w ago';
+}
+
+// Fly the map to a scene and open its detail panel.
+function focusFeature(id) {
+  window.showDetailById(id);
+  const c = centroidCache[id];
+  if (c) map.flyTo([c[1], c[0]], Math.max(map.getZoom(), 7), { duration: 0.8 });
+}
+
+function renderRecent() {
+  const list = document.getElementById('recentList');
+  const meta = document.getElementById('recentMeta');
+  if (!list) return;
+
+  const nowMs   = Date.now();
+  const cutoff  = new Date(nowMs - 30 * DAY_MS).toISOString().slice(0, 10);
+  const weekAgo = new Date(nowMs - 7  * DAY_MS).toISOString().slice(0, 10);
+
+  const trackingActive = allFeatures.some(f => f.properties.first_seen);
+
+  const recent = allFeatures
+    .filter(f => f.properties.first_seen && f.properties.first_seen >= cutoff)
+    .sort((a, b) => (b.properties.first_seen).localeCompare(a.properties.first_seen)
+                 || (b.properties.date || '').localeCompare(a.properties.date || ''))
+    .slice(0, 40);
+
+  // Ingestion tracking has run but nothing arrived in the window.
+  if (!recent.length && trackingActive) {
+    meta.textContent = 'NO NEW SCENES';
+    list.innerHTML =
+      `<p class="recent-empty">No scenes added in the last 30 days. The catalog refreshes every Monday — new arrivals will appear here.</p>`;
+    return;
+  }
+
+  // No ingestion history yet: fall back to the most recent acquisitions so the
+  // panel is useful now, and it switches to "new this week" once tracking fills.
+  if (!recent.length) {
+    const latest = allFeatures
+      .filter(f => f.properties.date)
+      .sort((a, b) => b.properties.date.localeCompare(a.properties.date))
+      .slice(0, 25);
+    meta.textContent = 'LATEST CAPTURES';
+    const rowLatest = f => {
+      const p = f.properties;
+      return `<button class="recent-row" data-recent-id="${esc(p.id)}">
+        <span class="recent-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
+        <span class="recent-body">
+          <span class="recent-id">${esc(p.id || '—')}</span>
+          <span class="recent-sub">${esc(p.provider_label)} · ${esc(p.sensor_mode || '—')}</span>
+        </span>
+        <span class="recent-age">${esc(p.date)}</span>
+      </button>`;
+    };
+    list.innerHTML =
+      `<p class="recent-empty">Weekly ingestion tracking begins with the next update. Showing the latest acquisitions for now.</p>`
+      + latest.map(rowLatest).join('');
+    return;
+  }
+
+  const weekCount = recent.filter(f => f.properties.first_seen >= weekAgo).length;
+  meta.textContent = weekCount ? `+${weekCount} THIS WEEK` : `${recent.length} THIS MONTH`;
+
+  const row = f => {
+    const p = f.properties;
+    return `<button class="recent-row" data-recent-id="${esc(p.id)}">
+      <span class="recent-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
+      <span class="recent-body">
+        <span class="recent-id">${esc(p.id || '—')}</span>
+        <span class="recent-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
+      </span>
+      <span class="recent-age">${relDays(p.first_seen, nowMs)}</span>
+    </button>`;
+  };
+
+  const week   = recent.filter(f => f.properties.first_seen >= weekAgo);
+  const earlier = recent.filter(f => f.properties.first_seen < weekAgo);
+  let html = '';
+  if (week.length)    html += `<div class="recent-group">THIS WEEK</div>` + week.map(row).join('');
+  if (earlier.length) html += `<div class="recent-group">EARLIER THIS MONTH</div>` + earlier.map(row).join('');
+  list.innerHTML = html;
+}
+
+document.getElementById('recentList').addEventListener('click', e => {
+  const btn = e.target.closest('.recent-row');
+  if (btn) focusFeature(btn.dataset.recentId);
+});
+
 // ── Load data ──────────────────────────────────────────────
 fetch('data/scenes.geojson')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
@@ -1232,6 +1329,7 @@ fetch('data/scenes.geojson')
     populateModes(allFeatures);
     restoreState();
     initTimeline(allFeatures);
+    renderRecent();
     document.getElementById('loading').classList.add('hidden');
     dataLoaded = true;
     render();

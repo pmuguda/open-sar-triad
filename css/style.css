@@ -540,6 +540,33 @@ body.detail-collapsed #detail-toggle { right: 0; }
 }
 .detail-fullscreen-btn:hover { background: var(--accent); color: #0d1117; border-color: var(--accent); }
 
+/* Recent activity list */
+.recent-list { display: flex; flex-direction: column; }
+.recent-group {
+  font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--ink-3); margin: 10px 0 6px;
+}
+.recent-group:first-child { margin-top: 2px; }
+.recent-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; background: none; border: 1px solid transparent;
+  border-left: 1px solid var(--line); text-align: left; cursor: pointer;
+  color: var(--ink); transition: background .12s, border-color .12s;
+}
+.recent-row:hover { background: var(--bg-2); border-color: var(--line); }
+.recent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.recent-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.recent-id {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.recent-sub { font-size: 9.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-age {
+  font-family: var(--mono); font-size: 9.5px; color: var(--accent);
+  flex-shrink: 0; white-space: nowrap;
+}
+.recent-empty { font-size: 11px; color: var(--ink-3); line-height: 1.5; margin: 4px 0; }
+
 /* Fullscreen image lightbox */
 #img-lightbox {
   display: none; position: fixed; inset: 0; z-index: 9999;
