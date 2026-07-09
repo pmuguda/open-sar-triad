@@ -690,6 +690,30 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .fmt-chip:hover { border-color: var(--accent); color: var(--ink); }
 .fmt-chip.is-active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 
+/* Draped scene preview control (on the map) */
+#drape-ctl {
+  position: absolute; top: 14px; right: 14px; z-index: 500;
+  width: 208px; padding: 9px 10px;
+  background: oklch(from var(--bg) l c h / .9); border: 1px solid var(--line-2);
+  backdrop-filter: blur(3px); font-family: var(--font-mono);
+  display: flex; flex-direction: column; gap: 8px;
+}
+#drape-ctl.hidden { display: none; }
+.drape-row { display: flex; align-items: center; gap: 7px; }
+.drape-id {
+  flex: 1; min-width: 0; font-size: 10px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.drape-btn {
+  flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--ink);
+  cursor: pointer; font-size: 12px; transition: all .12s;
+}
+.drape-btn:hover { border-color: var(--accent); color: var(--accent); }
+.drape-op { gap: 9px; }
+.drape-op-label { font-size: 8.5px; letter-spacing: .12em; color: var(--ink-3); }
+#drape-opacity { flex: 1; accent-color: var(--accent); height: 3px; cursor: pointer; }
+
 /* Overlapping-scene picker popup */
 .scene-picker-popup .leaflet-popup-content { margin: 0 !important; }
 .scene-picker .picker-head {

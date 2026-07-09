@@ -4,6 +4,17 @@ All notable changes to open-sar-triad are documented here. The format is based o
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Georeferenced scene preview on the map** — clicking a scene now drapes its SAR
+  preview image onto the basemap at the footprint location (warped to the footprint
+  corners) and fits the map to it, EO-viewer style. An on-map control offers an
+  opacity slider (blend against the basemap), a fullscreen button (reuses the zoom/pan
+  lightbox), and a close button; Home/reset also clears it. The side panel now shows
+  the scene's full metadata instead of a thumbnail. Umbra previews are still rendered
+  from the COG overview on the fly.
+
 ## [2.1.0] — 2026-07-07
 
 Feature release building on v2.0.0. All changes are backward-compatible.

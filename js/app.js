@@ -34,6 +34,13 @@ const INITIAL_CENTER = [20, 0];
 const INITIAL_ZOOM = 2;
 const map = L.map('map', { center: INITIAL_CENTER, zoom: INITIAL_ZOOM, zoomControl: false, preferCanvas: true });
 const footprintRenderer = L.canvas({ padding: 0.5 });
+// Draped scene preview sits just above the footprint vectors (zIndex 400) so its
+// imagery isn't tinted by the polygon fill, but below the country/drawn panes so
+// the dashed selection outline (drawnPane) still reads on top.
+map.createPane('scenePane');
+map.getPane('scenePane').style.zIndex = 405;
+map.getPane('scenePane').style.pointerEvents = 'none';
+
 map.createPane('countryPane');
 map.getPane('countryPane').style.zIndex = 410;
 map.getPane('countryPane').style.pointerEvents = 'none';
@@ -543,13 +550,12 @@ function _pctile(sorted, p) {
   return sorted[i];
 }
 
-const _fsBtnHtml =
-  `<button class="detail-fullscreen-btn" title="View fullscreen" aria-label="View fullscreen">
-     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-   </button>`;
-
-async function renderUmbraPreview(slot, url) {
-  try {
+// Render an Umbra COG's smallest overview to a stretched grayscale JPEG data URL.
+// Cached by URL so re-selecting a scene doesn't re-fetch/re-render.
+const _umbraPreviewCache = new Map();
+function umbraPreviewDataUrl(url) {
+  if (_umbraPreviewCache.has(url)) return _umbraPreviewCache.get(url);
+  const promise = (async () => {
     const GT = await loadGeoTIFF();
     const tiff = await GT.fromUrl(url);
     const n = await tiff.getImageCount();
@@ -574,57 +580,142 @@ async function renderUmbraPreview(slot, url) {
       id.data[i*4] = g; id.data[i*4+1] = g; id.data[i*4+2] = g; id.data[i*4+3] = 255;
     }
     ctx.putImageData(id, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-    // A later showDetail() replaces #detail-content, detaching stale slots.
-    if (!slot.isConnected) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'detail-thumb-wrap';
-    wrap.innerHTML =
-      `<img class="detail-thumbnail" src="${dataUrl}" alt="Umbra SAR preview rendered from COG" />
-       ${_fsBtnHtml}
-       <span class="detail-thumb-tag">RENDERED FROM COG</span>`;
-    slot.replaceWith(wrap);
-  } catch (e) {
-    if (slot.isConnected) {
-      slot.classList.remove('umbra-rendering');
-      slot.textContent = 'Preview unavailable — could not render this Umbra COG.';
-    }
-  }
+    return canvas.toDataURL('image/jpeg', 0.85);
+  })().catch(err => { _umbraPreviewCache.delete(url); throw err; });
+  _umbraPreviewCache.set(url, promise);
+  return promise;
 }
 
-function showDetail(p) {
-  const thumbSrc = proxyThumb(p.thumbnail, p.provider);
-  const noPreviewMsg = p.provider === 'umbra'
-    ? 'No image asset listed for this scene'
-    : 'Preview unavailable';
-  // Umbra ships no thumbnail, but its GeoTIFFs are COGs — render one on the fly.
-  const umbraCog = (!thumbSrc && p.provider === 'umbra') ? umbraCogUrl(p.download) : null;
-  const thumbHtml = thumbSrc
-    ? `<div class="detail-thumb-wrap">
-         <img class="detail-thumbnail" src="${esc(thumbSrc)}" alt="SAR thumbnail" data-preview-fallback="${esc(noPreviewMsg)}" />
-         <button class="detail-fullscreen-btn" title="View fullscreen" aria-label="View fullscreen">
-           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-         </button>
-       </div>`
-    : umbraCog
-    ? `<div class="detail-thumb-placeholder umbra-rendering" data-umbra-slot><span class="spin"></span>Rendering preview from COG…</div>`
-    : `<div class="detail-thumb-placeholder">${noPreviewMsg}</div>`;
+// Resolve a displayable preview image URL for a scene, per provider.
+async function scenePreviewUrl(p) {
+  const thumb = proxyThumb(p.thumbnail, p.provider);
+  if (thumb) return thumb;
+  if (p.provider === 'umbra') {
+    const cog = umbraCogUrl(p.download);
+    if (cog) return await umbraPreviewDataUrl(cog);
+  }
+  return null;
+}
 
-  // One acquisition may be published in several data formats (Capella). Offer a
-  // picker instead of listing "Collection".
+// ── Georeferenced scene preview drape ──────────────────────────
+// Clicking a scene drapes its preview image onto the map at the footprint's
+// location (warped to the corners) and fits the view to it, EO-viewer style.
+let _rotOverlayPromise = null;
+function loadRotatedOverlay() {
+  if (L.imageOverlay && typeof L.imageOverlay.rotated === 'function') return Promise.resolve();
+  if (!_rotOverlayPromise) {
+    _rotOverlayPromise = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/leaflet-imageoverlay-rotated@0.2.1/Leaflet.ImageOverlay.Rotated.js';
+      s.onload = () => res();
+      s.onerror = () => rej(new Error('rotated overlay plugin failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+  return _rotOverlayPromise;
+}
+
+// Assign a footprint quad's corners to image top-left / top-right / bottom-left
+// so the draped image is oriented top→north. Returns null for non-quad rings.
+function footprintCorners(g) {
+  if (!g) return null;
+  let ring;
+  if (g.type === 'Polygon') ring = g.coordinates[0];
+  else if (g.type === 'MultiPolygon') ring = g.coordinates[0][0];
+  else return null;
+  let pts = ring.slice();
+  const a = pts[0], b = pts[pts.length - 1];
+  if (pts.length > 1 && a[0] === b[0] && a[1] === b[1]) pts = pts.slice(0, -1);
+  if (pts.length !== 4) return null;
+  const byLat = [...pts].sort((u, v) => v[1] - u[1]);          // north first
+  const top = byLat.slice(0, 2), bot = byLat.slice(2, 4);
+  const [tl, tr] = top[0][0] < top[1][0] ? [top[0], top[1]] : [top[1], top[0]];
+  const bl = bot[0][0] < bot[1][0] ? bot[0] : bot[1];
+  const toLL = c => L.latLng(c[1], c[0]);
+  return { topLeft: toLL(tl), topRight: toLL(tr), bottomLeft: toLL(bl) };
+}
+
+let sceneOverlay = null, sceneOutline = null, _drapeUrl = null, _drapeToken = 0, _selToken = 0;
+
+function clearDrape() {
+  _drapeToken++;  // invalidate any in-flight image loads
+  if (sceneOverlay) { map.removeLayer(sceneOverlay); sceneOverlay = null; }
+  if (sceneOutline) { map.removeLayer(sceneOutline); sceneOutline = null; }
+  _drapeUrl = null;
+  map.getPane('scenePane').style.opacity = 1;
+  const ctl = document.getElementById('drape-ctl');
+  if (ctl) ctl.classList.add('hidden');
+}
+
+async function drapeScene(p, imgUrl) {
+  clearDrape();
+  const g = geomCache[p.id];
+  if (!imgUrl || !g) return;
+  const token = ++_drapeToken;
+  const bounds = L.geoJSON(g).getBounds();
+  map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 13 });
+
+  // Preload so we only drape a working image (and can fall back on error).
+  const probe = new Image();
+  probe.onload = async () => {
+    await loadRotatedOverlay();
+    if (token !== _drapeToken) return;  // superseded by a newer/cleared selection
+    const corners = footprintCorners(g);
+    if (corners && typeof L.imageOverlay.rotated === 'function') {
+      sceneOverlay = L.imageOverlay.rotated(imgUrl, corners.topLeft, corners.topRight, corners.bottomLeft,
+        { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
+    } else {
+      sceneOverlay = L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
+    }
+    sceneOutline = L.geoJSON(g, { style: { color: '#fff', weight: 1.4, fill: false, dashArray: '4 3' },
+      interactive: false, pane: 'drawnPane' }).addTo(map);
+    _drapeUrl = imgUrl;
+    showDrapeControl(p.id);
+  };
+  probe.onerror = () => { if (token === _drapeToken) showHint('Preview unavailable for this scene'); };
+  probe.src = imgUrl;
+}
+
+function showDrapeControl(sceneId) {
+  const ctl = document.getElementById('drape-ctl');
+  if (!ctl) return;
+  ctl.querySelector('.drape-id').textContent = sceneId || 'scene';
+  ctl.querySelector('#drape-opacity').value = '100';
+  ctl.classList.remove('hidden');
+}
+
+// Drape control wiring (opacity / fullscreen / close).
+(function () {
+  const ctl = document.getElementById('drape-ctl');
+  if (!ctl) return;
+  ctl.querySelector('#drape-opacity').addEventListener('input', e => {
+    map.getPane('scenePane').style.opacity = +e.target.value / 100;
+  });
+  ctl.querySelector('#drape-fs').addEventListener('click', () => {
+    if (_drapeUrl && window.__openLightbox) window.__openLightbox(_drapeUrl);
+  });
+  ctl.querySelector('#drape-close').addEventListener('click', clearDrape);
+})();
+
+function showDetail(p) {
+  // One acquisition may be published in several data formats (Capella).
   const products = (p.products && Object.keys(p.products).length > 1) ? p.products : null;
 
+  // Full metadata — every meaningful field, blanks skipped.
   const rows = [
-    ['Date',            p.date             || '—'],
-    ['Provider',        p.provider_label   || '—'],
-    ['Mode',            p.sensor_mode      || '—'],
-    ['Polarization',    p.polarization     || '—'],
-    ['Resolution',      p.resolution != null ? p.resolution + ' m' : '—'],
-    ['Incidence angle', p.incidence_angle != null ? p.incidence_angle + '°' : '—'],
-    ['Off-nadir',       p.off_nadir != null ? p.off_nadir + '°' : '—'],
-    ['Collection',      products ? '—' : (p.collection || '—')],
-  ].filter(([,v]) => v !== '—')
+    ['Acquired',        p.date],
+    ['Provider',        p.provider_label],
+    ['Sensor mode',     p.sensor_mode],
+    ['Polarization',    p.polarization],
+    ['Resolution',      p.resolution != null ? p.resolution + ' m' : null],
+    ['Incidence angle', p.incidence_angle != null ? p.incidence_angle + '°' : null],
+    ['Off-nadir',       p.off_nadir != null ? p.off_nadir + '°' : null],
+    ['Orbit',           p.orbit_state],
+    ['Look',            p.look_dir],
+    ['Formats',         products ? (p.formats || Object.keys(products)).join(', ') : null],
+    ['Collection',      products ? null : p.collection],
+    ['First seen',      p.first_seen],
+  ].filter(([,v]) => v != null && v !== '' && v !== 'n/a')
    .map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
 
   const pvUrl = safeUrl(p.provider_url);
@@ -648,8 +739,8 @@ function showDetail(p) {
   }
 
   document.getElementById('detail-content').innerHTML =
-    `<div class="mod-h detail-h"><span class="ix">05</span><span class="ttl">Preview</span><span class="rule"></span><span class="meta">SCENE</span></div>
-${thumbHtml}<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
+    `<div class="mod-h detail-h"><span class="ix">05</span><span class="ttl">Scene</span><span class="rule"></span><span class="meta">METADATA</span></div>
+<div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
 ${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
@@ -667,26 +758,18 @@ ${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
     });
   }
 
-  const img = document.querySelector('#detail-content .detail-thumbnail[data-preview-fallback]');
-  if (img) {
-    img.addEventListener('error', () => {
-      const placeholder = document.createElement('div');
-      placeholder.className = 'detail-thumb-placeholder';
-      placeholder.textContent = img.dataset.previewFallback || 'Preview unavailable';
-      img.replaceWith(placeholder);
-    }, { once: true });
-  }
-
-  if (umbraCog) {
-    const slot = document.querySelector('#detail-content [data-umbra-slot]');
-    if (slot) renderUmbraPreview(slot, umbraCog);
-  }
-
   const panel = document.getElementById('detail-panel');
   panel.scrollTop = 0;
   panel.classList.remove('hidden');
   document.body.classList.remove('detail-collapsed');
   document.getElementById('detail-toggle').classList.remove('hidden');
+
+  // Drape the preview on the map at the footprint location. Guard against a
+  // slow preview (e.g. Umbra COG) resolving after a newer scene was selected.
+  const sel = ++_selToken;
+  scenePreviewUrl(p)
+    .then(url => { if (sel === _selToken) drapeScene(p, url); })
+    .catch(() => { if (sel === _selToken) showHint('Preview unavailable for this scene'); });
 }
 
 // ── Detail toggle ───────────────────────────────────────────
@@ -996,6 +1079,7 @@ document.getElementById('tb-upload').addEventListener('change', e => {
 // ── Clear all ──────────────────────────────────────────────
 document.getElementById('tb-clear').addEventListener('click', clearAll);
 function clearAll() {
+  clearDrape();
   if (activeDrawTool) { activeDrawTool.disable(); activeDrawTool = null; }
   map.removeControl(drawControl);
   drawnItems.clearLayers(); aoiBbox = null;
@@ -1405,9 +1489,8 @@ function relDays(fromStr, nowMs) {
 
 // Fly the map to a scene and open its detail panel.
 function focusFeature(id) {
+  // showDetail drapes the scene and fits the map to its footprint.
   window.showDetailById(id);
-  const c = centroidCache[id];
-  if (c) map.flyTo([c[1], c[0]], Math.max(map.getZoom(), 7), { duration: 0.8 });
 }
 
 function renderRecent() {
@@ -1572,13 +1655,8 @@ fetch('data/scenes.geojson')
     lbImg.src = '';
   }
 
-  // Open via fullscreen button or thumbnail click (delegated — injected dynamically)
-  document.getElementById('detail-content').addEventListener('click', e => {
-    const wrap = e.target.closest('.detail-thumb-wrap');
-    if (!wrap) return;
-    const img = wrap.querySelector('.detail-thumbnail');
-    if (img) open(img.src);
-  });
+  // Let the on-map drape control open the fullscreen viewer with its image.
+  window.__openLightbox = open;
 
   document.getElementById('lb-close').addEventListener('click', close);
   document.getElementById('lb-zoom-in').addEventListener('click', () => zoom(1.25));
