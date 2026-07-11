@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'sar-tour-v4';
+  var STORAGE_KEY = 'sar-tour-v5';
   var PAD    = 10;   // spotlight padding around target
   var MARGIN = 14;   // tooltip margin from edge / target
   var TT_W   = 290;  // tooltip width (matches CSS)
@@ -54,10 +54,30 @@
       pos:    'right',
     },
     {
+      target: '.basemap-toggle',
+      title:  'Map / Satellite Basemap',
+      body:   'Switch between the clean vector map and satellite imagery. The satellite view is useful when comparing a draped SAR preview against optical ground context.',
+      pos:    'right',
+    },
+    {
       target: '#timeline',
       title:  'Date Range Slider',
       body:   'Drag either handle to restrict scenes to a specific time window. The scene count updates as you narrow the range.',
       pos:    'top',
+    },
+    {
+      target: '#drape-ctl',
+      title:  'Georeferenced Preview Drape',
+      body:   'Clicking a scene places its SAR preview directly on the map. Use opacity to blend it with the basemap, hide/show to compare, fullscreen for inspection, or close to return to the full footprint layer.',
+      pos:    'right',
+      before: openTourScene,
+    },
+    {
+      target: '#detail-panel',
+      title:  '05 Scene Metadata',
+      body:   'The side panel now focuses on metadata and actions: scene ID, acquisition details, orbit/look direction, provider links, and downloads. Capella scenes show one clean Available formats row plus format chips for choosing GEC, GEO, SLC, SICD, SIDD, or CPHD.',
+      pos:    'left',
+      before: openTourScene,
     },
     {
       target: '.cfoot',
@@ -68,7 +88,7 @@
     {
       target: null,
       title:  "Scene Footprints — You're Ready!",
-      body:   'Each coloured polygon on the map is a SAR scene. Click one for a quick popup with date and mode, then hit "Details" to open the right-side panel with a thumbnail preview, full metadata, and download links.',
+      body:   'Each coloured polygon on the map is a SAR scene. Click one for a popup or the full side panel; the map will drape the preview where possible and the panel will show metadata, provider links, and download actions.',
       pos:    'center',
     },
   ];
@@ -130,6 +150,32 @@
       pos:    'top',
     },
     {
+      target: '.basemap-toggle',
+      title:  'Map / Satellite',
+      body:   'Switch to SAT when you want optical context behind a draped SAR preview, or MAP for the cleaner vector basemap.',
+      pos:    'bottom',
+    },
+    {
+      target: '#drape-ctl',
+      title:  'Preview Drape',
+      body:   'Tapping a scene places its preview on the map. The compact control lets you adjust opacity, hide/show the drape, open fullscreen, or clear it.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.add('collapsed');
+        openTourScene();
+      },
+    },
+    {
+      target: '#detail-panel',
+      title:  'Scene Metadata',
+      body:   'Open scene details to review the full metadata table, provider links, and downloads. Capella scenes include a format selector without repeating the same metadata twice.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.add('collapsed');
+        openTourScene();
+      },
+    },
+    {
       target: '#collapseBtn',
       title:  'Map Space',
       body:   'Use this handle to collapse or expand the bottom sheet.',
@@ -147,10 +193,23 @@
     {
       target: null,
       title:  'Ready',
-      body:   'Tap a scene footprint to preview details, or collapse the sheet and explore the map.',
+      body:   'Tap a scene footprint to drape its preview and review metadata, or collapse the sheet and explore the map.',
       pos:    'center',
     },
   ];
+
+  function openTourScene() {
+    if (window.__tourSceneOpened) return;
+    var detailBtn = document.querySelector('[data-detail-id]');
+    var recentBtn = document.querySelector('[data-recent-id]');
+    var id = detailBtn ? detailBtn.getAttribute('data-detail-id')
+      : recentBtn ? recentBtn.getAttribute('data-recent-id')
+      : null;
+    if (id && window.showDetailById) {
+      window.__tourSceneOpened = true;
+      window.showDetailById(id);
+    }
+  }
 
   function isMobile() {
     return window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
@@ -239,7 +298,9 @@
 
   /* ── Spotlight ────────────────────────────────────────────── */
   function setSpotlight(rect) {
-    if (!rect) {
+    if (!rect || rect.width <= 0 || rect.height <= 0 ||
+        rect.right <= 0 || rect.bottom <= 0 ||
+        rect.left >= window.innerWidth || rect.top >= window.innerHeight) {
       holeRect.setAttribute('x',      '-9999');
       holeRect.setAttribute('y',      '-9999');
       holeRect.setAttribute('width',  '0');
@@ -254,6 +315,14 @@
     var h = rect.height + PAD * 2;
     if (x + w > window.innerWidth) w = window.innerWidth - x;
     if (y + h > window.innerHeight) h = window.innerHeight - y;
+    if (w <= 0 || h <= 0) {
+      holeRect.setAttribute('x',      '-9999');
+      holeRect.setAttribute('y',      '-9999');
+      holeRect.setAttribute('width',  '0');
+      holeRect.setAttribute('height', '0');
+      ringEl.style.display = 'none';
+      return;
+    }
 
     holeRect.setAttribute('x',      x);
     holeRect.setAttribute('y',      y);

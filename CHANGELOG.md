@@ -6,6 +6,11 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Changed
+- Refreshed the desktop and mobile onboarding tours for the current interface:
+  MAP/SAT basemap switching, georeferenced preview drapes, `05 Scene` metadata,
+  and Capella's cleaned format selector/provider action are now covered.
+
 ## [2.1.1] — 2026-07-11
 
 Patch release focused on scene preview georeferencing and detail-panel metadata.
