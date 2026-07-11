@@ -76,7 +76,7 @@ The three providers represented in this tool each operate public open data progr
 - Leaflet map with a CartoDB dark basemap
 - Scene footprints rendered as colored polygons, one per acquisition
 - Home button clears AOI/country filters and returns the map to the opening world view
-- Clickable scenes open a detail panel with full scene metadata, provider/product links, and direct download actions
+- Clickable scenes open a detail panel with full scene metadata, STAC Browser/provider links, and direct download actions
 - Where several footprints overlap the same spot, a click opens a "N scenes here" picker to choose among the stacked acquisitions instead of only the topmost
 
 **Scene previews**
@@ -132,9 +132,11 @@ Scene metadata originates from the public STAC catalogs maintained by each provi
 
 | Provider | Open Data Program | STAC Catalog Endpoint | License |
 |----------|-------------------|-----------------------|---------|
-| ICEYE | https://www.iceye.com/open-data-initiative | `iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json` | CC-BY 4.0 |
+| ICEYE | https://www.iceye.com/open-data-initiative | `iceye-open-data-catalog.s3.amazonaws.com/collections/iceye-sar.json` | CC-BY 4.0 |
 | Umbra | https://umbra.space/open-data/ | `s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json` | CC-BY 4.0 |
 | Capella | https://www.capellaspace.com/community/capella-open-data-program/ | `capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json` | CC-BY 4.0 |
+
+The scene detail panel uses [Radiant Earth STAC Browser](https://radiantearth.github.io/stac-browser/) for provider/source links. ICEYE and Umbra scenes open directly to a derived STAC item page when the scene ID or asset path is available; Capella opens the live Capella STAC catalog root because its public per-product metadata files are not consistently STAC Item documents.
 
 ---
 
@@ -269,7 +271,7 @@ Each feature carries the following properties:
 | `off_nadir` | number | Off-nadir angle in degrees, if available |
 | `thumbnail` | string | URL to a preview image |
 | `download` | string | URL to the scene data asset |
-| `provider_url` | string | URL to the provider's open data program page |
+| `provider_url` | string | STAC Browser URL for the provider catalog root |
 | `collection` | string | Product type or collection name |
 | `orbit_state` | string | Satellite pass direction: `ascending`, `descending`, or `null` |
 | `look_dir` | string | Radar look direction: `left` or `right` |

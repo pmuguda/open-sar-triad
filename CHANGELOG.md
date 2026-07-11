@@ -6,6 +6,12 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Changed
+- Scene/provider actions now open Radiant Earth STAC Browser sources instead of
+  retired or generic provider pages. ICEYE and Umbra links resolve to scene-level
+  STAC items when their IDs/assets allow it; Capella links to the live Capella STAC
+  catalog root.
+
 ## [2.1.2] — 2026-07-11
 
 Patch release focused on onboarding clarity.

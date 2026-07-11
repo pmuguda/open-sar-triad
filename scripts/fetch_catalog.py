@@ -32,19 +32,19 @@ PROVIDER_META = {
     "iceye": {
         "label":        "ICEYE",
         "color":        "#00FF87",
-        "provider_url": "https://www.iceye.com/open-data-initiative",
+        "provider_url": "https://radiantearth.github.io/stac-browser/#/external/iceye-open-data-catalog.s3.amazonaws.com/collections/iceye-sar.json",
         "parquets":     [f"{BASE_URL}/iceye/iceye.parquet"],
     },
     "umbra": {
         "label":        "Umbra",
         "color":        "#00C9FF",
-        "provider_url": "https://umbra.space/open-data/",
+        "provider_url": "https://radiantearth.github.io/stac-browser/#/external/s3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json",
         "parquets":     [f"{BASE_URL}/umbra/umbra.parquet"],
     },
     "capella": {
         "label":        "Capella",
         "color":        "#FF6B35",
-        "provider_url": "https://www.capellaspace.com/",
+        "provider_url": "https://radiantearth.github.io/stac-browser/#/external/capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json",
         "parquets": [
             f"{BASE_URL}/capella/capella_GEC.parquet",
             f"{BASE_URL}/capella/capella_GEO.parquet",

@@ -467,10 +467,10 @@ function updateModes(visibleFeatures = getVisibleFeatures()) {
 // ── Popup ──────────────────────────────────────────────────
 function makePopup(p) {
   const dlUrl = safeUrl(p.download);
-  const pvUrl = safeUrl(p.provider_url);
+  const pvUrl = safeUrl(providerStacBrowserUrl(p));
   const det = `<button class="popup-btn details-btn" data-detail-id="${esc(p.id)}">Details</button>`;
   const dl  = dlUrl ? `<a class="popup-btn" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download</a>` : '';
-  const pv  = pvUrl ? `<a class="popup-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.provider_label)}</a>` : '';
+  const pv  = pvUrl ? `<a class="popup-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">STAC</a>` : '';
   return `<div class="popup-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="popup-id">${esc(p.id||'—')}</div>
 <div class="popup-date">📅 ${esc(p.date||'Unknown')}</div>
@@ -533,6 +533,56 @@ function safeUrl(url) {
     const u = new URL(String(url));
     return (u.protocol === 'https:' || u.protocol === 'http:') ? url : null;
   } catch { return null; }
+}
+
+const STAC_BROWSER_BASE = 'https://radiantearth.github.io/stac-browser/#/external/';
+const PROVIDER_STAC_ROOTS = {
+  iceye: 'iceye-open-data-catalog.s3.amazonaws.com/collections/iceye-sar.json',
+  umbra: 's3.us-west-2.amazonaws.com/umbra-open-data-catalog/stac/catalog.json',
+  capella: 'capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json',
+};
+
+function stacBrowserUrl(pathOrUrl) {
+  if (!pathOrUrl) return null;
+  const value = String(pathOrUrl);
+  if (value.startsWith(STAC_BROWSER_BASE)) return value;
+  const stripped = value.replace(/^https?:\/\//, '').replace(/^\/+/, '');
+  return `${STAC_BROWSER_BASE}${stripped}`;
+}
+
+function iceyeStacBrowserUrl(p) {
+  if (p.id && p.date && /^\d{4}-\d{2}/.test(p.date)) {
+    const yyyy = p.date.slice(0, 4);
+    const mm = p.date.slice(5, 7);
+    return stacBrowserUrl(`iceye-open-data-catalog.s3.amazonaws.com/stac-items/${yyyy}/${mm}/${p.id}.json`);
+  }
+  return stacBrowserUrl(PROVIDER_STAC_ROOTS.iceye);
+}
+
+function umbraStacBrowserUrl(p) {
+  const dl = safeUrl(p.download);
+  if (dl) {
+    try {
+      const url = new URL(dl);
+      const parts = url.pathname.split('/');
+      const filename = parts.pop() || '';
+      const itemBase = filename.replace(/_(CSI|GEC|SICD|SIDD|CPHD|SLC|GRD)(?:_[^.]*)?\.[^.]+$/i, '');
+      if (itemBase && itemBase !== filename) {
+        const dir = parts.join('/').replace(/^\/+/, '');
+        return stacBrowserUrl(`${url.host}/${dir}/${itemBase}.stac.v2.json`);
+      }
+    } catch {
+      // Fall through to the catalog root if the asset URL is not parseable.
+    }
+  }
+  return stacBrowserUrl(PROVIDER_STAC_ROOTS.umbra);
+}
+
+function providerStacBrowserUrl(p) {
+  if (p.provider === 'iceye') return iceyeStacBrowserUrl(p);
+  if (p.provider === 'umbra') return umbraStacBrowserUrl(p);
+  if (p.provider === 'capella') return stacBrowserUrl(PROVIDER_STAC_ROOTS.capella);
+  return stacBrowserUrl(p.provider_url) || safeUrl(p.provider_url);
 }
 
 // ── Detail panel ───────────────────────────────────────────
@@ -969,12 +1019,10 @@ function showDetail(p) {
   // One acquisition may be published in several data formats (Capella).
   const products = (p.products && Object.keys(p.products).length > 1) ? p.products : null;
 
-  const providerPageUrl = p.provider === 'capella'
-    ? 'https://www.capellaspace.com/'
-    : p.provider_url;
-  const pvUrl = safeUrl(providerPageUrl);
+  const stacUrl = providerStacBrowserUrl(p);
+  const pvUrl = safeUrl(stacUrl);
   const pv = pvUrl
-    ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
+    ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View in STAC Browser</a>` : '';
 
   const metadataValue = (v, suffix = '') => {
     if (v == null || v === '' || v === 'n/a') return null;
@@ -1007,7 +1055,7 @@ function showDetail(p) {
     ['First seen',       metadataValue(p.first_seen)],
     ['Thumbnail',        metadataLink(p.thumbnail)],
     ['Download asset',   products ? null : metadataLink(p.download)],
-    ['Provider page',    metadataLink(providerPageUrl)],
+    ['STAC Browser',     metadataLink(stacUrl)],
   ].filter(([,v]) => v)
    .map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 
