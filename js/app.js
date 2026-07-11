@@ -588,6 +588,19 @@ function _pctile(sorted, p) {
   return sorted[i];
 }
 
+function wgs84BoundsFromTiffImage(image) {
+  if (!image || typeof image.getBoundingBox !== 'function') return null;
+  try {
+    const b = image.getBoundingBox(); // [west, south, east, north] for EPSG:4326 COGs.
+    if (!b || b.length !== 4 || b.some(v => !Number.isFinite(v))) return null;
+    const [w, s, e, n] = b;
+    if (w < -180 || e > 180 || s < -90 || n > 90 || w >= e || s >= n) return null;
+    return L.latLngBounds([[s, w], [n, e]]);
+  } catch {
+    return null;
+  }
+}
+
 // Render an Umbra COG's smallest overview to a stretched grayscale JPEG data URL.
 // Cached by URL so re-selecting a scene doesn't re-fetch/re-render.
 const _umbraPreviewCache = new Map();
@@ -599,6 +612,7 @@ function umbraPreviewDataUrl(url) {
     const n = await tiff.getImageCount();
     const image = await tiff.getImage(Math.max(0, n - 1));  // smallest overview
     const w = image.getWidth(), h = image.getHeight();
+    const bounds = wgs84BoundsFromTiffImage(image);
     const band = (await image.readRasters())[0];
 
     // Robust 2–98 percentile stretch on a subsample of non-zero pixels.
@@ -618,7 +632,7 @@ function umbraPreviewDataUrl(url) {
       id.data[i*4] = g; id.data[i*4+1] = g; id.data[i*4+2] = g; id.data[i*4+3] = 255;
     }
     ctx.putImageData(id, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return { url: canvas.toDataURL('image/jpeg', 0.85), bounds };
   })().catch(err => { _umbraPreviewCache.delete(url); throw err; });
   _umbraPreviewCache.set(url, promise);
   return promise;
@@ -627,10 +641,13 @@ function umbraPreviewDataUrl(url) {
 // Resolve a displayable preview image URL for a scene, per provider.
 async function scenePreviewUrl(p) {
   const thumb = proxyThumb(p.thumbnail, p.provider);
-  if (thumb) return thumb;
+  if (thumb) return { url: thumb, fit: 'quad' };
   if (p.provider === 'umbra') {
     const cog = umbraCogUrl(p.download);
-    if (cog) return await umbraPreviewDataUrl(cog);
+    if (cog) {
+      const preview = await umbraPreviewDataUrl(cog);
+      return { url: preview.url, bounds: preview.bounds, fit: preview.bounds ? 'bbox' : 'quad' };
+    }
   }
   return null;
 }
@@ -643,6 +660,57 @@ async function scenePreviewUrl(p) {
 // rotated footprint outline drawn on top shows the actual data coverage.
 let sceneOverlay = null, sceneOutline = null, _drapeUrl = null, _drapeToken = 0, _selToken = 0;
 let _focusMode = false, _drapeHidden = false;
+
+const QuadImageOverlay = L.Layer.extend({
+  initialize(url, corners, options) {
+    this._url = url;
+    this._corners = corners.map(c => L.latLng(c));
+    L.setOptions(this, options);
+  },
+  onAdd(mapRef) {
+    this._map = mapRef;
+    this._img = L.DomUtil.create('img', 'leaflet-image-layer');
+    this._img.src = this._url;
+    this._img.alt = '';
+    this._img.draggable = false;
+    this._img.style.position = 'absolute';
+    this._img.style.transformOrigin = '0 0';
+    this._img.style.opacity = this.options.opacity == null ? 1 : this.options.opacity;
+    this._img.style.pointerEvents = 'none';
+    this._img.onload = () => this._reset();
+    this.getPane().appendChild(this._img);
+    mapRef.on('zoom viewreset move', this._reset, this);
+    this._reset();
+  },
+  onRemove(mapRef) {
+    mapRef.off('zoom viewreset move', this._reset, this);
+    L.DomUtil.remove(this._img);
+    this._img = null;
+  },
+  getPane() {
+    return this._map.getPane(this.options.pane || 'overlayPane');
+  },
+  getElement() {
+    return this._img;
+  },
+  setOpacity(opacity) {
+    if (this._img) this._img.style.opacity = opacity;
+    return this;
+  },
+  _reset() {
+    if (!this._map || !this._img) return;
+    const w = this._img.naturalWidth || this._img.width || 1;
+    const h = this._img.naturalHeight || this._img.height || 1;
+    this._img.style.width = `${w}px`;
+    this._img.style.height = `${h}px`;
+    const [tl, tr, , bl] = this._corners.map(c => this._map.latLngToLayerPoint(c));
+    const a = (tr.x - tl.x) / w;
+    const b = (tr.y - tl.y) / w;
+    const c = (bl.x - tl.x) / h;
+    const d = (bl.y - tl.y) / h;
+    this._img.style.transform = `matrix(${a},${b},${c},${d},${tl.x},${tl.y})`;
+  },
+});
 
 function clearDrape() {
   _drapeToken++;  // invalidate any in-flight image loads
@@ -674,23 +742,43 @@ function footprintClipPath(g, bounds) {
   return `polygon(${pts.join(', ')})`;
 }
 
-function drapeScene(p, imgUrl) {
+function footprintImageCorners(g) {
+  const ring = g.type === 'Polygon' ? g.coordinates[0]
+             : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
+  if (!ring) return null;
+  const pts = ring.slice(0, -1).length >= 4 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+    ? ring.slice(0, -1)
+    : ring.slice();
+  if (pts.length !== 4) return null;
+  const projected = pts.map(c => ({ ll: L.latLng(c[1], c[0]), p: map.latLngToLayerPoint([c[1], c[0]]) }));
+  projected.sort((a, b) => a.p.y - b.p.y);
+  const top = projected.slice(0, 2).sort((a, b) => a.p.x - b.p.x);
+  const bottom = projected.slice(2, 4).sort((a, b) => a.p.x - b.p.x);
+  return [top[0].ll, top[1].ll, bottom[1].ll, bottom[0].ll]; // TL, TR, BR, BL
+}
+
+function drapeScene(p, preview) {
   clearDrape();
   const g = geomCache[p.id];
+  const imgUrl = preview && preview.url;
   if (!imgUrl || !g) return;
   const token = ++_drapeToken;
-  const bounds = L.geoJSON(g).getBounds();
+  const bounds = preview.bounds || L.geoJSON(g).getBounds();
   map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 13 });
 
   // Preload so we only drape a working image (and can fall back on error).
   const probe = new Image();
   probe.onload = () => {
     if (token !== _drapeToken) return;  // superseded by a newer/cleared selection
-    sceneOverlay = L.imageOverlay(imgUrl, bounds,
-      { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
-    const clip = footprintClipPath(g, bounds);
-    const el = sceneOverlay.getElement();
-    if (clip && el) el.style.clipPath = clip;
+    const corners = preview.fit === 'quad' ? footprintImageCorners(g) : null;
+    sceneOverlay = corners
+      ? new QuadImageOverlay(imgUrl, corners, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map)
+      : L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
+    if (!corners) {
+      const clip = footprintClipPath(g, bounds);
+      const el = sceneOverlay.getElement();
+      if (clip && el) el.style.clipPath = clip;
+    }
 
     // White dashed outline of the selected footprint.
     const ring = g.type === 'Polygon' ? g.coordinates[0]
