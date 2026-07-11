@@ -601,6 +601,32 @@ function wgs84BoundsFromTiffImage(image) {
   }
 }
 
+function wgs84CornersFromTiffImage(image) {
+  const fd = image && image.fileDirectory;
+  const w = image && image.getWidth ? image.getWidth() : 0;
+  const h = image && image.getHeight ? image.getHeight() : 0;
+  if (!fd || !w || !h) return null;
+
+  let xy = null;
+  const m = fd.ModelTransformation;
+  if (m && typeof m.length === 'number' && m.length >= 8) {
+    xy = (col, row) => [m[0] * col + m[1] * row + m[3], m[4] * col + m[5] * row + m[7]];
+  } else if (fd.ModelTiepoint && fd.ModelPixelScale) {
+    const t = fd.ModelTiepoint;
+    const s = fd.ModelPixelScale;
+    xy = (col, row) => [t[3] + (col - t[0]) * s[0], t[4] - (row - t[1]) * s[1]];
+  }
+  if (!xy) return null;
+
+  const corners = [
+    xy(0, 0), xy(w, 0), xy(w, h), xy(0, h),
+  ];
+  if (corners.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y) || x < -180 || x > 180 || y < -90 || y > 90)) {
+    return null;
+  }
+  return corners.map(([lng, lat]) => L.latLng(lat, lng)); // TL, TR, BR, BL
+}
+
 // Render an Umbra COG's smallest overview to a stretched grayscale JPEG data URL.
 // Cached by URL so re-selecting a scene doesn't re-fetch/re-render.
 const _umbraPreviewCache = new Map();
@@ -613,6 +639,7 @@ function umbraPreviewDataUrl(url) {
     const image = await tiff.getImage(Math.max(0, n - 1));  // smallest overview
     const w = image.getWidth(), h = image.getHeight();
     const bounds = wgs84BoundsFromTiffImage(image);
+    const corners = wgs84CornersFromTiffImage(image);
     const band = (await image.readRasters())[0];
 
     // Robust 2–98 percentile stretch on a subsample of non-zero pixels.
@@ -632,7 +659,7 @@ function umbraPreviewDataUrl(url) {
       id.data[i*4] = g; id.data[i*4+1] = g; id.data[i*4+2] = g; id.data[i*4+3] = 255;
     }
     ctx.putImageData(id, 0, 0);
-    return { url: canvas.toDataURL('image/jpeg', 0.85), bounds };
+    return { url: canvas.toDataURL('image/jpeg', 0.85), bounds, corners };
   })().catch(err => { _umbraPreviewCache.delete(url); throw err; });
   _umbraPreviewCache.set(url, promise);
   return promise;
@@ -646,7 +673,7 @@ async function scenePreviewUrl(p) {
     const cog = umbraCogUrl(p.download);
     if (cog) {
       const preview = await umbraPreviewDataUrl(cog);
-      return { url: preview.url, bounds: preview.bounds, fit: preview.bounds ? 'bbox' : 'quad' };
+      return { url: preview.url, bounds: preview.bounds, corners: preview.corners, fit: preview.corners ? 'quad' : 'bbox' };
     }
   }
   return null;
@@ -750,11 +777,11 @@ function footprintImageCorners(g) {
     ? ring.slice(0, -1)
     : ring.slice();
   if (pts.length !== 4) return null;
-  const projected = pts.map(c => ({ ll: L.latLng(c[1], c[0]), p: map.latLngToLayerPoint([c[1], c[0]]) }));
-  projected.sort((a, b) => a.p.y - b.p.y);
-  const top = projected.slice(0, 2).sort((a, b) => a.p.x - b.p.x);
-  const bottom = projected.slice(2, 4).sort((a, b) => a.p.x - b.p.x);
-  return [top[0].ll, top[1].ll, bottom[1].ll, bottom[0].ll]; // TL, TR, BR, BL
+
+  // The upstream catalog footprints are emitted in raster-corner order for the
+  // geocoded preview assets: TL, BL, BR, TR, then closed. Convert to the order
+  // the affine image layer expects: TL, TR, BR, BL.
+  return [pts[0], pts[3], pts[2], pts[1]].map(c => L.latLng(c[1], c[0]));
 }
 
 function drapeScene(p, preview) {
@@ -763,14 +790,15 @@ function drapeScene(p, preview) {
   const imgUrl = preview && preview.url;
   if (!imgUrl || !g) return;
   const token = ++_drapeToken;
-  const bounds = preview.bounds || L.geoJSON(g).getBounds();
+  const previewCorners = preview.corners || null;
+  const bounds = previewCorners ? L.latLngBounds(previewCorners) : (preview.bounds || L.geoJSON(g).getBounds());
   map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 13 });
 
   // Preload so we only drape a working image (and can fall back on error).
   const probe = new Image();
   probe.onload = () => {
     if (token !== _drapeToken) return;  // superseded by a newer/cleared selection
-    const corners = preview.fit === 'quad' ? footprintImageCorners(g) : null;
+    const corners = preview.fit === 'quad' ? (previewCorners || footprintImageCorners(g)) : null;
     sceneOverlay = corners
       ? new QuadImageOverlay(imgUrl, corners, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map)
       : L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
