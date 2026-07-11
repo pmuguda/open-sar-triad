@@ -969,31 +969,46 @@ function showDetail(p) {
   // One acquisition may be published in several data formats (Capella).
   const products = (p.products && Object.keys(p.products).length > 1) ? p.products : null;
 
-  // Full metadata — every meaningful field, blanks skipped.
-  const rows = [
-    ['Acquired',        p.date],
-    ['Provider',        p.provider_label],
-    ['Sensor mode',     p.sensor_mode],
-    ['Polarization',    p.polarization],
-    ['Resolution',      p.resolution != null ? p.resolution + ' m' : null],
-    ['Incidence angle', p.incidence_angle != null ? p.incidence_angle + '°' : null],
-    ['Off-nadir',       p.off_nadir != null ? p.off_nadir + '°' : null],
-    ['Orbit',           p.orbit_state],
-    ['Look',            p.look_dir],
-    ['Formats',         products ? (p.formats || Object.keys(products)).join(', ') : null],
-    ['Collection',      products ? null : p.collection],
-    ['First seen',      p.first_seen],
-  ].filter(([,v]) => v != null && v !== '' && v !== 'n/a')
-   .map(([k,v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
-
   const pvUrl = safeUrl(p.provider_url);
   const pv = pvUrl
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
+  const metadataValue = (v, suffix = '') => {
+    if (v == null || v === '' || v === 'n/a') return null;
+    return `${esc(v)}${suffix}`;
+  };
+  const metadataLink = url => {
+    const safe = safeUrl(url);
+    return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Open</a>` : null;
+  };
+  const productNames = products ? (p.formats || Object.keys(products)).filter(f => safeUrl(products[f])) : null;
+  const rows = [
+    ['Scene ID',         metadataValue(p.id)],
+    ['Provider key',     metadataValue(p.provider)],
+    ['Provider',         metadataValue(p.provider_label)],
+    ['Display color',    metadataValue(p.color)],
+    ['Acquired',         metadataValue(p.date)],
+    ['Year',             metadataValue(p.year)],
+    ['Sensor mode',      metadataValue(p.sensor_mode)],
+    ['Polarization',     metadataValue(p.polarization)],
+    ['Resolution',       p.resolution != null ? metadataValue(p.resolution, ' m') : null],
+    ['Incidence angle',  p.incidence_angle != null ? metadataValue(p.incidence_angle, '°') : null],
+    ['Off-nadir',        p.off_nadir != null ? metadataValue(p.off_nadir, '°') : null],
+    ['Orbit',            metadataValue(p.orbit_state)],
+    ['Look',             metadataValue(p.look_dir)],
+    ['Collection',       metadataValue(p.collection)],
+    ['Formats',          productNames ? metadataValue(productNames.join(', ')) : null],
+    ['First seen',       metadataValue(p.first_seen)],
+    ['Thumbnail',        metadataLink(p.thumbnail)],
+    ['Download asset',   metadataLink(p.download)],
+    ['Provider page',    metadataLink(p.provider_url)],
+  ].filter(([,v]) => v)
+   .map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+
   let formatBlock = '';
   let dl = '';
   if (products) {
-    const fmts = (p.formats || Object.keys(p.products)).filter(f => safeUrl(p.products[f]));
+    const fmts = productNames || [];
     const first = fmts[0];
     const chips = fmts.map((f, i) =>
       `<button class="fmt-chip${i === 0 ? ' is-active' : ''}" data-fmt="${esc(f)}" data-url="${esc(p.products[f])}">${esc(f)}</button>`
