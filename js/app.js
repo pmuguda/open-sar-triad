@@ -875,7 +875,7 @@ function quadFootprintClipPath(g, corners) {
   return `polygon(${pts.join(', ')})`;
 }
 
-function footprintImageCorners(g) {
+function footprintImageCorners(g, provider) {
   const ring = g.type === 'Polygon' ? g.coordinates[0]
              : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
   if (!ring) return null;
@@ -883,6 +883,12 @@ function footprintImageCorners(g) {
     ? ring.slice(0, -1)
     : ring.slice();
   if (pts.length !== 4) return null;
+
+  if (provider === 'iceye') {
+    // ICEYE browse KML uses gx:LatLonQuad order: lower-left, lower-right,
+    // upper-right, upper-left. Convert to the affine layer order: TL, TR, BR, BL.
+    return [pts[3], pts[2], pts[1], pts[0]].map(c => L.latLng(c[1], c[0]));
+  }
 
   // The upstream catalog footprints are emitted in raster-corner order for the
   // geocoded preview assets: TL, BL, BR, TR, then closed. Convert to the order
@@ -904,7 +910,7 @@ function drapeScene(p, preview) {
   const probe = new Image();
   probe.onload = () => {
     if (token !== _drapeToken) return;  // superseded by a newer/cleared selection
-    const corners = preview.fit === 'quad' ? (previewCorners || footprintImageCorners(g)) : null;
+    const corners = preview.fit === 'quad' ? (previewCorners || footprintImageCorners(g, p.provider)) : null;
     sceneOverlay = corners
       ? new QuadImageOverlay(imgUrl, corners, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map)
       : L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
