@@ -556,11 +556,11 @@ function proxyThumb(url, provider) {
   return url;
 }
 
-// ── Umbra on-the-fly preview from Cloud-Optimized GeoTIFF ──────
-// Umbra publishes no thumbnails, but its GeoTIFFs are COGs on a CORS-enabled,
-// range-capable S3 bucket. We fetch only the smallest overview (a few hundred
-// KB, not the full multi-hundred-MB file) and render a stretched grayscale
-// preview client-side. geotiff.js is loaded lazily on first use.
+// ── Geocoded COG preview rendering ─────────────────────────────
+// Umbra publishes no thumbnails, and Capella thumbnails are browse images rather
+// than reliable map drapes. Their GeoTIFFs are COGs on CORS-enabled,
+// range-capable buckets, so we fetch only the smallest overview and render a
+// stretched grayscale preview client-side. geotiff.js is loaded lazily.
 let _geotiffPromise = null;
 function loadGeoTIFF() {
   if (window.GeoTIFF) return Promise.resolve(window.GeoTIFF);
@@ -583,6 +583,11 @@ function umbraCogUrl(download) {
   return /\.tif$/.test(download) ? download : null;
 }
 
+function capellaCogUrl(p) {
+  const products = p && p.products;
+  return (products && products.GEC) || (p && p.download) || null;
+}
+
 function _pctile(sorted, p) {
   const i = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))));
   return sorted[i];
@@ -601,6 +606,69 @@ function wgs84BoundsFromTiffImage(image) {
   }
 }
 
+function geoKeyValue(fd, keyName, keyId) {
+  if (!fd) return null;
+  if (fd[keyName] != null) return fd[keyName];
+  const keys = fd.GeoKeyDirectory;
+  if (!keys) return null;
+  if (!Array.isArray(keys) && typeof keys === 'object' && keys[keyName] != null) return keys[keyName];
+  const n = Number(keys[3]) || 0;
+  for (let i = 0; i < n; i++) {
+    const off = 4 + i * 4;
+    if (keys[off] === keyId) return keys[off + 3];
+  }
+  return null;
+}
+
+function projectedEpsgFromTiff(fd) {
+  const epsg = Number(geoKeyValue(fd, 'ProjectedCSTypeGeoKey', 3072));
+  return Number.isFinite(epsg) ? epsg : null;
+}
+
+function utmToLonLat(x, y, epsg) {
+  const north = epsg >= 32601 && epsg <= 32660;
+  const south = epsg >= 32701 && epsg <= 32760;
+  if (!north && !south) return null;
+  const zone = epsg - (north ? 32600 : 32700);
+  const a = 6378137;
+  const e = 0.08181919084262149;
+  const e1sq = 0.006739496742276434;
+  const k0 = 0.9996;
+  const xAdj = x - 500000;
+  const yAdj = south ? y - 10000000 : y;
+  const m = yAdj / k0;
+  const mu = m / (a * (1 - e * e / 4 - 3 * e ** 4 / 64 - 5 * e ** 6 / 256));
+  const e1 = (1 - Math.sqrt(1 - e * e)) / (1 + Math.sqrt(1 - e * e));
+  const j1 = 3 * e1 / 2 - 27 * e1 ** 3 / 32;
+  const j2 = 21 * e1 ** 2 / 16 - 55 * e1 ** 4 / 32;
+  const j3 = 151 * e1 ** 3 / 96;
+  const j4 = 1097 * e1 ** 4 / 512;
+  const fp = mu + j1 * Math.sin(2 * mu) + j2 * Math.sin(4 * mu) + j3 * Math.sin(6 * mu) + j4 * Math.sin(8 * mu);
+  const sinfp = Math.sin(fp), cosfp = Math.cos(fp), tanfp = Math.tan(fp);
+  const c1 = e1sq * cosfp * cosfp;
+  const t1 = tanfp * tanfp;
+  const r1 = a * (1 - e * e) / Math.pow(1 - e * e * sinfp * sinfp, 1.5);
+  const n1 = a / Math.sqrt(1 - e * e * sinfp * sinfp);
+  const d = xAdj / (n1 * k0);
+  const q1 = n1 * tanfp / r1;
+  const q2 = d * d / 2;
+  const q3 = (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * e1sq) * d ** 4 / 24;
+  const q4 = (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * e1sq - 3 * c1 * c1) * d ** 6 / 720;
+  const lat = fp - q1 * (q2 - q3 + q4);
+  const q5 = d;
+  const q6 = (1 + 2 * t1 + c1) * d ** 3 / 6;
+  const q7 = (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * e1sq + 24 * t1 * t1) * d ** 5 / 120;
+  const lon0 = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+  const lon = lon0 + (q5 - q6 + q7) / cosfp;
+  return [lon * 180 / Math.PI, lat * 180 / Math.PI];
+}
+
+function tagLength(tag) {
+  if (!tag) return 0;
+  if (typeof tag.length === 'number') return tag.length;
+  return Object.keys(tag).filter(k => /^\d+$/.test(k)).length;
+}
+
 function wgs84CornersFromTiffImage(image) {
   const fd = image && image.fileDirectory;
   const w = image && image.getWidth ? image.getWidth() : 0;
@@ -609,7 +677,7 @@ function wgs84CornersFromTiffImage(image) {
 
   let xy = null;
   const m = fd.ModelTransformation;
-  if (m && typeof m.length === 'number' && m.length >= 8) {
+  if (tagLength(m) >= 8) {
     xy = (col, row) => [m[0] * col + m[1] * row + m[3], m[4] * col + m[5] * row + m[7]];
   } else if (fd.ModelTiepoint && fd.ModelPixelScale) {
     const t = fd.ModelTiepoint;
@@ -621,25 +689,36 @@ function wgs84CornersFromTiffImage(image) {
   const corners = [
     xy(0, 0), xy(w, 0), xy(w, h), xy(0, h),
   ];
-  if (corners.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y) || x < -180 || x > 180 || y < -90 || y > 90)) {
+  let lonLat = corners;
+  if (corners.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y))) {
     return null;
   }
-  return corners.map(([lng, lat]) => L.latLng(lat, lng)); // TL, TR, BR, BL
+  if (corners.some(([x, y]) => x < -180 || x > 180 || y < -90 || y > 90)) {
+    const epsg = projectedEpsgFromTiff(fd);
+    if (!epsg) return null;
+    lonLat = corners.map(([x, y]) => utmToLonLat(x, y, epsg));
+    if (lonLat.some(v => !v)) return null;
+  }
+  if (lonLat.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y) || x < -180 || x > 180 || y < -90 || y > 90)) {
+    return null;
+  }
+  return lonLat.map(([lng, lat]) => L.latLng(lat, lng)); // TL, TR, BR, BL
 }
 
-// Render an Umbra COG's smallest overview to a stretched grayscale JPEG data URL.
+// Render a COG's smallest overview to a stretched grayscale PNG data URL.
 // Cached by URL so re-selecting a scene doesn't re-fetch/re-render.
-const _umbraPreviewCache = new Map();
-function umbraPreviewDataUrl(url) {
-  if (_umbraPreviewCache.has(url)) return _umbraPreviewCache.get(url);
+const _cogPreviewCache = new Map();
+function cogPreviewDataUrl(url) {
+  if (_cogPreviewCache.has(url)) return _cogPreviewCache.get(url);
   const promise = (async () => {
     const GT = await loadGeoTIFF();
     const tiff = await GT.fromUrl(url);
     const n = await tiff.getImageCount();
+    const baseImage = await tiff.getImage(0);
     const image = await tiff.getImage(Math.max(0, n - 1));  // smallest overview
     const w = image.getWidth(), h = image.getHeight();
-    const bounds = wgs84BoundsFromTiffImage(image);
-    const corners = wgs84CornersFromTiffImage(image);
+    const bounds = wgs84BoundsFromTiffImage(baseImage);
+    const corners = wgs84CornersFromTiffImage(baseImage);
     const band = (await image.readRasters())[0];
 
     // Robust 2–98 percentile stretch on a subsample of non-zero pixels.
@@ -647,6 +726,7 @@ function umbraPreviewDataUrl(url) {
     const step = Math.max(1, Math.floor(band.length / 40000));
     for (let i = 0; i < band.length; i += step) { const v = band[i]; if (v > 0) sample.push(v); }
     sample.sort((a, b) => a - b);
+    if (!sample.length) throw new Error('COG preview has no non-zero pixels');
     const lo = _pctile(sample, 0.02), hi = _pctile(sample, 0.98), range = (hi - lo) || 1;
 
     const canvas = document.createElement('canvas');
@@ -654,37 +734,44 @@ function umbraPreviewDataUrl(url) {
     const ctx = canvas.getContext('2d');
     const id = ctx.createImageData(w, h);
     for (let i = 0; i < band.length; i++) {
+      if (band[i] <= 0) { id.data[i*4+3] = 0; continue; }
       let t = (band[i] - lo) / range; t = t < 0 ? 0 : t > 1 ? 1 : t;
       const g = (t * 255) | 0;
       id.data[i*4] = g; id.data[i*4+1] = g; id.data[i*4+2] = g; id.data[i*4+3] = 255;
     }
     ctx.putImageData(id, 0, 0);
-    return { url: canvas.toDataURL('image/jpeg', 0.85), bounds, corners };
-  })().catch(err => { _umbraPreviewCache.delete(url); throw err; });
-  _umbraPreviewCache.set(url, promise);
+    return { url: canvas.toDataURL('image/png'), bounds, corners };
+  })().catch(err => { _cogPreviewCache.delete(url); throw err; });
+  _cogPreviewCache.set(url, promise);
   return promise;
 }
 
 // Resolve a displayable preview image URL for a scene, per provider.
 async function scenePreviewUrl(p) {
-  const thumb = proxyThumb(p.thumbnail, p.provider);
-  if (thumb) return { url: thumb, fit: 'quad' };
   if (p.provider === 'umbra') {
     const cog = umbraCogUrl(p.download);
     if (cog) {
-      const preview = await umbraPreviewDataUrl(cog);
+      const preview = await cogPreviewDataUrl(cog);
       return { url: preview.url, bounds: preview.bounds, corners: preview.corners, fit: preview.corners ? 'quad' : 'bbox' };
     }
   }
+  if (p.provider === 'capella') {
+    const cog = capellaCogUrl(p);
+    if (cog) {
+      const preview = await cogPreviewDataUrl(cog);
+      return { url: preview.url, bounds: preview.bounds, corners: preview.corners, fit: preview.corners ? 'quad' : 'bbox' };
+    }
+  }
+  const thumb = proxyThumb(p.thumbnail, p.provider);
+  if (thumb) return { url: thumb, fit: 'quad' };
   return null;
 }
 
 // ── Georeferenced scene preview drape ──────────────────────────
 // Clicking a scene drapes its preview onto the map and fits the view to it,
-// EO-viewer style. The providers' thumbnails (and the Umbra GEC overview we
-// render) are all geocoded / north-up rasters whose pixel extent is the
-// footprint's bounding box — so we place them axis-aligned on that bbox. The
-// rotated footprint outline drawn on top shows the actual data coverage.
+// EO-viewer style. When a geocoded COG is available, we use the raster metadata
+// corners. Otherwise the provider thumbnail is fitted approximately to the
+// catalog footprint.
 let sceneOverlay = null, sceneOutline = null, _drapeUrl = null, _drapeToken = 0, _selToken = 0;
 let _focusMode = false, _drapeHidden = false;
 
@@ -769,6 +856,25 @@ function footprintClipPath(g, bounds) {
   return `polygon(${pts.join(', ')})`;
 }
 
+function quadFootprintClipPath(g, corners) {
+  const ring = g.type === 'Polygon' ? g.coordinates[0]
+             : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
+  if (!ring || ring.length < 4 || !corners || corners.length !== 4) return null;
+  const [tl, tr, , bl] = corners.map(c => map.latLngToLayerPoint(c));
+  const ux = tr.x - tl.x, uy = tr.y - tl.y;
+  const vx = bl.x - tl.x, vy = bl.y - tl.y;
+  const det = ux * vy - uy * vx;
+  if (Math.abs(det) < 1e-9) return null;
+  const pts = ring.map(c => {
+    const p = map.latLngToLayerPoint([c[1], c[0]]);
+    const px = p.x - tl.x, py = p.y - tl.y;
+    const a = (px * vy - py * vx) / det;
+    const b = (ux * py - uy * px) / det;
+    return `${(a * 100).toFixed(2)}% ${(b * 100).toFixed(2)}%`;
+  });
+  return `polygon(${pts.join(', ')})`;
+}
+
 function footprintImageCorners(g) {
   const ring = g.type === 'Polygon' ? g.coordinates[0]
              : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
@@ -802,11 +908,9 @@ function drapeScene(p, preview) {
     sceneOverlay = corners
       ? new QuadImageOverlay(imgUrl, corners, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map)
       : L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
-    if (!corners) {
-      const clip = footprintClipPath(g, bounds);
-      const el = sceneOverlay.getElement();
-      if (clip && el) el.style.clipPath = clip;
-    }
+    const clip = corners ? quadFootprintClipPath(g, corners) : footprintClipPath(g, bounds);
+    const el = sceneOverlay.getElement();
+    if (clip && el) el.style.clipPath = clip;
 
     // White dashed outline of the selected footprint.
     const ring = g.type === 'Polygon' ? g.coordinates[0]
