@@ -23,9 +23,9 @@ An interactive, browser-based map explorer for discovering and filtering open Sy
 
 ## Built-in Tour
 
-The application includes an interactive onboarding tour, so separate demo GIFs are no longer needed in the README. First-time desktop visitors are guided through the provider toggles, collapsible sidebar trays, AOI tools, home view control, timeline, and scene preview panel directly inside the live tool.
+The application includes a concise interactive onboarding tour, so separate demo GIFs are no longer needed in the README. First-time desktop visitors are guided through provider toggles, collapsible sidebar trays including `03 Recent`, AOI tools, home view, MAP/SAT basemaps, the acquisition window, georeferenced preview drapes, and the `05 Scene` metadata panel directly inside the live tool.
 
-Use the `?` button to replay the tour at any time. On mobile, the tour is opt-in so the first screen stays map-first and usable. Shared links skip the tour automatically so recipients land directly on the filtered map view.
+Use the `?` button to replay the tour at any time. On mobile, the concise tour is opt-in so the first screen stays map-first and usable. Shared links skip the tour automatically so recipients land directly on the filtered map view.
 
 ---
 
@@ -454,7 +454,7 @@ Steps performed by the workflow:
 
 If you use open-sar-triad in research, teaching, reports, operational analysis, or derivative tools, please cite it:
 
-> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.1.1). Zenodo. https://doi.org/10.5281/zenodo.20562327
+> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.1.2). Zenodo. https://doi.org/10.5281/zenodo.20562327
 
 BibTeX:
 
@@ -463,7 +463,7 @@ BibTeX:
   author = {Muguda Sanjeevamurthy, Pavan},
   title = {open-sar-triad: Browser-based discovery console for commercial open SAR},
   year = {2026},
-  version = {2.1.1},
+  version = {2.1.2},
   doi = {10.5281/zenodo.20562327},
   url = {https://github.com/pmuguda/open-sar-triad},
   note = {Live application: https://pmuguda.github.io/open-sar-triad}

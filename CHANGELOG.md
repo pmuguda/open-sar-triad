@@ -6,11 +6,16 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+## [2.1.2] — 2026-07-11
+
+Patch release focused on onboarding clarity.
+
 ### Changed
 - Refreshed the desktop and mobile onboarding tours for the current interface:
   MAP/SAT basemap switching, `03 Recent`, georeferenced preview drapes,
   `05 Scene` metadata, and Capella's cleaned format selector/provider action
   are now covered with shorter step descriptions.
+- Bumped the tour cache keys so returning visitors receive the updated tour.
 
 ## [2.1.1] — 2026-07-11
 
@@ -108,6 +113,7 @@ First public release.
 - Security hardening: CSP, X-Content-Type-Options, SRI hashes, XSS protections,
   URL-scheme validation.
 
+[2.1.2]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.2
 [2.1.1]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.1
 [2.1.0]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.0
 [2.0.0]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.0.0
