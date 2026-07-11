@@ -8,12 +8,17 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ### Added
 - **Georeferenced scene preview on the map** — clicking a scene now drapes its SAR
-  preview image onto the basemap at the footprint location (warped to the footprint
-  corners) and fits the map to it, EO-viewer style. An on-map control offers an
-  opacity slider (blend against the basemap), a fullscreen button (reuses the zoom/pan
-  lightbox), and a close button; Home/reset also clears it. The side panel now shows
-  the scene's full metadata instead of a thumbnail. Umbra previews are still rendered
-  from the COG overview on the fly.
+  preview image onto the basemap, aligned to the footprint's geographic bounds
+  (the thumbnails are geocoded/north-up) and clipped to the exact footprint polygon,
+  then fits the map to it, EO-viewer style. On-map controls: an opacity slider (blend
+  against the basemap), a hide/show toggle, a fullscreen button (reuses the zoom/pan
+  lightbox), and a close button; Home/reset also clears it. While a scene is draped,
+  all other footprints are hidden for a clean view. The side panel now shows the
+  scene's full metadata instead of a thumbnail. Umbra previews are rendered from the
+  COG overview on the fly.
+- **Satellite basemap** — a MAP / SAT toggle switches the basemap to Esri World
+  Imagery, so a draped SAR preview can be compared against optical ground truth to
+  confirm georeferencing.
 
 ## [2.1.0] — 2026-07-07
 

@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=map-drape-4" />
+  <link rel="stylesheet" href="css/style.css?v=map-drape-7" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -208,6 +208,9 @@
     <div id="drape-ctl" class="hidden">
       <div class="drape-row">
         <span class="drape-id" title="Draped scene"></span>
+        <button class="drape-btn" id="drape-toggle" title="Hide / show preview" aria-label="Hide or show preview" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
         <button class="drape-btn" id="drape-fs" title="View fullscreen" aria-label="View fullscreen">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
@@ -351,7 +354,7 @@
     <img id="lb-img" alt="SAR scene preview" />
   </div>
 </div>
-<script src="js/app.js?v=map-drape-4"></script>
+<script src="js/app.js?v=map-drape-7"></script>
 <script src="js/tour.js?v=tour-logo-1"></script>
 </body>
 </html>

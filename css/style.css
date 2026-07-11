@@ -690,6 +690,19 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .fmt-chip:hover { border-color: var(--accent); color: var(--ink); }
 .fmt-chip.is-active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
 
+/* Basemap toggle (MAP / SAT) */
+.basemap-toggle { display: flex; overflow: hidden; border: 1px solid var(--line-2) !important; background: var(--bg); }
+.basemap-toggle button {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+  padding: 5px 8px; background: var(--bg); color: var(--ink-3);
+  border: 0; border-left: 1px solid var(--line); cursor: pointer; transition: all .12s;
+}
+.basemap-toggle button:first-child { border-left: 0; }
+.basemap-toggle button[aria-pressed="true"] { background: var(--accent); color: #0d1117; font-weight: 600; }
+
+/* eye button pressed = preview hidden */
+.drape-btn[aria-pressed="true"] { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+
 /* Draped scene preview control (on the map) */
 #drape-ctl {
   position: absolute; top: 14px; right: 14px; z-index: 500;

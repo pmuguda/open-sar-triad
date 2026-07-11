@@ -85,6 +85,41 @@ const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &
 let baseLayer  = L.tileLayer(TILE.dark,  { subdomains: 'abcd', attribution: ATTR, detectRetina: true }).addTo(map);
 let labelLayer = L.tileLayer(TILE.labels.dark, { subdomains: 'abcd', detectRetina: true, opacity: 0.55, pane: 'overlayPane' }).addTo(map);
 
+// Esri World Imagery satellite basemap — lets you compare draped SAR against
+// optical ground truth to confirm georeferencing.
+const ESRI_IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ESRI_ATTR = 'Imagery &copy; Esri, Maxar, Earthstar Geographics';
+let satLayer = null, basemapMode = 'map';
+function setBasemap(mode) {
+  basemapMode = mode;
+  if (mode === 'sat') {
+    if (!satLayer) satLayer = L.tileLayer(ESRI_IMAGERY, { attribution: ESRI_ATTR, maxZoom: 19, detectRetina: true });
+    satLayer.addTo(map);
+    if (map.hasLayer(baseLayer))  map.removeLayer(baseLayer);
+    if (map.hasLayer(labelLayer)) map.removeLayer(labelLayer);
+  } else {
+    if (satLayer && map.hasLayer(satLayer)) map.removeLayer(satLayer);
+    if (!map.hasLayer(baseLayer))  baseLayer.addTo(map);
+    if (!map.hasLayer(labelLayer)) labelLayer.addTo(map);
+  }
+  document.querySelectorAll('[data-basemap-btn]').forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.basemapBtn === mode));
+}
+
+const BasemapControl = L.Control.extend({
+  options: { position: 'topleft' },
+  onAdd() {
+    const c = L.DomUtil.create('div', 'leaflet-bar leaflet-control basemap-toggle');
+    c.innerHTML = `<button data-basemap-btn="map" aria-pressed="true" title="Vector basemap">MAP</button>` +
+                  `<button data-basemap-btn="sat" aria-pressed="false" title="Satellite imagery">SAT</button>`;
+    L.DomEvent.disableClickPropagation(c);
+    c.querySelectorAll('button').forEach(b =>
+      L.DomEvent.on(b, 'click', () => setBasemap(b.dataset.basemapBtn)));
+    return c;
+  }
+});
+new BasemapControl().addTo(map);
+
 // ── Graticule ──────────────────────────────────────────────
 const gridLayer = L.layerGroup().addTo(map);
 function drawGraticule() {
@@ -327,6 +362,9 @@ function render(options = {}) {
     layer.addTo(map);
     activeLayers[provider] = layer;
   }
+
+  // While a scene is draped, keep the map clean: hide every other footprint.
+  if (_focusMode) Object.values(activeLayers).forEach(l => map.removeLayer(l));
 
   const total = counts.iceye + counts.umbra + counts.capella;
   if (!geometryOnly) {
@@ -598,56 +636,45 @@ async function scenePreviewUrl(p) {
 }
 
 // ── Georeferenced scene preview drape ──────────────────────────
-// Clicking a scene drapes its preview image onto the map at the footprint's
-// location (warped to the corners) and fits the view to it, EO-viewer style.
-let _rotOverlayPromise = null;
-function loadRotatedOverlay() {
-  if (L.imageOverlay && typeof L.imageOverlay.rotated === 'function') return Promise.resolve();
-  if (!_rotOverlayPromise) {
-    _rotOverlayPromise = new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/leaflet-imageoverlay-rotated@0.2.1/Leaflet.ImageOverlay.Rotated.js';
-      s.onload = () => res();
-      s.onerror = () => rej(new Error('rotated overlay plugin failed to load'));
-      document.head.appendChild(s);
-    });
-  }
-  return _rotOverlayPromise;
-}
-
-// Assign a footprint quad's corners to image top-left / top-right / bottom-left
-// so the draped image is oriented top→north. Returns null for non-quad rings.
-function footprintCorners(g) {
-  if (!g) return null;
-  let ring;
-  if (g.type === 'Polygon') ring = g.coordinates[0];
-  else if (g.type === 'MultiPolygon') ring = g.coordinates[0][0];
-  else return null;
-  let pts = ring.slice();
-  const a = pts[0], b = pts[pts.length - 1];
-  if (pts.length > 1 && a[0] === b[0] && a[1] === b[1]) pts = pts.slice(0, -1);
-  if (pts.length !== 4) return null;
-  const byLat = [...pts].sort((u, v) => v[1] - u[1]);          // north first
-  const top = byLat.slice(0, 2), bot = byLat.slice(2, 4);
-  const [tl, tr] = top[0][0] < top[1][0] ? [top[0], top[1]] : [top[1], top[0]];
-  const bl = bot[0][0] < bot[1][0] ? bot[0] : bot[1];
-  const toLL = c => L.latLng(c[1], c[0]);
-  return { topLeft: toLL(tl), topRight: toLL(tr), bottomLeft: toLL(bl) };
-}
-
+// Clicking a scene drapes its preview onto the map and fits the view to it,
+// EO-viewer style. The providers' thumbnails (and the Umbra GEC overview we
+// render) are all geocoded / north-up rasters whose pixel extent is the
+// footprint's bounding box — so we place them axis-aligned on that bbox. The
+// rotated footprint outline drawn on top shows the actual data coverage.
 let sceneOverlay = null, sceneOutline = null, _drapeUrl = null, _drapeToken = 0, _selToken = 0;
+let _focusMode = false, _drapeHidden = false;
 
 function clearDrape() {
   _drapeToken++;  // invalidate any in-flight image loads
   if (sceneOverlay) { map.removeLayer(sceneOverlay); sceneOverlay = null; }
   if (sceneOutline) { map.removeLayer(sceneOutline); sceneOutline = null; }
   _drapeUrl = null;
+  _drapeHidden = false;
   map.getPane('scenePane').style.opacity = 1;
   const ctl = document.getElementById('drape-ctl');
   if (ctl) ctl.classList.add('hidden');
+  // Restore the other scene footprints we hid for the clean view.
+  if (_focusMode) { _focusMode = false; if (dataLoaded) render(); }
 }
 
-async function drapeScene(p, imgUrl) {
+// A CSS clip-path (in image-space %) that trims the bbox-placed image to the
+// exact footprint polygon — removes nodata corners and any spill beyond the
+// swath, and scales automatically with the overlay on zoom.
+function footprintClipPath(g, bounds) {
+  const ring = g.type === 'Polygon' ? g.coordinates[0]
+             : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
+  if (!ring || ring.length < 4) return null;
+  const W = bounds.getWest(), E = bounds.getEast(), S = bounds.getSouth(), N = bounds.getNorth();
+  const dx = (E - W) || 1, dy = (N - S) || 1;
+  const pts = ring.map(c => {
+    const x = (c[0] - W) / dx * 100;
+    const y = (N - c[1]) / dy * 100;   // y inverted: image top = north
+    return `${x.toFixed(2)}% ${y.toFixed(2)}%`;
+  });
+  return `polygon(${pts.join(', ')})`;
+}
+
+function drapeScene(p, imgUrl) {
   clearDrape();
   const g = geomCache[p.id];
   if (!imgUrl || !g) return;
@@ -657,18 +684,26 @@ async function drapeScene(p, imgUrl) {
 
   // Preload so we only drape a working image (and can fall back on error).
   const probe = new Image();
-  probe.onload = async () => {
-    await loadRotatedOverlay();
+  probe.onload = () => {
     if (token !== _drapeToken) return;  // superseded by a newer/cleared selection
-    const corners = footprintCorners(g);
-    if (corners && typeof L.imageOverlay.rotated === 'function') {
-      sceneOverlay = L.imageOverlay.rotated(imgUrl, corners.topLeft, corners.topRight, corners.bottomLeft,
-        { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
-    } else {
-      sceneOverlay = L.imageOverlay(imgUrl, bounds, { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
+    sceneOverlay = L.imageOverlay(imgUrl, bounds,
+      { opacity: 1, interactive: false, pane: 'scenePane' }).addTo(map);
+    const clip = footprintClipPath(g, bounds);
+    const el = sceneOverlay.getElement();
+    if (clip && el) el.style.clipPath = clip;
+
+    // White dashed outline of the selected footprint.
+    const ring = g.type === 'Polygon' ? g.coordinates[0]
+               : g.type === 'MultiPolygon' ? g.coordinates[0][0] : null;
+    if (ring) {
+      sceneOutline = L.polygon(ring.map(c => [c[1], c[0]]),
+        { color: '#fff', weight: 1.4, fill: false, dashArray: '4 3', interactive: false, pane: 'drawnPane' }).addTo(map);
     }
-    sceneOutline = L.geoJSON(g, { style: { color: '#fff', weight: 1.4, fill: false, dashArray: '4 3' },
-      interactive: false, pane: 'drawnPane' }).addTo(map);
+
+    // Clean view: hide all other scene footprints while this one is draped.
+    _focusMode = true;
+    Object.values(activeLayers).forEach(l => map.removeLayer(l));
+
     _drapeUrl = imgUrl;
     showDrapeControl(p.id);
   };
@@ -681,6 +716,7 @@ function showDrapeControl(sceneId) {
   if (!ctl) return;
   ctl.querySelector('.drape-id').textContent = sceneId || 'scene';
   ctl.querySelector('#drape-opacity').value = '100';
+  ctl.querySelector('#drape-toggle').setAttribute('aria-pressed', 'false');
   ctl.classList.remove('hidden');
 }
 
@@ -693,6 +729,12 @@ function showDrapeControl(sceneId) {
   });
   ctl.querySelector('#drape-fs').addEventListener('click', () => {
     if (_drapeUrl && window.__openLightbox) window.__openLightbox(_drapeUrl);
+  });
+  ctl.querySelector('#drape-toggle').addEventListener('click', e => {
+    _drapeHidden = !_drapeHidden;
+    if (sceneOverlay) { const el = sceneOverlay.getElement(); if (el) el.style.display = _drapeHidden ? 'none' : ''; }
+    if (sceneOutline) sceneOutline.setStyle({ opacity: _drapeHidden ? 0 : 1 });
+    e.currentTarget.setAttribute('aria-pressed', String(_drapeHidden));
   });
   ctl.querySelector('#drape-close').addEventListener('click', clearDrape);
 })();
