@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'sar-tour-v5';
+  var STORAGE_KEY = 'sar-tour-v6';
   var PAD    = 10;   // spotlight padding around target
   var MARGIN = 14;   // tooltip margin from edge / target
   var TT_W   = 290;  // tooltip width (matches CSS)
@@ -10,92 +10,92 @@
     {
       target: null,
       title:  'Welcome to open-sar-triad',
-      body:   'A browser-based discovery portal for open SAR satellite imagery from ICEYE, Umbra, and Capella. This quick tour walks you through every control — or skip it if you already know the ropes.',
+      body:   'Explore open SAR scenes from ICEYE, Umbra, and Capella.',
       pos:    'center',
       logo:   true,
     },
     {
       target: '#mapLegend',
       title:  'Provider Toggles',
-      body:   'Click any coloured row to show or hide scenes from that provider. ICEYE (green), Umbra (blue), and Capella (orange) are toggled independently.',
+      body:   'Show or hide ICEYE, Umbra, and Capella scenes independently.',
       pos:    'right',
     },
     {
       target: '#filters-mod',
       title:  'Filters',
-      body:   '<b>Sensor Mode</b> narrows by acquisition type (Spotlight, Stripmap…). <b>Orbit</b> picks ascending or descending satellite passes. <b>Look</b> picks left or right radar illumination side. <b>Reset All Filters</b> clears every filter at once.',
+      body:   'Filter by mode, orbit direction, and radar look side. Reset clears them all.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#filters-mod'); },
     },
     {
       target: '#stats-mod',
       title:  'Stats',
-      body:   'A live coverage bar shows visible scene counts per provider, and a mode breakdown updates instantly as you adjust any filter.',
+      body:   'Live counts by provider, plus mode breakdown for the current view.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#stats-mod'); },
     },
     {
       target: '#recent-mod',
       title:  'Recent Scenes',
-      body:   'The Recent tray highlights newly ingested scenes from the weekly catalog refresh. Until enough ingest history exists, it falls back to the latest acquisitions so the list is still useful.',
+      body:   'Newly ingested scenes, with latest acquisitions as a fallback.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#recent-mod'); },
     },
     {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
+      body:   'Export visible scenes, generate a download script, or copy a shareable state link.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#export-mod'); },
     },
     {
       target: '#aoi-toolbar',
       title:  'Area of Interest Toolbar',
-      body:   'Draw a bounding box or polygon to spatially filter scenes. Upload a custom GeoJSON boundary, or use the globe icon to select a country. The × clears the active AOI.',
+      body:   'Draw an AOI, upload GeoJSON, pick a country, or clear spatial filters.',
       pos:    'right',
     },
     {
       target: '#home-control',
       title:  'Home View',
-      body:   'Use the home button to clear AOI or country filters and return the map to its opening world view.',
+      body:   'Clear AOI/country filters and return to the opening map view.',
       pos:    'right',
     },
     {
       target: '.basemap-toggle',
       title:  'Map / Satellite Basemap',
-      body:   'Switch between the clean vector map and satellite imagery. The satellite view is useful when comparing a draped SAR preview against optical ground context.',
+      body:   'Switch between vector map and satellite imagery.',
       pos:    'right',
     },
     {
       target: '#timeline',
       title:  'Date Range Slider',
-      body:   'Drag either handle to restrict scenes to a specific time window. The scene count updates as you narrow the range.',
+      body:   'Drag the handles to filter by acquisition month.',
       pos:    'top',
     },
     {
       target: '#map',
       title:  'Georeferenced Preview Drape',
-      body:   'Clicking a scene places its SAR preview directly on the map. When the preview control appears, use opacity to blend it with the basemap, hide/show to compare, fullscreen for inspection, or close to return to the full footprint layer.',
+      body:   'Scene previews drape on the map. Blend, hide, fullscreen, or close from the control.',
       pos:    'right',
       before: openTourScene,
     },
     {
       target: '#detail-panel',
       title:  '05 Scene Metadata',
-      body:   'The side panel now focuses on metadata and actions: scene ID, acquisition details, orbit/look direction, provider links, and downloads. Capella scenes show one clean Available formats row plus format chips for choosing GEC, GEO, SLC, SICD, SIDD, or CPHD.',
+      body:   'Review scene metadata, links, downloads, and Capella format chips.',
       pos:    'left',
       before: openTourScene,
     },
     {
       target: '.cfoot',
       title:  'GitHub & Ko-fi',
-      body:   'Source code and issue tracker live on GitHub — contributions and bug reports welcome. If open-sar-triad has saved you time, you can support its development on Ko-fi.',
+      body:   'Find the code on GitHub or support the project on Ko-fi.',
       pos:    'top',
     },
     {
       target: null,
       title:  "Scene Footprints — You're Ready!",
-      body:   'Each coloured polygon on the map is a SAR scene. Click one for a popup or the full side panel; the map will drape the preview where possible and the panel will show metadata, provider links, and download actions.',
+      body:   'Click any scene to drape its preview and inspect metadata.',
       pos:    'center',
     },
   ];
@@ -104,26 +104,26 @@
     {
       target: null,
       title:  'open-sar-triad on mobile',
-      body:   'The mobile layout keeps the map first. Use the bottom sheet for filters, stats, and exports, then collapse it when you want more map space.',
+      body:   'Map-first on mobile. Use the bottom sheet when you need controls.',
       pos:    'center',
       logo:   true,
     },
     {
       target: '#mapLegend',
       title:  'Provider Toggles',
-      body:   'Tap ICEYE, Umbra, or Capella to show or hide each provider.',
+      body:   'Show or hide each provider.',
       pos:    'bottom',
     },
     {
       target: '#timeline',
       title:  'Acquisition Window',
-      body:   'Drag the two date handles to filter scenes by acquisition month. The scene count updates as the window changes.',
+      body:   'Drag handles to filter by acquisition month.',
       pos:    'top',
     },
     {
       target: '#filters-mod',
       title:  'Acquisition Filters',
-      body:   'Use the bottom sheet for mode, orbit, look direction, stats, and export tools.',
+      body:   'Filter by mode, orbit, and look direction.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
@@ -133,7 +133,7 @@
     {
       target: '#stats-mod',
       title:  'Coverage',
-      body:   'Coverage shows the visible scene count by provider, plus the mode breakdown for the current map, date window, and filters.',
+      body:   'Visible scene counts and mode breakdown.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
@@ -143,7 +143,7 @@
     {
       target: '#recent-mod',
       title:  'Recent Scenes',
-      body:   'Recent shows newly added scenes from the weekly refresh, or the latest acquisitions while ingest history builds up.',
+      body:   'New scenes from refresh, or latest acquisitions.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
@@ -153,7 +153,7 @@
     {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   'Export the current visible scenes, generate a download script, or copy a share link that restores the same filters and map state.',
+      body:   'Export, generate a script, or copy a share link.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
@@ -163,19 +163,19 @@
     {
       target: '#aoi-toolbar',
       title:  'AOI Tools',
-      body:   'Draw an area, upload GeoJSON, pick a country, or clear spatial filters from this compact toolbar.',
+      body:   'Draw, upload, pick a country, or clear AOI.',
       pos:    'top',
     },
     {
       target: '.basemap-toggle',
       title:  'Map / Satellite',
-      body:   'Switch to SAT when you want optical context behind a draped SAR preview, or MAP for the cleaner vector basemap.',
+      body:   'Use SAT for optical context, MAP for a clean basemap.',
       pos:    'bottom',
     },
     {
       target: '#map',
       title:  'Preview Drape',
-      body:   'Tapping a scene places its preview on the map. When the compact control appears, use it to adjust opacity, hide/show the drape, open fullscreen, or clear it.',
+      body:   'Tap a scene to drape its preview on the map.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.add('collapsed');
@@ -185,7 +185,7 @@
     {
       target: '#detail-panel',
       title:  'Scene Metadata',
-      body:   'Open scene details to review the full metadata table, provider links, and downloads. Capella scenes include a format selector without repeating the same metadata twice.',
+      body:   'Review metadata, links, downloads, and Capella formats.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.add('collapsed');
@@ -195,13 +195,13 @@
     {
       target: '#collapseBtn',
       title:  'Map Space',
-      body:   'Use this handle to collapse or expand the bottom sheet.',
+      body:   'Collapse or expand the bottom sheet.',
       pos:    'top',
     },
     {
       target: '.cfoot',
       title:  'GitHub & Ko-fi',
-      body:   'Source code and issue tracker on GitHub. If open-sar-triad has been useful, support it on Ko-fi.',
+      body:   'Code on GitHub. Support on Ko-fi.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
@@ -210,7 +210,7 @@
     {
       target: null,
       title:  'Ready',
-      body:   'Tap a scene footprint to drape its preview and review metadata, or collapse the sheet and explore the map.',
+      body:   'Tap a scene to preview it, or collapse the sheet and explore.',
       pos:    'center',
     },
   ];
