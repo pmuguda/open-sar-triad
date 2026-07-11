@@ -705,11 +705,12 @@ body.detail-collapsed #detail-toggle { right: 0; }
 
 /* Draped scene preview control (on the map) */
 #drape-ctl {
-  position: absolute; top: 14px; right: 14px; z-index: 500;
-  width: 208px; padding: 9px 10px;
-  background: oklch(from var(--bg) l c h / .9); border: 1px solid var(--line-2);
+  position: absolute; top: 92px; left: 14px; z-index: 600;
+  width: 216px; padding: 10px 11px;
+  background: oklch(from var(--bg) l c h / .92); border: 1px solid var(--accent);
   backdrop-filter: blur(3px); font-family: var(--font-mono);
   display: flex; flex-direction: column; gap: 8px;
+  box-shadow: var(--shadow);
 }
 #drape-ctl.hidden { display: none; }
 .drape-row { display: flex; align-items: center; gap: 7px; }
