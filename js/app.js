@@ -969,7 +969,10 @@ function showDetail(p) {
   // One acquisition may be published in several data formats (Capella).
   const products = (p.products && Object.keys(p.products).length > 1) ? p.products : null;
 
-  const pvUrl = safeUrl(p.provider_url);
+  const providerPageUrl = p.provider === 'capella'
+    ? 'https://www.capellaspace.com/'
+    : p.provider_url;
+  const pvUrl = safeUrl(providerPageUrl);
   const pv = pvUrl
     ? `<a class="detail-action-btn" href="${esc(pvUrl)}" target="_blank" rel="noopener noreferrer">View on ${esc(p.provider_label)}</a>` : '';
 
@@ -982,6 +985,9 @@ function showDetail(p) {
     return safe ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">Open</a>` : null;
   };
   const productNames = products ? (p.formats || Object.keys(products)).filter(f => safeUrl(products[f])) : null;
+  const collectionValue = products && productNames && p.collection === productNames.join(', ')
+    ? null
+    : p.collection;
   const rows = [
     ['Scene ID',         metadataValue(p.id)],
     ['Provider key',     metadataValue(p.provider)],
@@ -996,12 +1002,12 @@ function showDetail(p) {
     ['Off-nadir',        p.off_nadir != null ? metadataValue(p.off_nadir, '°') : null],
     ['Orbit',            metadataValue(p.orbit_state)],
     ['Look',             metadataValue(p.look_dir)],
-    ['Collection',       metadataValue(p.collection)],
-    ['Formats',          productNames ? metadataValue(productNames.join(', ')) : null],
+    ['Collection',       metadataValue(collectionValue)],
+    ['Available formats', productNames ? metadataValue(productNames.join(', ')) : null],
     ['First seen',       metadataValue(p.first_seen)],
     ['Thumbnail',        metadataLink(p.thumbnail)],
-    ['Download asset',   metadataLink(p.download)],
-    ['Provider page',    metadataLink(p.provider_url)],
+    ['Download asset',   products ? null : metadataLink(p.download)],
+    ['Provider page',    metadataLink(providerPageUrl)],
   ].filter(([,v]) => v)
    .map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 

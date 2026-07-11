@@ -44,7 +44,7 @@ PROVIDER_META = {
     "capella": {
         "label":        "Capella",
         "color":        "#FF6B35",
-        "provider_url": "https://www.capellaspace.com/community/capella-open-data-program/",
+        "provider_url": "https://www.capellaspace.com/",
         "parquets": [
             f"{BASE_URL}/capella/capella_GEC.parquet",
             f"{BASE_URL}/capella/capella_GEO.parquet",

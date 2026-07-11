@@ -76,12 +76,14 @@ The three providers represented in this tool each operate public open data progr
 - Leaflet map with a CartoDB dark basemap
 - Scene footprints rendered as colored polygons, one per acquisition
 - Home button clears AOI/country filters and returns the map to the opening world view
-- Clickable scenes open a detail panel with a numbered Preview section, thumbnail, metadata, and a direct download link
+- Clickable scenes open a detail panel with full scene metadata, provider/product links, and direct download actions
 - Where several footprints overlap the same spot, a click opens a "N scenes here" picker to choose among the stacked acquisitions instead of only the topmost
 
 **Scene previews**
 - Fullscreen preview lightbox with fit-to-screen centering, zoom (buttons, mouse wheel, pinch), drag-to-pan, and reset
-- Umbra publishes no thumbnails, so previews are rendered in the browser from its Cloud-Optimized GeoTIFFs: only the smallest overview is fetched (a few hundred KB) and stretched to a grayscale image — no backend, no stored thumbnails, marked "RENDERED FROM COG"
+- On-map preview drapes align scene imagery to the acquisition footprint and provide opacity, hide/show, fullscreen, and close controls
+- Umbra and Capella previews are rendered in the browser from Cloud-Optimized GeoTIFF overviews: only the smallest overview is fetched and stretched to a grayscale image — no backend and no stored preview rasters
+- ICEYE previews use provider browse imagery with the corrected ICEYE KML corner order for footprint-aligned placement
 - Capella acquisitions offer a data-format selector (GEC, GEO, SLC, SICD, SIDD, CPHD, CSI) that swaps the download link
 
 **Recent activity**
@@ -228,7 +230,7 @@ Key functions in `app.js`:
 | `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
 | `updateCoverage()` | Updates provider scene-count numbers and bars |
 | `updateModes()` | Renders the stacked sensor-mode breakdown |
-| `showDetail()` | Populates the right-side `04 Preview` detail panel with scene metadata |
+| `showDetail()` | Populates the right-side `05 Scene` detail panel with scene metadata, provider/product links, and format-specific downloads |
 | `bboxFromGeometry()` | Extracts a bounding box from any GeoJSON geometry |
 | `unwrapAntimeridian()` | Corrects polygon coordinates that cross the ±180° meridian |
 | `loadCountries()` | Fetches world-atlas TopoJSON and creates interactive country polygons |
@@ -413,7 +415,7 @@ Steps performed by the workflow:
 | Leaflet | 1.9.4 | Interactive map | BSD-2-Clause |
 | Leaflet-Draw | 1.0.4 | Bounding box and polygon drawing tools | MIT |
 | topojson-client | 3.1.0 | Decodes TopoJSON country boundaries | BSD-3-Clause |
-| geotiff.js | 2.1.3 | Reads Umbra Cloud-Optimized GeoTIFF overviews for on-the-fly previews (lazy-loaded on first Umbra preview) | MIT |
+| geotiff.js | 2.1.3 | Reads Umbra and Capella Cloud-Optimized GeoTIFF overviews for on-the-fly previews (lazy-loaded on first COG preview) | MIT |
 
 **Fonts**
 
@@ -437,6 +439,7 @@ Steps performed by the workflow:
 | world-atlas by Mike Bostock | Country boundary TopoJSON | ISC |
 | images.weserv.nl | Image proxy for ICEYE thumbnails (CORS workaround) | Free service |
 | Umbra open data S3 bucket | Direct CORS/range reads of Cloud-Optimized GeoTIFF overviews for Umbra previews | CC-BY 4.0 |
+| Capella open data S3 bucket | Direct CORS/range reads of Cloud-Optimized GeoTIFF overviews and product downloads for Capella scenes | CC-BY 4.0 |
 
 **Python (data pipeline only)**
 
@@ -451,7 +454,7 @@ Steps performed by the workflow:
 
 If you use open-sar-triad in research, teaching, reports, operational analysis, or derivative tools, please cite it:
 
-> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.0.0). Zenodo. https://doi.org/10.5281/zenodo.20562327
+> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.1.1). Zenodo. https://doi.org/10.5281/zenodo.20562327
 
 BibTeX:
 
@@ -460,7 +463,7 @@ BibTeX:
   author = {Muguda Sanjeevamurthy, Pavan},
   title = {open-sar-triad: Browser-based discovery console for commercial open SAR},
   year = {2026},
-  version = {2.1.0},
+  version = {2.1.1},
   doi = {10.5281/zenodo.20562327},
   url = {https://github.com/pmuguda/open-sar-triad},
   note = {Live application: https://pmuguda.github.io/open-sar-triad}
