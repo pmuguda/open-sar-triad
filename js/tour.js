@@ -35,6 +35,13 @@
       before: function () { if (window.expandTray) window.expandTray('#stats-mod'); },
     },
     {
+      target: '#recent-mod',
+      title:  'Recent Scenes',
+      body:   'The Recent tray highlights newly ingested scenes from the weekly catalog refresh. Until enough ingest history exists, it falls back to the latest acquisitions so the list is still useful.',
+      pos:    'right',
+      before: function () { if (window.expandTray) window.expandTray('#recent-mod'); },
+    },
+    {
       target: '#export-mod',
       title:  'Export & Share',
       body:   '<b>Export as STAC Collection</b> downloads visible scenes as a GeoJSON file for QGIS or Python. <b>Generate Download Script</b> produces a ready-to-run bash script that saves scene assets into <code>iceye/</code>, <code>umbra/</code>, and <code>capella/</code> folders. <b>Copy Share Link</b> copies a URL that restores every active filter and the map view — send it to a colleague and they land on exactly the same view.',
@@ -66,9 +73,9 @@
       pos:    'top',
     },
     {
-      target: '#drape-ctl',
+      target: '#map',
       title:  'Georeferenced Preview Drape',
-      body:   'Clicking a scene places its SAR preview directly on the map. Use opacity to blend it with the basemap, hide/show to compare, fullscreen for inspection, or close to return to the full footprint layer.',
+      body:   'Clicking a scene places its SAR preview directly on the map. When the preview control appears, use opacity to blend it with the basemap, hide/show to compare, fullscreen for inspection, or close to return to the full footprint layer.',
       pos:    'right',
       before: openTourScene,
     },
@@ -134,6 +141,16 @@
       },
     },
     {
+      target: '#recent-mod',
+      title:  'Recent Scenes',
+      body:   'Recent shows newly added scenes from the weekly refresh, or the latest acquisitions while ingest history builds up.',
+      pos:    'top',
+      before: function () {
+        document.getElementById('app').classList.remove('collapsed');
+        if (window.expandTray) window.expandTray('#recent-mod');
+      },
+    },
+    {
       target: '#export-mod',
       title:  'Export & Share',
       body:   'Export the current visible scenes, generate a download script, or copy a share link that restores the same filters and map state.',
@@ -156,9 +173,9 @@
       pos:    'bottom',
     },
     {
-      target: '#drape-ctl',
+      target: '#map',
       title:  'Preview Drape',
-      body:   'Tapping a scene places its preview on the map. The compact control lets you adjust opacity, hide/show the drape, open fullscreen, or clear it.',
+      body:   'Tapping a scene places its preview on the map. When the compact control appears, use it to adjust opacity, hide/show the drape, open fullscreen, or clear it.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.add('collapsed');
