@@ -151,6 +151,11 @@ def normalize_row(row, provider_id):
                 year = int(s[:4])
         except Exception:
             pass
+    # Reject clearly erroneous future dates (> 1 year ahead)
+    now = datetime.now(timezone.utc)
+    cutoff_future = now.replace(year=now.year + 1).strftime("%Y-%m-%d")
+    if date_str and date_str > cutoff_future:
+        return None
 
     # Sensor metadata
     sensor_mode  = row.get("sar:instrument_mode") or row.get("instrument_mode") or "N/A"

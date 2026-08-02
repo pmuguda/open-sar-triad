@@ -588,7 +588,17 @@ function providerStacBrowserUrl(p) {
 // ── Detail panel ───────────────────────────────────────────
 window.showDetailById = id => {
   const f = allFeatures.find(f => f.properties.id === id);
-  if (f) showDetail(f.properties);
+  if (!f) return;
+  // Immediately fly to the footprint so the map shows the scene before the
+  // preview image finishes loading (drapeScene refits once the image is ready).
+  const g = geomCache[id] || f.geometry;
+  if (g) {
+    try {
+      const bounds = L.geoJSON(g).getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], animate: true, maxZoom: 13 });
+    } catch (_) {}
+  }
+  showDetail(f.properties);
 };
 
 document.getElementById('map').addEventListener('click', e => {
