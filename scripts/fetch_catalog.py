@@ -96,24 +96,26 @@ def parse_assets(assets_val):
     # Normalize to lowercase keys for case-insensitive lookup (new schema uses lowercase)
     lc = {k.lower(): v for k, v in assets.items()}
 
+    def _href(v):
+        """Extract href string from an asset value, skipping empty strings."""
+        h = v.get("href") if isinstance(v, dict) else None
+        return h.strip() if h and h.strip() else None
+
     thumbnail = None
-    for key in ("thumbnail", "overview", "browse", "quicklook", "preview"):
+    for key in ("thumbnail", "qlk-cog", "overview", "browse", "quicklook", "preview"):
         if key in lc:
-            v = lc[key]
-            thumbnail = v.get("href") if isinstance(v, dict) else None
+            thumbnail = _href(lc[key])
             if thumbnail:
                 break
 
+    # Prefer geocoded/analysis-ready products; include ICEYE hyphenated keys
     download = None
-    for key in ("gec", "data", "cog", "grd", "slc", "hh", "vv", "sicd", "amplitude", "csi"):
+    for key in ("gec", "grd-cog", "csi-cog", "slc-cog", "data", "cog",
+                "grd", "slc", "hh", "vv", "sicd", "amplitude", "csi"):
         if key in lc:
-            v = lc[key]
-            download = v.get("href") if isinstance(v, dict) else None
+            download = _href(lc[key])
             if download:
                 break
-    if not download and assets:
-        first = next(iter(assets.values()))
-        download = first.get("href") if isinstance(first, dict) else None
 
     return thumbnail, download
 
