@@ -24,6 +24,7 @@ let orbitFilter = '';   // '' | 'ascending' | 'descending'
 let lookFilter  = '';   // '' | 'left' | 'right'
 let dataLoaded  = false;
 let pendingCountryRestore = null;
+let recentProvider = null; // 'iceye' | 'umbra' | 'capella' | null — tab filter
 
 // ── Custom timeline scrubber state ─────────────────────────
 let MONTHS = [];
@@ -812,7 +813,7 @@ function cogPreviewDataUrl(url) {
 // Resolve a displayable preview image URL for a scene, per provider.
 async function scenePreviewUrl(p) {
   if (p.provider === 'umbra') {
-    const cog = umbraCogUrl(p.download);
+    const cog = umbraCogUrl((p.products && p.products.GEC) || p.download);
     if (cog) {
       const preview = await cogPreviewDataUrl(cog);
       return { url: preview.url, bounds: preview.bounds, corners: preview.corners, fit: preview.corners ? 'quad' : 'bbox' };
@@ -1843,10 +1844,25 @@ function focusFeature(id) {
   window.showDetailById(id);
 }
 
+function renderRecentTabs() {
+  const container = document.getElementById('recent-tabs');
+  if (!container) return;
+  const tabs = [
+    { id: 'iceye',   label: 'ICEYE'   },
+    { id: 'umbra',   label: 'UMBRA'   },
+    { id: 'capella', label: 'CAPELLA' },
+  ];
+  container.innerHTML = tabs.map(t =>
+    `<button class="recent-tab${recentProvider === t.id ? ' is-active' : ''}" data-provider="${esc(t.id)}">${esc(t.label)}</button>`
+  ).join('');
+}
+
 function renderRecent() {
   const list = document.getElementById('recentList');
   const meta = document.getElementById('recentMeta');
   if (!list) return;
+
+  renderRecentTabs();
 
   const nowMs   = Date.now();
   const cutoff  = new Date(nowMs - 30 * DAY_MS).toISOString().slice(0, 10);
@@ -1856,6 +1872,7 @@ function renderRecent() {
 
   const recent = allFeatures
     .filter(f => f.properties.first_seen && f.properties.first_seen >= cutoff)
+    .filter(f => !recentProvider || f.properties.provider === recentProvider)
     .sort((a, b) => (b.properties.first_seen).localeCompare(a.properties.first_seen)
                  || (b.properties.date || '').localeCompare(a.properties.date || ''))
     .slice(0, 40);
@@ -1919,6 +1936,14 @@ function renderRecent() {
 document.getElementById('recentList').addEventListener('click', e => {
   const btn = e.target.closest('.recent-row');
   if (btn) focusFeature(btn.dataset.recentId);
+});
+
+document.getElementById('recent-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.recent-tab');
+  if (!btn) return;
+  const p = btn.dataset.provider;
+  recentProvider = recentProvider === p ? null : p;
+  renderRecent();
 });
 
 // ── Load data ──────────────────────────────────────────────

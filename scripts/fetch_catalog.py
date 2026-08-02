@@ -34,6 +34,24 @@ OUT_PATH = Path(__file__).parent.parent / "data" / "scenes.geojson"
 
 BASE_URL = "https://raw.githubusercontent.com/Jack-Hayes/commerical-sar-stac/refs/heads/main/parquets"
 
+# Ordered list of (display_label, asset_key) for each provider's downloadable formats.
+ICEYE_FORMATS = [
+    ("GRD", "grd-cog"),
+    ("CSI", "csi-cog"),
+    ("SLC", "slc-cog"),
+    ("SICD", "sicd"),
+    ("SIDD", "sidd"),
+    ("CPHD", "cphd"),
+    ("VID", "vid-cog"),
+]
+UMBRA_FORMATS = [
+    ("GEC", "gec"),
+    ("CSI", "csi"),
+    ("SICD", "sicd"),
+    ("SIDD", "sidd"),
+    ("CPHD", "cphd"),
+]
+
 PROVIDER_META = {
     "iceye": {
         "label":        "ICEYE",
@@ -81,15 +99,19 @@ def read_parquet(url):
         return None
 
 
-def parse_assets(assets_val):
-    """Return (thumbnail_url, download_url) from assets field."""
+def parse_assets(assets_val, provider_id=None):
+    """Return (thumbnail_url, download_url, products_dict) from assets field.
+
+    products_dict is a {FormatLabel: url} map for providers with multiple
+    downloadable formats (ICEYE, Umbra). None for Capella (handled separately).
+    """
     if assets_val is None:
-        return None, None
+        return None, None, None
     if isinstance(assets_val, str):
         try:
             assets = json.loads(assets_val)
         except Exception:
-            return None, None
+            return None, None, None
     else:
         assets = dict(assets_val)
 
@@ -108,16 +130,40 @@ def parse_assets(assets_val):
             if thumbnail:
                 break
 
-    # Prefer geocoded/analysis-ready products; include ICEYE hyphenated keys
-    download = None
-    for key in ("gec", "grd-cog", "csi-cog", "slc-cog", "data", "cog",
-                "grd", "slc", "hh", "vv", "sicd", "amplitude", "csi"):
-        if key in lc:
-            download = _href(lc[key])
-            if download:
-                break
+    # Build per-format products dict for ICEYE and Umbra
+    products = None
+    if provider_id == "iceye":
+        p = {}
+        for label, key in ICEYE_FORMATS:
+            if key in lc:
+                url = _href(lc[key])
+                if url:
+                    p[label] = url
+        if p:
+            products = p
+    elif provider_id == "umbra":
+        p = {}
+        for label, key in UMBRA_FORMATS:
+            if key in lc:
+                url = _href(lc[key])
+                if url:
+                    p[label] = url
+        if p:
+            products = p
 
-    return thumbnail, download
+    # Primary download: first available format, or fall back to generic keys
+    download = None
+    if products:
+        download = next(iter(products.values()))
+    else:
+        for key in ("gec", "grd-cog", "csi-cog", "slc-cog", "data", "cog",
+                    "grd", "slc", "hh", "vv", "sicd", "amplitude", "csi"):
+            if key in lc:
+                download = _href(lc[key])
+                if download:
+                    break
+
+    return thumbnail, download, products
 
 
 def normalize_row(row, provider_id):
@@ -182,7 +228,7 @@ def normalize_row(row, provider_id):
         except Exception:
             resolution = None
 
-    thumbnail, download = parse_assets(row.get("assets"))
+    thumbnail, download, products = parse_assets(row.get("assets"), provider_id)
 
     # Incidence angle / off-nadir (ICEYE uses these instead of resolution)
     import math
@@ -238,6 +284,7 @@ def normalize_row(row, provider_id):
             "off_nadir":       off_nadir,
             "thumbnail":       safe_url(thumbnail),
             "download":        safe_url(download),
+            "products":        {k: safe_url(v) for k, v in products.items()} if products else None,
             "provider_url":    info["provider_url"],
             "collection":      sanitize_str(row.get("collection") or row.get("sar:product_type")) or "",
             "orbit_state":     orbit,
