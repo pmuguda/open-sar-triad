@@ -427,7 +427,7 @@ function updateCoverage(counts, total) {
     const numEl = document.querySelector(`.cov .num[data-cov="${pid}"]`);
     const barEl = document.querySelector(`.cov .bar i[data-covbar="${pid}"]`);
     if (numEl) numEl.textContent = counts[pid].toLocaleString('en-US');
-    if (barEl) barEl.style.width = (counts[pid] / maxCount * 100) + '%';
+    if (barEl) barEl.style.transform = `scaleX(${counts[pid] / maxCount})`;
   });
 }
 
@@ -1076,7 +1076,7 @@ function showDetail(p) {
   }
 
   document.getElementById('detail-content').innerHTML =
-    `<div class="mod-h detail-h"><span class="ix">05</span><span class="ttl">Scene</span><span class="rule"></span><span class="meta">METADATA</span></div>
+    `<div class="mod-h detail-h"><span class="ttl">Scene</span><span class="rule"></span><span class="meta">METADATA</span></div>
 <div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>

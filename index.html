@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=map-drape-11" />
+  <link rel="stylesheet" href="css/style.css?v=redesign-2" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -63,11 +63,12 @@
         </div>
         <div class="brand-txt">
           <div class="wordmark">open<span class="sep">·</span>sar<span class="sep">·</span>triad</div>
-          <div class="brand-desc">Browser-based discovery console for commercial open SAR.</div>
           <div class="brand-sub">
-            <span><span class="tdot" style="background:var(--iceye)"></span> ICEYE</span>
-            <span><span class="tdot" style="background:var(--umbra)"></span> Umbra</span>
-            <span><span class="tdot" style="background:var(--capella)"></span> Capella</span>
+            <span class="brand-sensor" style="--sc:var(--iceye)">ICEYE</span>
+            <span class="brand-sep">·</span>
+            <span class="brand-sensor" style="--sc:var(--umbra)">Umbra</span>
+            <span class="brand-sep">·</span>
+            <span class="brand-sensor" style="--sc:var(--capella)">Capella</span>
           </div>
         </div>
         <div class="theme-toggle" role="group" aria-label="Theme">
@@ -76,10 +77,10 @@
         </div>
       </div>
 
-      <!-- 01 · FILTERS -->
+      <!-- FILTERS -->
       <div class="mod" id="filters-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="filters-tray">
-          <span class="ix">01</span><span class="ttl">Acquisition</span><span class="rule"></span><span class="meta">FILTERS</span><span class="chev" aria-hidden="true"></span>
+          <span class="ttl">Acquisition</span><span class="rule"></span><span class="meta">FILTERS</span><span class="chev" aria-hidden="true"></span>
         </button>
 
         <div class="tray-body acq-tray" id="filters-tray">
@@ -115,49 +116,55 @@
         </div>
       </div>
 
-      <!-- 02 · COVERAGE / STATS -->
+      <!-- COVERAGE / STATS -->
       <div class="mod" id="stats-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="stats-tray">
-          <span class="ix">02</span><span class="ttl">Coverage</span><span class="rule"></span><span class="meta" id="covTotal">— SCENES</span><span class="chev" aria-hidden="true"></span>
+          <span class="ttl">Coverage</span><span class="rule"></span><span class="meta" id="covTotal">— SCENES</span><span class="chev" aria-hidden="true"></span>
         </button>
         <div class="tray-body" id="stats-tray">
           <div class="cov">
             <div class="cell" style="--sc:var(--iceye)">
-              <div class="num" data-cov="iceye">—</div>
-              <div class="lab">ICEYE</div>
+              <div class="cov-row">
+                <div class="lab">ICEYE</div>
+                <div class="num" data-cov="iceye">—</div>
+              </div>
               <div class="bar"><i data-covbar="iceye" style="width:0%"></i></div>
             </div>
             <div class="cell" style="--sc:var(--umbra)">
-              <div class="num" data-cov="umbra">—</div>
-              <div class="lab">Umbra</div>
+              <div class="cov-row">
+                <div class="lab">Umbra</div>
+                <div class="num" data-cov="umbra">—</div>
+              </div>
               <div class="bar"><i data-covbar="umbra" style="width:0%"></i></div>
             </div>
             <div class="cell" style="--sc:var(--capella)">
-              <div class="num" data-cov="capella">—</div>
-              <div class="lab">Capella</div>
+              <div class="cov-row">
+                <div class="lab">Capella</div>
+                <div class="num" data-cov="capella">—</div>
+              </div>
               <div class="bar"><i data-covbar="capella" style="width:0%"></i></div>
             </div>
           </div>
 
-          <div style="margin:18px 0 9px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);">Mode breakdown</div>
+          <div class="section-label">Mode breakdown</div>
           <div class="modes" id="modes"></div>
         </div>
       </div>
 
-      <!-- 03 · RECENT ACTIVITY -->
+      <!-- RECENT ACTIVITY -->
       <div class="mod" id="recent-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="recent-tray">
-          <span class="ix">03</span><span class="ttl">Recent</span><span class="rule"></span><span class="meta" id="recentMeta">NEWLY ADDED</span><span class="chev" aria-hidden="true"></span>
+          <span class="ttl">Recent</span><span class="rule"></span><span class="meta" id="recentMeta">NEWLY ADDED</span><span class="chev" aria-hidden="true"></span>
         </button>
         <div class="tray-body" id="recent-tray">
           <div class="recent-list" id="recentList"></div>
         </div>
       </div>
 
-      <!-- 04 · EXPORT -->
+      <!-- EXPORT -->
       <div class="mod" id="export-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="export-tray">
-          <span class="ix">04</span><span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC · SH · LINK</span><span class="chev" aria-hidden="true"></span>
+          <span class="ttl">Export</span><span class="rule"></span><span class="meta">STAC · SH · LINK</span><span class="chev" aria-hidden="true"></span>
         </button>
         <div class="tray-body" id="export-tray">
           <button class="btn ghost" data-export="stac">
@@ -226,9 +233,6 @@
     <div class="mo" aria-hidden="true">
       <div class="corner tl"></div><div class="corner tr"></div>
       <div class="corner bl"></div><div class="corner br"></div>
-      <div class="reticle">
-        <div class="ring"></div><div class="h"></div><div class="v"></div><div class="dot"></div>
-      </div>
     </div>
 
     <!-- coordinate status bar -->
@@ -354,7 +358,7 @@
     <img id="lb-img" alt="SAR scene preview" />
   </div>
 </div>
-<script src="js/app.js?v=stac-links-1"></script>
+<script src="js/app.js?v=no-ix-1"></script>
 <script src="js/tour.js?v=tour-v7"></script>
 </body>
 </html>
