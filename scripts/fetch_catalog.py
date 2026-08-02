@@ -24,9 +24,15 @@ except ImportError:
     print("ERROR: pyarrow is required. Install with: pip install pyarrow", file=sys.stderr)
     sys.exit(1)
 
+try:
+    from shapely import wkb as shapely_wkb
+    _HAS_SHAPELY = True
+except ImportError:
+    _HAS_SHAPELY = False
+
 OUT_PATH = Path(__file__).parent.parent / "data" / "scenes.geojson"
 
-BASE_URL = "https://raw.githubusercontent.com/Jack-Hayes/commerical-sar-stac/refs/heads/main/parquets/viz"
+BASE_URL = "https://raw.githubusercontent.com/Jack-Hayes/commerical-sar-stac/refs/heads/main/parquets"
 
 PROVIDER_META = {
     "iceye": {
@@ -113,15 +119,23 @@ def normalize_row(row, provider_id):
     """Convert a parquet row to a GeoJSON Feature."""
     info = PROVIDER_META[provider_id]
 
-    # Geometry — prefer pre-serialised geojson string
+    # Geometry — new schema stores raw WKB bytes; old schema had geometry_geojson string
+    geom_raw = row.get("geometry")
     geom_str = row.get("geometry_geojson")
-    if geom_str:
+    geometry = None
+    if geom_raw is not None and _HAS_SHAPELY:
+        try:
+            geom = shapely_wkb.loads(bytes(geom_raw))
+            geometry = geom.__geo_interface__
+        except Exception:
+            pass
+    if geometry is None and geom_str:
         try:
             geometry = json.loads(geom_str)
         except Exception:
-            return None
-    else:
-        return None  # skip rows without geometry
+            pass
+    if geometry is None:
+        return None
 
     # Date
     dt_val = row.get("datetime") or row.get("start_datetime")
