@@ -638,9 +638,12 @@ function loadGeoTIFF() {
 
 function umbraCogUrl(download) {
   if (!download) return null;
-  // Prefer the geocoded (GEC) product — it's north-up and map-aligned.
-  if (/_CSI\.tif$/.test(download)) return download.replace(/_CSI\.tif$/, '_GEC.tif');
-  return /\.tif$/.test(download) ? download : null;
+  // Normalize regional S3 endpoints to the global virtual-hosted form — regional
+  // endpoints (s3.us-west-2.amazonaws.com) are blocked cross-origin in some
+  // environments whereas the global form (s3.amazonaws.com) is not.
+  let url = download.replace(/\.s3\.[a-z0-9-]+\.amazonaws\.com/, '.s3.amazonaws.com');
+  if (/_CSI\.tif$/.test(url)) return url.replace(/_CSI\.tif$/, '_GEC.tif');
+  return /\.tif$/.test(url) ? url : null;
 }
 
 function capellaCogUrl(p) {

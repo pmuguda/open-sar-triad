@@ -93,18 +93,21 @@ def parse_assets(assets_val):
     else:
         assets = dict(assets_val)
 
+    # Normalize to lowercase keys for case-insensitive lookup (new schema uses lowercase)
+    lc = {k.lower(): v for k, v in assets.items()}
+
     thumbnail = None
     for key in ("thumbnail", "overview", "browse", "quicklook", "preview"):
-        if key in assets:
-            v = assets[key]
+        if key in lc:
+            v = lc[key]
             thumbnail = v.get("href") if isinstance(v, dict) else None
             if thumbnail:
                 break
 
     download = None
-    for key in ("data", "cog", "GRD", "SLC", "HH", "VV", "GEC", "SICD", "amplitude"):
-        if key in assets:
-            v = assets[key]
+    for key in ("gec", "data", "cog", "grd", "slc", "hh", "vv", "sicd", "amplitude", "csi"):
+        if key in lc:
+            v = lc[key]
             download = v.get("href") if isinstance(v, dict) else None
             if download:
                 break
