@@ -45,6 +45,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Architecture](#architecture)
 - [Data Pipeline](#data-pipeline)
 - [Filter Reference](#filter-reference)
+- [Metadata sidecars](#metadata-sidecars)
 - [Local Development](#local-development)
 - [Deployment](#deployment)
 - [Progressive Web App](#progressive-web-app)
@@ -110,18 +111,20 @@ The three providers represented in this tool each operate public open data progr
 - Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 
-**Selection** — collapsible Selection tray in the sidebar
-- Hand-pick the scenes to export instead of taking the whole filter: turn on `Pick scenes on map` (or the checkbox button on the AOI toolbar) and click footprints to add or remove them
-- Picked footprints are drawn with a heavier dashed outline and a denser fill
-- Where footprints overlap, the "N scenes here" picker turns into a checklist with an `Add all N to selection` shortcut
-- `Add all filtered scenes` takes the current filter in one click; the tray lists every pick with a per-row remove, and `Clear selection` empties it
-- Picks survive filter changes — narrow the map freely without losing your basket
-- With nothing picked, both exports fall back to all filtered scenes
+**Download list** — collapsible Download list tray in the sidebar
+- Hand-pick the scenes to export instead of taking the whole filter. `Click map to add` turns map clicks into add/remove; picked footprints are drawn with a heavier dashed outline and a denser fill
+- `Show only these on map` hides everything else so the map shows just your list — including picks the current filter excludes. Coverage numbers and stats keep describing the filter, and a banner says so while it is on
+- `Add all filtered (N)` takes the current filter in one click; the tray lists every pick with a per-row remove, and `Clear list` empties it
+- Hovering a row — in the list or in the "N scenes here" overlap picker — lights up that footprint on the map and lifts it above its neighbours, so picking from a deep stack of near-identical scene IDs is no longer guesswork
+- Where footprints overlap, the "N scenes here" picker turns into a checklist with an `Add all N to the download list` shortcut
+- Picks survive filter changes — narrow the map freely without losing your list
+- With an empty list, both exports fall back to all filtered scenes
 
 **Export & Share** — collapsible Export tray in the sidebar
 - Export the selected scenes — or all currently visible scenes when nothing is selected — as a STAC-compliant GeoJSON collection
 - Generate a bash download script for the selected scenes (or all filtered scenes) that saves assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
-- Pick which data format(s) that script should fetch — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD`, `VID` — instead of downloading each scene's primary asset one at a time from the detail panel. Chips show how many currently-visible scenes publish each format and grey out when none do; picking several formats is allowed, and the script then writes to `<provider>/<FORMAT>/`
+- Pick which data format(s) that script should fetch — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD`, `VID` — instead of downloading each scene's primary asset one at a time from the detail panel. Chips show how many scenes publish each format and grey out when none do; picking several formats is allowed, and the script then writes to `<provider>/<FORMAT>/`
+- Every data file is downloaded with the metadata sidecar the provider publishes next to it, saved into the same directory (see [Metadata sidecars](#metadata-sidecars))
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
 
 **Progressive Web App**
@@ -231,6 +234,7 @@ Key global state managed by `app.js`:
 | `orbitFilter` | Active orbit filter: `''` (all), `'ascending'`, or `'descending'` |
 | `selectedScenes` | Scene ids hand-picked for export; empty means "use the filter" |
 | `selectMode` | When true, map clicks toggle selection instead of opening the detail panel |
+| `isolateSelection` | When true, the map draws only the download list (counts still describe the filter) |
 | `exportFormats` | Data formats the download script should fetch; empty means each scene's primary asset |
 | `lookFilter` | Active look-direction filter: `''` (all), `'left'`, or `'right'` |
 
@@ -245,7 +249,10 @@ Key functions in `app.js`:
 | `updateCoverage()` | Updates provider scene-count numbers and bars |
 | `buildFormatCache()` | Resolves and caches each scene's valid per-format asset URLs once at load |
 | `getExportFeatures()` | The features the exports act on: the hand-picked set, or the filtered set when nothing is picked |
-| `renderSelection()` | Rebuilds the Selection tray and refreshes the export format chips and download hint |
+| `getMapFeatures()` | The features the map draws: the download list while isolating, else the filtered set |
+| `metadataUrl()` | Derives the provider's metadata sidecar URL for a data asset, or null if none is published |
+| `highlightScene()` | Lights up one footprint and lifts it above its neighbours, for list hover feedback |
+| `renderSelection()` | Rebuilds the Download list tray and refreshes the export format chips and download hint |
 | `setSelectMode()` | Switches map clicks between opening the detail panel and toggling selection |
 | `renderExportFormats()` | Rebuilds the Export tray format chips with per-format counts for the current filter state |
 | `collectDownloadJobs()` | Expands the visible scenes into the concrete files the download script should fetch |
@@ -351,6 +358,27 @@ https://pmuguda.github.io/open-sar-triad#from=2024-01-01&to=2025-06-01&mode=spot
 ```
 
 Clicking **Copy Share Link** in the Export panel copies the current URL to the clipboard. Opening a shared URL restores all filters immediately: bbox AOIs redraw as visible rectangles, selected countries are highlighted after country boundaries load, and date range is applied after the timeline initializes. The onboarding tour is suppressed when a shared URL is detected so the recipient lands directly on the filtered view.
+
+---
+
+## Metadata sidecars
+
+The generated download script fetches each provider's own metadata file alongside every
+data asset. The URLs are derived from the asset URL, so no extra catalog fields are needed.
+
+| Provider | Formats | Sidecar | Derivation |
+|----------|---------|---------|------------|
+| ICEYE | SICD, SIDD | `.xml` (SICD/SIDD XML metadata) | `.nitf` → `.xml` |
+| ICEYE | GRD, SLC, CSI, VID | `.json` | `.tif` → `.json` |
+| ICEYE | CPHD | none published | — |
+| Umbra | all | `<base>.stac.v2.json`, one per **acquisition** | strip the `_FORMAT` suffix |
+| Capella | GEC, GEO, SLC, CSI | `_extended.json` | `.tif` → `_extended.json` |
+| Capella | SICD, SIDD, CPHD | none published | — |
+
+XML exists only for ICEYE's NITF products; everything else is JSON. Assets with no sidecar
+are skipped and counted in the script header. Because Umbra publishes one STAC item per
+acquisition rather than per format, that file is downloaded once even when several Umbra
+formats are selected.
 
 ---
 

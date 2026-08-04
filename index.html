@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=scene-select-1" />
+  <link rel="stylesheet" href="css/style.css?v=download-list-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -163,25 +163,29 @@
         </div>
       </div>
 
-      <!-- SELECTION -->
+      <!-- DOWNLOAD LIST -->
       <div class="mod" id="sel-mod">
         <button class="mod-h tray-toggle" type="button" aria-expanded="true" aria-controls="sel-tray">
-          <span class="ttl">Selection</span><span class="rule"></span><span class="meta" id="selMeta">NONE</span><span class="chev" aria-hidden="true"></span>
+          <span class="ttl">Download list</span><span class="rule"></span><span class="meta" id="selMeta">EMPTY</span><span class="chev" aria-hidden="true"></span>
         </button>
         <div class="tray-body" id="sel-tray">
+          <p id="sel-note" class="export-note"></p>
           <button class="btn ghost" id="selPick" aria-pressed="false">
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="9" height="9" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M4.4 6.6 6 8.2 9 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 4v10H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            Pick scenes on map
+            Click map to add
+          </button>
+          <button class="btn ghost" id="selIsolate" aria-pressed="false" disabled>
+            <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.8" stroke="currentColor" stroke-width="1.3"/></svg></span>
+            Show only these on map
           </button>
           <button class="btn ghost" id="selAddVisible">
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
-            <span id="selAddLabel">Add all filtered scenes</span>
+            <span id="selAddLabel">Add all filtered</span>
           </button>
           <button class="btn ghost" id="selClear">
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
-            Clear selection
+            Clear list
           </button>
-          <p id="sel-note" class="export-note"></p>
           <div class="recent-list sel-list" id="selList"></div>
         </div>
       </div>
@@ -312,14 +316,6 @@
         </svg>
       </button>
       <div class="tb-divider"></div>
-      <button class="tb-btn" id="tb-select" title="Select scenes for export" aria-pressed="false">
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 4v13H7"/>
-          <rect x="2" y="2" width="11" height="11" rx="1"/>
-          <path d="M5 7.5l2.2 2.2L10.5 5"/>
-        </svg>
-      </button>
-      <div class="tb-divider"></div>
       <button class="tb-btn tb-clear" id="tb-clear" title="Clear all">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M5 5l10 10M15 5L5 15"/>
@@ -395,7 +391,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=scene-select-1"></script>
-<script src="js/tour.js?v=tour-v9"></script>
+<script src="js/app.js?v=download-list-1"></script>
+<script src="js/tour.js?v=tour-v10"></script>
 </body>
 </html>

@@ -43,8 +43,8 @@
     },
     {
       target: '#sel-mod',
-      title:  'Selection',
-      body:   'Hand-pick scenes to export: click footprints on the map, or add the whole filter in one go.',
+      title:  'Download list',
+      body:   'Hand-pick what to export: click footprints on the map, add the whole filter at once, then show only your list on the map.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#sel-mod'); },
     },

@@ -38,6 +38,7 @@ let catalogFormats = [];   // union of formats present in the catalog, ordered
 // download. Holds scene ids; picks survive filter changes.
 const selectedScenes = new Set();
 let selectMode = false;              // map clicks toggle selection instead of opening detail
+let isolateSelection = false;        // draw only the list, so the map shows the basket
 const sceneLayerById = new Map();    // id → Leaflet layer, for cheap per-scene restyling
 
 // ── Custom timeline scrubber state ─────────────────────────
@@ -359,12 +360,15 @@ function render(options = {}) {
   const visible = getVisibleFeatures();
   const factor  = sceneScaleFactor();
 
-  // Group visible features by provider into 3 geoJSON layers (far fewer DOM nodes)
+  // Coverage/stats always describe the filter; the map may be showing only the
+  // download list (see getMapFeatures).
+  visible.forEach(feat => counts[feat.properties.provider]++);
+
+  // Group the drawn features by provider into 3 geoJSON layers (far fewer DOM nodes)
   const byProvider = { iceye: [], umbra: [], capella: [] };
-  visible.forEach(feat => {
+  getMapFeatures(visible).forEach(feat => {
     const geom = getDisplayGeometry(feat, factor);
     byProvider[feat.properties.provider].push({ type: 'Feature', geometry: geom, properties: feat.properties });
-    counts[feat.properties.provider]++;
   });
 
   sceneLayerById.clear();
@@ -429,11 +433,19 @@ function pointInPolygon(pt, geom) {
   return false;
 }
 
-// ── Scene selection ────────────────────────────────────────
-// The features the exports should act on: the hand-picked set when there is
+// ── Download list ──────────────────────────────────────────
+// The features the exports should act on: the hand-picked list when there is
 // one, otherwise everything the filters leave visible.
 function getExportFeatures(visible) {
   if (!selectedScenes.size) return visible || getVisibleFeatures();
+  return allFeatures.filter(f => selectedScenes.has(f.properties.id));
+}
+
+// The features the map should draw. "Show only these" draws the whole list —
+// including picks the current filter excludes — since the point is to see the
+// list itself. Coverage and stats keep describing the filter.
+function getMapFeatures(visible) {
+  if (!isolateSelection || !selectedScenes.size) return visible || getVisibleFeatures();
   return allFeatures.filter(f => selectedScenes.has(f.properties.id));
 }
 
@@ -442,9 +454,31 @@ function restyleScene(id) {
   if (entry) entry.lyr.setStyle(sceneStyle(entry.lyr.feature.properties, entry.color));
 }
 
+// Hovering a row in either list lights up its footprint. bringToFront matters:
+// in a deep stack the highlight would otherwise sit under its neighbours.
+function highlightScene(id, on) {
+  const entry = sceneLayerById.get(id);
+  if (!entry) return;
+  if (on) {
+    entry.lyr.setStyle({ fillOpacity: 0.75, weight: 3, opacity: 1 });
+    entry.lyr.bringToFront();
+  } else {
+    entry.lyr.setStyle(sceneStyle(entry.lyr.feature.properties, entry.color));
+  }
+}
+
+// Rows carry the scene id on `attr`; hovering one highlights its footprint.
+function wireHoverHighlight(container, attr) {
+  const idOf = e => e.target.closest(`[${attr}]`)?.getAttribute(attr);
+  container.addEventListener('mouseover', e => { const id = idOf(e); if (id) highlightScene(id, true); });
+  container.addEventListener('mouseout',  e => { const id = idOf(e); if (id) highlightScene(id, false); });
+}
+
 function setSceneSelected(id, on) {
   if (!id) return;
   if (on) selectedScenes.add(id); else selectedScenes.delete(id);
+  // While isolating, the drawn set changes with the list, so redraw the map.
+  if (isolateSelection) { render(); return; }
   restyleScene(id);
   renderSelection();
 }
@@ -456,18 +490,30 @@ function toggleSceneSelected(id) {
 function setSelectMode(on) {
   selectMode = on;
   document.body.classList.toggle('mode-select', on);
-  const tb = document.getElementById('tb-select');
-  tb.classList.toggle('select-on', on);
-  tb.setAttribute('aria-pressed', String(on));
   const btn = document.getElementById('selPick');
   btn.classList.toggle('is-active', on);
   btn.setAttribute('aria-pressed', String(on));
   if (on) {
     if (countryMode) setCountryMode(false);   // the two modes both own map clicks
-    showHint('Click footprints to add or remove them from the selection');
+    showHint('Click footprints to add or remove them from the download list');
   } else {
     hideHint();
+    if (isolateSelection) showIsolateHint();
   }
+}
+
+function showIsolateHint() {
+  showHint(`Showing only your download list (${selectedScenes.size.toLocaleString()} scenes) — coverage numbers still describe the filter`);
+}
+
+function setIsolateSelection(on) {
+  isolateSelection = on && selectedScenes.size > 0;
+  const btn = document.getElementById('selIsolate');
+  btn.classList.toggle('is-active', isolateSelection);
+  btn.setAttribute('aria-pressed', String(isolateSelection));
+  render();
+  if (isolateSelection && !selectMode) showIsolateHint();
+  else if (!isolateSelection && !selectMode) hideHint();
 }
 
 function renderSelection() {
@@ -476,22 +522,27 @@ function renderSelection() {
   const note = document.getElementById('sel-note');
   const list = document.getElementById('selList');
   const addLabel = document.getElementById('selAddLabel');
+  const isoBtn = document.getElementById('selIsolate');
   if (!list) return;
 
   const n = selectedScenes.size;
-  if (meta) meta.textContent = n ? `${n.toLocaleString()} PICKED` : 'NONE';
-  if (addLabel) addLabel.textContent = `Add all filtered scenes (${visible.length.toLocaleString()})`;
+  if (meta) meta.textContent = n ? `${n.toLocaleString()} SCENE${n === 1 ? '' : 'S'}` : 'EMPTY';
+  if (addLabel) addLabel.textContent = `Add all filtered (${visible.length.toLocaleString()})`;
+  if (isoBtn) isoBtn.disabled = !n;
 
   if (!n) {
-    if (note) note.textContent = 'No scenes picked — exports use all filtered scenes.';
+    if (note) note.textContent =
+      `Empty — the download script and STAC export use all ${visible.length.toLocaleString()} filtered scenes.`;
     list.innerHTML = '';
   } else {
-    if (note) note.textContent = `Exports use these ${n.toLocaleString()} scene(s), not the filter.`;
+    if (note) note.textContent = n === 1
+      ? 'The download script and STAC export use this 1 scene.'
+      : `The download script and STAC export use these ${n.toLocaleString()} scenes.`;
     const CAP = 200;
     const picked = allFeatures.filter(f => selectedScenes.has(f.properties.id));
     const rows = picked.slice(0, CAP).map(f => {
       const p = f.properties;
-      return `<div class="recent-row sel-row">
+      return `<div class="recent-row sel-row" data-sel-hover="${esc(p.id)}">
         <button class="sel-open" data-sel-open="${esc(p.id)}">
           <span class="recent-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
           <span class="recent-body">
@@ -499,11 +550,11 @@ function renderSelection() {
             <span class="recent-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
           </span>
         </button>
-        <button class="sel-remove" data-sel-remove="${esc(p.id)}" title="Remove from selection" aria-label="Remove ${esc(p.id)}">✕</button>
+        <button class="sel-remove" data-sel-remove="${esc(p.id)}" title="Remove from list" aria-label="Remove ${esc(p.id)}">✕</button>
       </div>`;
     }).join('');
     const more = picked.length > CAP
-      ? `<p class="recent-empty">+${(picked.length - CAP).toLocaleString()} more picked (not listed)</p>` : '';
+      ? `<p class="recent-empty">+${(picked.length - CAP).toLocaleString()} more in the list (not shown)</p>` : '';
     list.innerHTML = rows + more;
   }
 
@@ -513,22 +564,23 @@ function renderSelection() {
   updateDownloadCount(forExport);
 }
 
-document.getElementById('tb-select').addEventListener('click', () => setSelectMode(!selectMode));
 document.getElementById('selPick').addEventListener('click', () => setSelectMode(!selectMode));
+document.getElementById('selIsolate').addEventListener('click', () => setIsolateSelection(!isolateSelection));
 
 document.getElementById('selAddVisible').addEventListener('click', () => {
   const visible = getVisibleFeatures();
   if (!visible.length) { showToast('No scenes match current filters'); return; }
   visible.forEach(f => selectedScenes.add(f.properties.id));
   render();
-  showToast(`${selectedScenes.size.toLocaleString()} scenes selected`);
+  showToast(`${selectedScenes.size.toLocaleString()} scenes in the download list`);
 });
 
 document.getElementById('selClear').addEventListener('click', () => {
   if (!selectedScenes.size) return;
   selectedScenes.clear();
-  render();
-  showToast('Selection cleared');
+  if (isolateSelection) setIsolateSelection(false);   // nothing left to isolate
+  else render();
+  showToast('Download list cleared');
 });
 
 document.getElementById('selList').addEventListener('click', e => {
@@ -537,6 +589,7 @@ document.getElementById('selList').addEventListener('click', e => {
   const open = e.target.closest('[data-sel-open]');
   if (open) window.showDetailById(open.dataset.selOpen);
 });
+wireHoverHighlight(document.getElementById('selList'), 'data-sel-hover');
 
 // ── Export data formats ────────────────────────────────────
 // Validating every product URL on each render would mean tens of thousands of
@@ -571,6 +624,30 @@ function selectedFormats() {
     .concat([...exportFormats].filter(f => !FORMAT_ORDER.includes(f)).sort());
 }
 
+// Metadata sidecar published next to a data asset. Verified against the three
+// open-data buckets: ICEYE ships .xml for the NITF products (SICD/SIDD) and
+// .json for the rest, Capella ships one _extended.json per COG product, and
+// Umbra ships a single STAC item per acquisition (shared by all its formats).
+// Returns null where the provider publishes nothing — ICEYE CPHD and Capella
+// SICD/SIDD/CPHD.
+function metadataUrl(provider, assetUrl) {
+  if (!assetUrl) return null;
+  if (provider === 'iceye') {
+    if (assetUrl.endsWith('.tif'))  return assetUrl.slice(0, -4) + '.json';
+    if (assetUrl.endsWith('.nitf')) return assetUrl.slice(0, -5) + '.xml';
+    return null;
+  }
+  if (provider === 'capella') {
+    return assetUrl.endsWith('.tif') ? assetUrl.slice(0, -4) + '_extended.json' : null;
+  }
+  if (provider === 'umbra') {
+    // Same "_FORMAT" stripping as umbraStacBrowserUrl(), against the raw URL.
+    const m = assetUrl.match(/^(.*)\/([^/]+?)_(?:CSI|GEC|SICD|SIDD|CPHD|SLC|GRD)(?:_[^.]*)?\.[^./]+$/i);
+    return m ? `${m[1]}/${m[2]}.stac.v2.json` : null;
+  }
+  return null;
+}
+
 // Expand the visible scenes into the concrete files the script should fetch.
 // Shared by the hint and the generator so the two can never disagree.
 function collectDownloadJobs(visible) {
@@ -603,7 +680,21 @@ function collectDownloadJobs(visible) {
     Object.values(byProvider).forEach(jobs => jobs.sort((a, b) => rank.get(a.fmt) - rank.get(b.fmt)));
   }
 
-  return { formats, byProvider, scenes, files, skipped };
+  // Attach the metadata sidecar to each file. Umbra publishes one STAC item per
+  // acquisition rather than per format, so the same URL would otherwise be
+  // emitted once per selected format — keep only its first occurrence.
+  let metaFiles = 0, metaMissing = 0;
+  const seenMeta = new Set();
+  Object.entries(byProvider).forEach(([pid, jobs]) => jobs.forEach(job => {
+    const url = metadataUrl(pid, job.url);
+    if (!url) { metaMissing++; return; }
+    if (seenMeta.has(url)) return;
+    seenMeta.add(url);
+    job.meta = url;
+    metaFiles++;
+  }));
+
+  return { formats, byProvider, scenes, files, skipped, metaFiles, metaMissing };
 }
 
 function renderExportFormats(visible) {
@@ -726,7 +817,7 @@ function scenesAtLatLng(latlng) {
   const factor = sceneScaleFactor();
   const pt = [latlng.lng, latlng.lat];
   const hits = [];
-  for (const f of getVisibleFeatures()) {
+  for (const f of getMapFeatures()) {
     if (pointInPolygon(pt, getDisplayGeometry(f, factor))) hits.push(f);
   }
   // Newest first so the most recent acquisition is at the top.
@@ -741,7 +832,7 @@ function openScenePicker(latlng, hits) {
     // In select mode a row toggles the pick; otherwise it opens the detail panel.
     const attr = selectMode ? 'data-pick-id' : 'data-detail-id';
     const on   = selectMode && selectedScenes.has(p.id);
-    return `<button class="picker-row${on ? ' is-picked' : ''}" ${attr}="${esc(p.id)}">
+    return `<button class="picker-row${on ? ' is-picked' : ''}" ${attr}="${esc(p.id)}" data-hover-id="${esc(p.id)}">
       <span class="picker-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
       <span class="picker-body">
         <span class="picker-id">${esc(p.id || '—')}</span>
@@ -751,14 +842,18 @@ function openScenePicker(latlng, hits) {
   const more = hits.length > CAP
     ? `<div class="picker-more">+${hits.length - CAP} more — zoom in to narrow</div>` : '';
   const bulk = selectMode
-    ? `<button class="picker-bulk" data-pick-all>Add all ${hits.length} to selection</button>` : '';
+    ? `<button class="picker-bulk" data-pick-all>Add all ${hits.length} to the download list</button>` : '';
   const html =
     `<div class="scene-picker">
        <div class="picker-head">${hits.length} scenes here</div>
        <div class="picker-list">${rows}</div>${more}${bulk}
      </div>`;
-  L.popup({ maxWidth: 300, minWidth: 240, className: 'scene-picker-popup', autoPan: true })
+  const popup = L.popup({ maxWidth: 300, minWidth: 240, className: 'scene-picker-popup', autoPan: true })
     .setLatLng(latlng).setContent(html).openOn(map);
+  // Hovering a row lights up the matching footprint — without it, picking from a
+  // stack of near-identical ids is guesswork.
+  const el = popup.getElement()?.querySelector('.picker-list');
+  if (el) wireHoverHighlight(el, 'data-hover-id');
   _pickerHits = hits;
 }
 
@@ -776,6 +871,9 @@ function handleSceneClick(e) {
   openScenePicker(e.latlng, hits);
 }
 map.on('click', handleSceneClick);
+
+// A popup can close while a row is hovered, which would leave that footprint lit.
+map.on('popupclose', () => _pickerHits.forEach(f => restyleScene(f.properties.id)));
 
 function safeUrl(url) {
   if (!url) return null;
@@ -1801,7 +1899,8 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   const source  = picked ? 'selected' : 'visible';
   if (!visible.length) { showToast('No scenes match current filters'); return; }
 
-  const { formats, byProvider, scenes: total, files, skipped } = collectDownloadJobs(visible);
+  const { formats, byProvider, scenes: total, files, skipped, metaFiles, metaMissing } =
+    collectDownloadJobs(visible);
   if (!files) {
     showToast(formats.length
       ? `No ${source} scene publishes ${formats.join(' / ')}`
@@ -1826,6 +1925,8 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
     `# Formats: ${formats.length ? formats.join(', ') : 'primary asset per scene'}`,
     `# ${picked ? 'Selected' : 'Visible'}: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
     ...(formats.length ? [`# Files: ${files}  (${perFormat.join(', ')})`] : []),
+    `# Metadata: ${metaFiles} sidecar file(s) alongside the data` +
+      (metaMissing ? `  (${metaMissing} asset(s) publish none)` : ''),
     ...(skipped ? [formats.length
       ? `# Note: ${skipped} of ${visible.length} ${source} scene(s) skipped — none of the selected formats available`
       : `# Note: ${skipped} scene(s) omitted — no download URL in catalog`] : []),
@@ -1850,6 +1951,20 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
     '',
   ];
 
+  // Umbra republishes some acquisitions under a second prefix
+  // (sar-data/tasks/<campaign>/... as well as sar-data/task-data/...), so two
+  // distinct scenes can share an asset basename. Left flat they would overwrite
+  // each other on disk; give only the clashing ones their own scene-id folder.
+  const usedDest = new Set();
+  const claimDir = (dir, url, p) => {
+    const flat = `${dir}/${fileNameFromUrl(url, p.id)}`;
+    if (!usedDest.has(flat)) { usedDest.add(flat); return dir; }
+    let sub = `${dir}/${safeFileName(p.id)}`, n = 2;
+    while (usedDest.has(`${sub}/${fileNameFromUrl(url, p.id)}`)) sub = `${dir}/${safeFileName(p.id)}-${n++}`;
+    usedDest.add(`${sub}/${fileNameFromUrl(url, p.id)}`);
+    return sub;
+  };
+
   for (const [pid, jobs] of Object.entries(byProvider)) {
     if (!jobs.length) continue;
     const unit = formats.length ? 'files' : 'scenes';
@@ -1858,20 +1973,23 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
       acc[j.fmt] = (acc[j.fmt] || 0) + 1; return acc;
     }, {});
     let section = null;
-    jobs.forEach(({ p, fmt, url }) => {
+    jobs.forEach(({ p, fmt, url, meta }) => {
       if (formats.length > 1 && fmt !== section) {
         section = fmt;
         lines.push(`#   ── ${fmt} (${perProviderFormat[fmt]} files)`);
       }
-      const fname = fileNameFromUrl(url, p.id);
-      const dest  = fmt ? `${pid}/${safeFileName(fmt)}/${fname}` : `${pid}/${fname}`;
-      lines.push(`dl ${shQuote(url)} ${shQuote(dest)}`);
+      const dir  = claimDir(fmt ? `${pid}/${safeFileName(fmt)}` : pid, url, p);
+      lines.push(`dl ${shQuote(url)} ${shQuote(`${dir}/${fileNameFromUrl(url, p.id)}`)}`);
+      if (meta) {
+        // Sidecar lands next to its asset so the pair stays together on disk.
+        lines.push(`dl ${shQuote(meta)} ${shQuote(`${dir}/${fileNameFromUrl(meta, p.id + '.metadata')}`)}`);
+      }
     });
     lines.push('');
   }
 
   lines.push('echo ""');
-  lines.push(`echo "✓ Done — ${files} files"`);
+  lines.push(`echo "✓ Done — ${files} data file(s) + ${metaFiles} metadata file(s)"`);
 
   const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   const url  = URL.createObjectURL(blob);
@@ -1880,9 +1998,10 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   a.download = `open-sar-triad-download-${date}.sh`;
   a.click();
   URL.revokeObjectURL(url);
+  const metaNote = metaFiles ? ` + ${metaFiles.toLocaleString()} metadata` : '';
   showToast(formats.length
-    ? `download.sh ready · ${files.toLocaleString()} files · ${formats.join(' / ')}`
-    : `download.sh ready · ${total} scenes`);
+    ? `download.sh ready · ${files.toLocaleString()} files${metaNote} · ${formats.join(' / ')}`
+    : `download.sh ready · ${total} scenes${metaNote}`);
 });
 
 // ── Copy share link ────────────────────────────────────────
