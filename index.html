@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=map-dock-1" />
+  <link rel="stylesheet" href="css/style.css?v=a11y-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -251,23 +251,23 @@
     </div>
 
       <div id="dl-dock" role="group" aria-label="Download list actions">
-        <button class="tb-btn" id="selPick" aria-pressed="false" title="Click map to add scenes to the download list">
+        <button class="tb-btn" id="selPick" aria-label="Add scenes by clicking the map" aria-pressed="false" title="Click map to add scenes to the download list">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M5.6 8.2 7.6 10.2 11 6.2"/><path d="M17 5.5v12H6"/>
           </svg>
         </button>
-        <button class="tb-btn" id="selIsolate" aria-pressed="false" disabled title="Show only the download list on the map">
+        <button class="tb-btn" id="selIsolate" aria-label="Show only the download list on the map" aria-pressed="false" aria-disabled="true" title="Show only the download list on the map">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1.8 10S4.7 4.6 10 4.6 18.2 10 18.2 10 15.3 15.4 10 15.4 1.8 10 1.8 10Z"/><circle cx="10" cy="10" r="2.3"/>
           </svg>
         </button>
         <div class="tb-divider"></div>
-        <button class="tb-btn" id="selAddVisible" title="Add all filtered scenes to the download list">
+        <button class="tb-btn" id="selAddVisible" aria-label="Add all filtered scenes to the download list" title="Add all filtered scenes to the download list">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
             <path d="M10 4v12M4 10h12"/>
           </svg>
         </button>
-        <button class="tb-btn tb-clear" id="selClear" title="Clear the download list">
+        <button class="tb-btn tb-clear" id="selClear" aria-label="Clear the download list" title="Clear the download list">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
             <path d="M5 5l10 10M15 5L5 15"/>
           </svg>
@@ -405,7 +405,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=map-dock-1"></script>
+<script src="js/app.js?v=a11y-1"></script>
 <script src="js/tour.js?v=tour-v12"></script>
 </body>
 </html>

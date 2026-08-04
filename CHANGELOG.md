@@ -72,6 +72,30 @@ All notable changes to open-sar-triad are documented here. The format is based o
   the overlap checklist and the download-list tray already cover it.
 
 ### Fixed
+- Accessibility pass over the download-list UI, from measured contrast rather
+  than eyeball:
+  - Text on an `--accent` fill hardcoded a near-black, which measured **3.69:1**
+    in the paper theme — below AA. It now uses a per-theme `--on-accent` token
+    (11.50:1 dark / 5.12:1 paper) applied everywhere accent is used as a fill.
+  - `--ink-3` carried real body text — tray notes, every scene row's
+    `provider · date · mode`, field labels — at **3.26:1** dark / 4.33:1 paper.
+    Raised to 4.57:1 / 4.71:1. This also lifts the on-map dock icons from a
+    marginal 3.27:1 to 4.59:1 against a translucent pane over imagery.
+  - Keyboard focus was invisible on nearly every control; only two had a
+    `:focus-visible` style. Added one ring for all of them, and stopped
+    `transition: all` animating `outline-width` so the ring appears instantly.
+  - The per-scene format popover had no keyboard path: focus now moves into it,
+    Escape closes it, and focus returns to the badge that opened it.
+  - The icon dock was named only by `title`, which is not exposed on touch.
+    Added `aria-label` to every dock button.
+  - Dock buttons now use `aria-disabled` instead of `disabled`, so they stay
+    focusable, keep announcing their name, and explain the empty state out loud
+    instead of via a tooltip a disabled button never shows.
+  - A pinned format badge differed from an unpinned one by colour alone; it now
+    carries a `◆` marker.
+  - `.fmt-chip` and the row remove button were under the 24×24 minimum target.
+- `ALL` in the format control read as "every format" when it means "each scene's
+  primary asset". Renamed to `PRIMARY`.
 - The download script could silently overwrite files. Umbra republishes some
   acquisitions under a second prefix (`sar-data/tasks/<campaign>/…` as well as
   `sar-data/task-data/…`), so two distinct scenes can share an asset basename —

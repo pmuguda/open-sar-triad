@@ -10,7 +10,7 @@
   --line-2:    oklch(0.38 0.012 250);
   --ink:       oklch(0.92 0.006 250);
   --ink-2:     oklch(0.70 0.010 250);
-  --ink-3:     oklch(0.50 0.010 250);
+  --ink-3:     oklch(0.58 0.010 250);
   --accent:    oklch(0.82 0.14 82);
   --accent-2:  oklch(0.82 0.14 82 / 0.14);
   --accent-3:  oklch(0.82 0.14 82 / 0.42);
@@ -26,6 +26,9 @@
   --rail: 368px;
   --chrome: 1;
   --amber: oklch(0.75 0.16 70);
+  /* Text sitting on an --accent fill. Hardcoding a near-black failed AA in the
+     paper theme (3.69:1); per-theme it measures 11.50:1 dark / 5.12:1 paper. */
+  --on-accent: oklch(0.12 0.006 250);
 }
 
 /* ── Paper theme ────────────────────────────────────────── */
@@ -37,7 +40,7 @@
   --line-2:    oklch(0.70 0.013 90);
   --ink:       oklch(0.22 0.010 255);
   --ink-2:     oklch(0.40 0.012 255);
-  --ink-3:     oklch(0.56 0.011 255);
+  --ink-3:     oklch(0.54 0.011 255);
   --accent:    oklch(0.55 0.155 52);
   --accent-2:  oklch(0.55 0.155 52 / 0.12);
   --accent-3:  oklch(0.55 0.155 52 / 0.46);
@@ -47,6 +50,7 @@
   --grid:      oklch(0.45 0.01 250 / 0.16);
   --shadow:    0 18px 50px -28px oklch(0 0 0 / 0.28);
   --amber:     oklch(0.58 0.17 65);
+  --on-accent: oklch(1 0 0);
 }
 
 * { box-sizing: border-box; }
@@ -147,7 +151,7 @@ body {
   transition: background .12s, color .12s;
 }
 .theme-toggle button[aria-pressed="true"] {
-  background: var(--accent); color: var(--bg); font-weight: 600;
+  background: var(--accent); color: var(--on-accent); font-weight: 600;
 }
 
 /* ── Module section ── */
@@ -169,6 +173,11 @@ body {
   cursor: pointer; text-align: left;
 }
 .tray-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+/* Keyboard focus was invisible on nearly every control (WCAG 2.4.7). */
+button:focus-visible, [role="button"]:focus-visible, a:focus-visible,
+input:focus-visible, select:focus-visible, .lg:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 1px;
+}
 .mod-h .ttl { color: var(--ink-2); font-weight: 600; letter-spacing: .2em; }
 .mod-h .rule { flex: 1; height: 1px; background: var(--line); }
 .mod-h .meta { color: var(--ink-3); font-size: 9px; letter-spacing: .14em; }
@@ -218,7 +227,7 @@ body {
   background: var(--bg-2); color: var(--ink); font-family: var(--font-mono);
   letter-spacing: .05em;
 }
-.selx select option:checked { background: var(--accent); color: var(--bg); }
+.selx select option:checked { background: var(--accent); color: var(--on-accent); }
 .selx::after {
   content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
   border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent);
@@ -242,7 +251,7 @@ body {
   transition: background .12s, color .12s;
 }
 .seg button:first-child { border-left: 0; }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .seg button .ar { font-size: 11px; }
 
 /* ── Generic button ── */
@@ -496,7 +505,7 @@ body {
   transform: translateX(-50%); background: var(--accent);
 }
 .tl-h .grip {
-  margin-top: -1px; background: var(--accent); color: var(--bg); font-size: 8.5px; letter-spacing: .04em;
+  margin-top: -1px; background: var(--accent); color: var(--on-accent); font-size: 8.5px; letter-spacing: .04em;
   padding: 2px 5px; font-family: var(--font-mono); font-weight: 600; white-space: nowrap;
 }
 .tl-foot {
@@ -531,7 +540,8 @@ body {
 .tb-btn {
   width: 30px; height: 30px; border: 1px solid transparent; background: transparent;
   color: var(--ink-3); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all .12s;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .12s, background-color .12s, border-color .12s;
 }
 .tb-btn svg { width: 15px; height: 15px; pointer-events: none; }
 .tb-btn:hover { color: var(--accent); background: var(--accent-2); border-color: var(--accent-3); }
@@ -597,7 +607,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
   cursor: pointer; backdrop-filter: blur(2px);
   transition: background .12s, color .12s;
 }
-.detail-fullscreen-btn:hover { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+.detail-fullscreen-btn:hover { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
 /* Umbra rendering state */
 .detail-thumb-placeholder.umbra-rendering {
@@ -628,7 +638,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
   transition: background .12s, color .12s, border-color .12s;
 }
 .recent-tab:hover { background: var(--bg-3); color: var(--ink); border-color: var(--ink-3); }
-.recent-tab.is-active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.recent-tab.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 
 .recent-list {
   display: flex; flex-direction: column;
@@ -754,11 +764,12 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .format-chips[hidden] { display: none; }
 .fmt-chip {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
-  padding: 4px 10px; cursor: pointer; color: var(--ink-2);
-  background: var(--bg); border: 1px solid var(--line); transition: all .12s;
+  padding: 5px 10px; min-height: 24px; cursor: pointer; color: var(--ink-2);
+  background: var(--bg); border: 1px solid var(--line);
+  transition: color .12s, background-color .12s, border-color .12s;
 }
 .fmt-chip:hover { border-color: var(--accent); color: var(--ink); }
-.fmt-chip.is-active { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 600; }
+.fmt-chip.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 .fmt-chip.is-empty, .fmt-chip:disabled { opacity: .32; cursor: not-allowed; }
 .fmt-chip.is-empty:hover, .fmt-chip:disabled:hover { border-color: var(--line); color: var(--ink-2); }
 
@@ -774,10 +785,10 @@ body.detail-collapsed #detail-toggle { right: 0; }
   border: 0; border-left: 1px solid var(--line); cursor: pointer; transition: all .12s;
 }
 .basemap-toggle button:first-child { border-left: 0; }
-.basemap-toggle button[aria-pressed="true"] { background: var(--accent); color: #0d1117; font-weight: 600; }
+.basemap-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
 /* ── Drape controls ── */
-.drape-btn[aria-pressed="true"] { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+.drape-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 /* Top-left stack: preview controls, then the download-list dock beneath them. */
 #map-dock {
   position: absolute; top: 88px; left: 14px; z-index: 600;
@@ -853,7 +864,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
   cursor: pointer; color: var(--ink);
 }
 .sel-remove {
-  flex-shrink: 0; width: 26px; align-self: stretch;
+  flex-shrink: 0; width: 28px; min-height: 24px; align-self: stretch;
   background: none; border: 0; border-left: 1px solid var(--line);
   color: var(--ink-3); cursor: pointer; font-size: 11px; line-height: 1;
 }
@@ -882,6 +893,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .sel-fmt.is-pinned { color: var(--accent); font-weight: 600; }
 .sel-fmt.is-empty { color: var(--ink-3); opacity: .6; }
 .sel-fmt-more { color: var(--ink-3); margin-left: 2px; }
+.sel-fmt-pin { margin-right: 3px; font-size: 7px; vertical-align: middle; }
 .sel-fmt-pop {
   grid-column: 1 / -1; width: 100%;
   padding: 9px 10px; background: var(--bg-3); border: 1px solid var(--line-2);
@@ -901,8 +913,8 @@ body.detail-collapsed #detail-toggle { right: 0; }
   padding: 3px; user-select: none; box-shadow: var(--shadow);
 }
 #dl-dock .tb-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-2); border-color: var(--accent); }
-#dl-dock .tb-btn:disabled { opacity: .35; cursor: not-allowed; }
-#dl-dock .tb-btn:disabled:hover { color: var(--ink-3); background: transparent; border-color: transparent; }
+#dl-dock .tb-btn.is-off { opacity: .45; }
+#dl-dock .tb-btn.is-off:hover { color: var(--ink-3); background: transparent; border-color: transparent; }
 .dl-dock-count {
   font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
   color: var(--accent); padding: 0 8px 0 6px; white-space: nowrap;
