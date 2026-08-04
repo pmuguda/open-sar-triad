@@ -26,6 +26,13 @@ let dataLoaded  = false;
 let pendingCountryRestore = null;
 let recentProvider = null; // 'iceye' | 'umbra' | 'capella' | null — tab filter
 
+// Data formats the download script should fetch. Empty = each scene's primary
+// asset (the historical behaviour). Export-only: never filters the map.
+const exportFormats = new Set();
+// Canonical display order across all providers; unknown labels sort after these.
+const FORMAT_ORDER = ['GRD', 'GEC', 'GEO', 'SLC', 'CSI', 'SICD', 'SIDD', 'CPHD', 'VID'];
+let catalogFormats = [];   // union of formats present in the catalog, ordered
+
 // ── Custom timeline scrubber state ─────────────────────────
 let MONTHS = [];
 let tlFrom = 0, tlTo = 0;
@@ -373,6 +380,7 @@ function render(options = {}) {
     if (visEl) visEl.textContent = total.toLocaleString('en-US');
     updateCoverage(counts, total);
     updateModes(visible);
+    renderExportFormats(visible);
     updateDownloadCount(visible);
     updateTimelineHistogram();
   }
@@ -405,17 +413,119 @@ function pointInPolygon(pt, geom) {
   return false;
 }
 
+// ── Export data formats ────────────────────────────────────
+// Validating every product URL on each render would mean tens of thousands of
+// URL parses per filter change, so resolve them once at load and cache the
+// result on the feature. The cache is stored non-enumerably so it stays out of
+// the STAC export, which serialises the visible features verbatim.
+function buildFormatCache(features) {
+  const present = new Set();
+  const hide = (feat, key, value) =>
+    Object.defineProperty(feat, key, { value, writable: true, configurable: true });
+
+  features.forEach(feat => {
+    const p = feat.properties;
+    const urls = {};
+    for (const [fmt, url] of Object.entries(p.products || {})) {
+      const safe = safeUrl(url);
+      if (!safe) continue;
+      urls[fmt] = safe;
+      present.add(fmt);
+    }
+    hide(feat, '_fmtUrls', urls);
+    hide(feat, '_fmtList', Object.keys(urls));
+    hide(feat, '_dlUrl',   safeUrl(p.download));
+  });
+  catalogFormats = FORMAT_ORDER.filter(f => present.has(f))
+    .concat([...present].filter(f => !FORMAT_ORDER.includes(f)).sort());
+}
+
+// Selected formats, in canonical order.
+function selectedFormats() {
+  return FORMAT_ORDER.filter(f => exportFormats.has(f))
+    .concat([...exportFormats].filter(f => !FORMAT_ORDER.includes(f)).sort());
+}
+
+// Expand the visible scenes into the concrete files the script should fetch.
+// Shared by the hint and the generator so the two can never disagree.
+function collectDownloadJobs(visible) {
+  const formats = selectedFormats();
+  const byProvider = { iceye: [], umbra: [], capella: [] };
+  let scenes = 0, files = 0, skipped = 0;
+
+  visible.forEach(feat => {
+    const p = feat.properties;
+    const bucket = byProvider[p.provider];
+    if (!bucket) { skipped++; return; }
+
+    if (!formats.length) {
+      if (feat._dlUrl) { bucket.push({ p, fmt: null, url: feat._dlUrl }); scenes++; files++; }
+      else skipped++;
+      return;
+    }
+
+    const hits = formats.filter(f => feat._fmtUrls[f]);
+    if (!hits.length) { skipped++; return; }
+    hits.forEach(f => bucket.push({ p, fmt: f, url: feat._fmtUrls[f] }));
+    scenes++;
+    files += hits.length;
+  });
+
+  // Group each provider's files by format (stable sort keeps scene order within
+  // a format) so a multi-format script reads as one section per format.
+  if (formats.length > 1) {
+    const rank = new Map(formats.map((f, i) => [f, i]));
+    Object.values(byProvider).forEach(jobs => jobs.sort((a, b) => rank.get(a.fmt) - rank.get(b.fmt)));
+  }
+
+  return { formats, byProvider, scenes, files, skipped };
+}
+
+function renderExportFormats(visible) {
+  const wrap = document.getElementById('export-fmt');
+  const row  = document.getElementById('export-fmt-chips');
+  if (!wrap || !row) return;
+  if (!catalogFormats.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const counts = new Map(catalogFormats.map(f => [f, 0]));
+  visible.forEach(feat => {
+    (feat._fmtList || []).forEach(f => {
+      if (counts.has(f)) counts.set(f, counts.get(f) + 1);
+    });
+  });
+
+  const chip = (fmt, label, active, count, title) =>
+    `<button type="button" class="fmt-chip${active ? ' is-active' : ''}${count === 0 ? ' is-empty' : ''}"` +
+    ` data-fmt="${esc(fmt)}" aria-pressed="${active}"${count === 0 ? ' disabled' : ''}` +
+    ` title="${esc(title)}">${esc(label)}</button>`;
+
+  const chips = [
+    chip('', 'ALL', exportFormats.size === 0, visible.length,
+         'Each scene’s primary asset (default)'),
+    ...catalogFormats.map(f => chip(
+      f, `${f} · ${counts.get(f).toLocaleString()}`, exportFormats.has(f), counts.get(f),
+      counts.get(f) ? `${counts.get(f).toLocaleString()} visible scene(s) publish ${f}`
+                    : `No visible scene publishes ${f}`)),
+  ];
+  row.innerHTML = chips.join('');
+}
+
 // ── Download count hint ────────────────────────────────────
 function updateDownloadCount(visible) {
   const el = document.getElementById('dl-count');
   if (!el) return;
-  const withUrl = visible.filter(f => f.properties.download).length;
   if (!visible.length) { el.textContent = ''; return; }
-  if (withUrl === visible.length) {
-    el.textContent = `${withUrl.toLocaleString()} scenes have direct download links`;
-  } else {
-    el.textContent = `${withUrl.toLocaleString()} of ${visible.length.toLocaleString()} scenes have direct download links`;
+
+  const { formats, scenes, files } = collectDownloadJobs(visible);
+  if (!formats.length) {
+    el.textContent = scenes === visible.length
+      ? `${scenes.toLocaleString()} scenes have direct download links`
+      : `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} scenes have direct download links`;
+    return;
   }
+  const fileNote = files === scenes ? '' : ` · ${files.toLocaleString()} files`;
+  el.textContent = `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} scenes publish ${formats.join(' / ')}${fileNote}`;
 }
 
 // ── Coverage stats ─────────────────────────────────────────
@@ -1501,28 +1611,52 @@ function shQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
 }
 
+// Chip row: toggle which data formats the script should fetch.
+document.getElementById('export-fmt-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.fmt-chip');
+  if (!chip || chip.disabled) return;
+  const fmt = chip.dataset.fmt;
+  if (!fmt) exportFormats.clear();                                   // the ALL chip
+  else if (exportFormats.has(fmt)) exportFormats.delete(fmt);
+  else exportFormats.add(fmt);
+
+  const visible = getVisibleFeatures();
+  renderExportFormats(visible);
+  updateDownloadCount(visible);
+});
+
 document.querySelector('[data-export="script"]').addEventListener('click', () => {
   const visible = getVisibleFeatures();
   if (!visible.length) { showToast('No scenes match current filters'); return; }
 
-  const byProvider = { iceye: [], umbra: [], capella: [] };
-  visible.forEach(feat => {
-    const p = feat.properties;
-    if (safeUrl(p.download) && byProvider[p.provider]) byProvider[p.provider].push(p);
-  });
+  const { formats, byProvider, scenes: total, files, skipped } = collectDownloadJobs(visible);
+  if (!files) {
+    showToast(formats.length
+      ? `No visible scene publishes ${formats.join(' / ')}`
+      : 'No scenes match current filters');
+    return;
+  }
 
   const counts = Object.fromEntries(
     Object.entries(byProvider).map(([k, v]) => [k, v.length])
   );
-  const total   = counts.iceye + counts.umbra + counts.capella;
-  const omitted = visible.length - total;
-  const date    = new Date().toISOString().slice(0, 10);
+  const date = new Date().toISOString().slice(0, 10);
+
+  const perFormat = formats.map(f => {
+    const n = Object.values(byProvider).reduce(
+      (acc, jobs) => acc + jobs.filter(j => j.fmt === f).length, 0);
+    return `${f}: ${n}`;
+  });
 
   const lines = [
     '#!/usr/bin/env bash',
     `# open-sar-triad download script — generated ${new Date().toISOString()}`,
+    `# Formats: ${formats.length ? formats.join(', ') : 'primary asset per scene'}`,
     `# Visible: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
-    ...(omitted ? [`# Note: ${omitted} scene(s) omitted — no download URL in catalog`] : []),
+    ...(formats.length ? [`# Files: ${files}  (${perFormat.join(', ')})`] : []),
+    ...(skipped ? [formats.length
+      ? `# Note: ${skipped} of ${visible.length} visible scene(s) skipped — none of the selected formats available`
+      : `# Note: ${skipped} scene(s) omitted — no download URL in catalog`] : []),
     '# Usage:  bash download.sh',
     '# Dry run: bash download.sh --dry-run',
     '# Requires: curl',
@@ -1544,18 +1678,28 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
     '',
   ];
 
-  for (const [pid, scenes] of Object.entries(byProvider)) {
-    if (!scenes.length) continue;
-    lines.push(`# ── ${PROVIDER_LABELS[pid]} (${scenes.length} scenes) ${'─'.repeat(40)}`);
-    scenes.forEach(p => {
-      const fname = fileNameFromUrl(p.download, p.id);
-      lines.push(`dl ${shQuote(safeUrl(p.download))} ${shQuote(`${pid}/${fname}`)}`);
+  for (const [pid, jobs] of Object.entries(byProvider)) {
+    if (!jobs.length) continue;
+    const unit = formats.length ? 'files' : 'scenes';
+    lines.push(`# ── ${PROVIDER_LABELS[pid]} (${jobs.length} ${unit}) ${'─'.repeat(40)}`);
+    const perProviderFormat = jobs.reduce((acc, j) => {
+      acc[j.fmt] = (acc[j.fmt] || 0) + 1; return acc;
+    }, {});
+    let section = null;
+    jobs.forEach(({ p, fmt, url }) => {
+      if (formats.length > 1 && fmt !== section) {
+        section = fmt;
+        lines.push(`#   ── ${fmt} (${perProviderFormat[fmt]} files)`);
+      }
+      const fname = fileNameFromUrl(url, p.id);
+      const dest  = fmt ? `${pid}/${safeFileName(fmt)}/${fname}` : `${pid}/${fname}`;
+      lines.push(`dl ${shQuote(url)} ${shQuote(dest)}`);
     });
     lines.push('');
   }
 
   lines.push('echo ""');
-  lines.push(`echo "✓ Done — ${total} files"`);
+  lines.push(`echo "✓ Done — ${files} files"`);
 
   const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   const url  = URL.createObjectURL(blob);
@@ -1564,7 +1708,9 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   a.download = `open-sar-triad-download-${date}.sh`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`download.sh ready · ${total} scenes`);
+  showToast(formats.length
+    ? `download.sh ready · ${files.toLocaleString()} files · ${formats.join(' / ')}`
+    : `download.sh ready · ${total} scenes`);
 });
 
 // ── Copy share link ────────────────────────────────────────
@@ -1952,6 +2098,7 @@ fetch('data/scenes.geojson')
   .then(geojson => {
     allFeatures = geojson.features || [];
     buildGeomCache(allFeatures);
+    buildFormatCache(allFeatures);
     populateModes(allFeatures);
     restoreState();
     initTimeline(allFeatures);

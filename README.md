@@ -113,6 +113,7 @@ The three providers represented in this tool each operate public open data progr
 **Export & Share** — collapsible Export tray in the sidebar
 - Export all currently visible scenes as a STAC-compliant GeoJSON collection
 - Generate a bash download script that saves scene assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
+- Pick which data format(s) that script should fetch — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD`, `VID` — instead of downloading each scene's primary asset one at a time from the detail panel. Chips show how many currently-visible scenes publish each format and grey out when none do; picking several formats is allowed, and the script then writes to `<provider>/<FORMAT>/`
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
 
 **Progressive Web App**
@@ -231,6 +232,9 @@ Key functions in `app.js`:
 | `initCollapsibleTrays()` | Wires the numbered sidebar trays so Acquisition, Coverage, and Export can collapse independently |
 | `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
 | `updateCoverage()` | Updates provider scene-count numbers and bars |
+| `buildFormatCache()` | Resolves and caches each scene's valid per-format asset URLs once at load |
+| `renderExportFormats()` | Rebuilds the Export tray format chips with per-format counts for the current filter state |
+| `collectDownloadJobs()` | Expands the visible scenes into the concrete files the download script should fetch |
 | `updateModes()` | Renders the stacked sensor-mode breakdown |
 | `showDetail()` | Populates the right-side `05 Scene` detail panel with scene metadata, provider/product links, and format-specific downloads |
 | `bboxFromGeometry()` | Extracts a bounding box from any GeoJSON geometry |
@@ -270,7 +274,9 @@ Each feature carries the following properties:
 | `incidence_angle` | number | Look angle in degrees, if available |
 | `off_nadir` | number | Off-nadir angle in degrees, if available |
 | `thumbnail` | string | URL to a preview image |
-| `download` | string | URL to the scene data asset |
+| `download` | string | URL to the scene's primary data asset (the first entry of `products`) |
+| `products` | object | `{ FORMAT: url }` map of every downloadable data format for the acquisition |
+| `formats` | array | Ordered format labels for Capella scenes collapsed from several Parquet files |
 | `provider_url` | string | STAC Browser URL for the provider catalog root |
 | `collection` | string | Product type or collection name |
 | `orbit_state` | string | Satellite pass direction: `ascending`, `descending`, or `null` |

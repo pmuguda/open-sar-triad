@@ -44,7 +44,7 @@
     {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   'Export visible scenes, generate a download script, or copy a shareable state link.',
+      body:   'Export visible scenes, generate a download script for a chosen data format, or copy a shareable state link.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#export-mod'); },
     },
@@ -153,7 +153,7 @@
     {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   'Export, generate a script, or copy a share link.',
+      body:   'Export, generate a script for a chosen data format, or copy a share link.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');

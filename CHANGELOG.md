@@ -6,6 +6,16 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- Data-format selector in the Export tray. The generated download script can now
+  fetch a chosen format — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`,
+  `CPHD` or `VID` — for every scene in the current filter, instead of only each
+  scene's primary asset. Several formats can be selected at once; chips report
+  how many visible scenes publish each format and disable when none do. Scenes
+  that don't publish a selected format are skipped and the count is reported in
+  the script header and the export hint. With no format selected the script is
+  unchanged from before.
+
 ### Changed
 - Scene/provider actions now open Radiant Earth STAC Browser sources instead of
   retired or generic provider pages. ICEYE and Umbra links resolve to scene-level
