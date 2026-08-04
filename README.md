@@ -110,9 +110,17 @@ The three providers represented in this tool each operate public open data progr
 - Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 
+**Selection** — collapsible Selection tray in the sidebar
+- Hand-pick the scenes to export instead of taking the whole filter: turn on `Pick scenes on map` (or the checkbox button on the AOI toolbar) and click footprints to add or remove them
+- Picked footprints are drawn with a heavier dashed outline and a denser fill
+- Where footprints overlap, the "N scenes here" picker turns into a checklist with an `Add all N to selection` shortcut
+- `Add all filtered scenes` takes the current filter in one click; the tray lists every pick with a per-row remove, and `Clear selection` empties it
+- Picks survive filter changes — narrow the map freely without losing your basket
+- With nothing picked, both exports fall back to all filtered scenes
+
 **Export & Share** — collapsible Export tray in the sidebar
-- Export all currently visible scenes as a STAC-compliant GeoJSON collection
-- Generate a bash download script that saves scene assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
+- Export the selected scenes — or all currently visible scenes when nothing is selected — as a STAC-compliant GeoJSON collection
+- Generate a bash download script for the selected scenes (or all filtered scenes) that saves assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
 - Pick which data format(s) that script should fetch — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD`, `VID` — instead of downloading each scene's primary asset one at a time from the detail panel. Chips show how many currently-visible scenes publish each format and grey out when none do; picking several formats is allowed, and the script then writes to `<provider>/<FORMAT>/`
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
 
@@ -221,6 +229,9 @@ Key global state managed by `app.js`:
 | `MONTHS`, `tlFrom`, `tlTo` | Timeline month list and active acquisition-window indices |
 | `providerActive` | `{ iceye, umbra, capella }` boolean flags |
 | `orbitFilter` | Active orbit filter: `''` (all), `'ascending'`, or `'descending'` |
+| `selectedScenes` | Scene ids hand-picked for export; empty means "use the filter" |
+| `selectMode` | When true, map clicks toggle selection instead of opening the detail panel |
+| `exportFormats` | Data formats the download script should fetch; empty means each scene's primary asset |
 | `lookFilter` | Active look-direction filter: `''` (all), `'left'`, or `'right'` |
 
 Key functions in `app.js`:
@@ -233,6 +244,9 @@ Key functions in `app.js`:
 | `centroid()` | Computes the centroid of a polygon for bbox intersection checks |
 | `updateCoverage()` | Updates provider scene-count numbers and bars |
 | `buildFormatCache()` | Resolves and caches each scene's valid per-format asset URLs once at load |
+| `getExportFeatures()` | The features the exports act on: the hand-picked set, or the filtered set when nothing is picked |
+| `renderSelection()` | Rebuilds the Selection tray and refreshes the export format chips and download hint |
+| `setSelectMode()` | Switches map clicks between opening the detail panel and toggling selection |
 | `renderExportFormats()` | Rebuilds the Export tray format chips with per-format counts for the current filter state |
 | `collectDownloadJobs()` | Expands the visible scenes into the concrete files the download script should fetch |
 | `updateModes()` | Renders the stacked sensor-mode breakdown |

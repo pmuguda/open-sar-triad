@@ -33,6 +33,13 @@ const exportFormats = new Set();
 const FORMAT_ORDER = ['GRD', 'GEC', 'GEO', 'SLC', 'CSI', 'SICD', 'SIDD', 'CPHD', 'VID'];
 let catalogFormats = [];   // union of formats present in the catalog, ordered
 
+// Hand-picked scenes. When non-empty the exports use these instead of the
+// whole filter, so the filter narrows the map and the selection narrows the
+// download. Holds scene ids; picks survive filter changes.
+const selectedScenes = new Set();
+let selectMode = false;              // map clicks toggle selection instead of opening detail
+const sceneLayerById = new Map();    // id → Leaflet layer, for cheap per-scene restyling
+
 // ── Custom timeline scrubber state ─────────────────────────
 let MONTHS = [];
 let tlFrom = 0, tlTo = 0;
@@ -335,6 +342,14 @@ map.on('zoomend', () => {
   if (f !== _lastScaleFactor) { _lastScaleFactor = f; render({ geometryOnly: true }); }
 });
 
+// Selected footprints keep their provider colour but read as picked: heavier
+// dashed outline and a denser fill, which works in both themes.
+function sceneStyle(p, color) {
+  return selectedScenes.has(p.id)
+    ? { color, weight: 2.5, opacity: 1,    fillColor: color, fillOpacity: 0.45, dashArray: '5 3' }
+    : { color, weight: 1,   opacity: 0.85, fillColor: color, fillOpacity: 0.18, dashArray: null };
+}
+
 // ── Render ─────────────────────────────────────────────────
 function render(options = {}) {
   const geometryOnly = !!options.geometryOnly;
@@ -352,19 +367,21 @@ function render(options = {}) {
     counts[feat.properties.provider]++;
   });
 
+  sceneLayerById.clear();
   for (const [provider, feats] of Object.entries(byProvider)) {
     if (!feats.length) continue;
     const color = PROVIDER_COLORS[provider];
     const layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
       renderer:     footprintRenderer,
-      style:        () => ({ color, weight: 1, opacity: 0.85, fillColor: color, fillOpacity: 0.18 }),
+      style:        feat => sceneStyle(feat.properties, color),
       interactive:  !countryMode,
       pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 5, color, weight: 1, fillColor: color, fillOpacity: 0.6 }),
       onEachFeature: countryMode ? undefined : (feat, lyr) => {
         // Click is handled centrally on the map (see handleSceneClick) so that
         // overlapping footprints can be disambiguated; here we only do hover.
+        sceneLayerById.set(feat.properties.id, { lyr, color });
         lyr.on('mouseover', function () { this.setStyle({ fillOpacity: 0.5, weight: 2 }); });
-        lyr.on('mouseout',  function () { this.setStyle({ fillOpacity: 0.18, weight: 1 }); });
+        lyr.on('mouseout',  function () { this.setStyle(sceneStyle(feat.properties, color)); });
       },
     });
     layer.addTo(map);
@@ -380,8 +397,7 @@ function render(options = {}) {
     if (visEl) visEl.textContent = total.toLocaleString('en-US');
     updateCoverage(counts, total);
     updateModes(visible);
-    renderExportFormats(visible);
-    updateDownloadCount(visible);
+    renderSelection();
     updateTimelineHistogram();
   }
   if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
@@ -412,6 +428,115 @@ function pointInPolygon(pt, geom) {
   if (geom.type === 'MultiPolygon')      return geom.coordinates.some(p => inRing(p[0]));
   return false;
 }
+
+// ── Scene selection ────────────────────────────────────────
+// The features the exports should act on: the hand-picked set when there is
+// one, otherwise everything the filters leave visible.
+function getExportFeatures(visible) {
+  if (!selectedScenes.size) return visible || getVisibleFeatures();
+  return allFeatures.filter(f => selectedScenes.has(f.properties.id));
+}
+
+function restyleScene(id) {
+  const entry = sceneLayerById.get(id);
+  if (entry) entry.lyr.setStyle(sceneStyle(entry.lyr.feature.properties, entry.color));
+}
+
+function setSceneSelected(id, on) {
+  if (!id) return;
+  if (on) selectedScenes.add(id); else selectedScenes.delete(id);
+  restyleScene(id);
+  renderSelection();
+}
+
+function toggleSceneSelected(id) {
+  setSceneSelected(id, !selectedScenes.has(id));
+}
+
+function setSelectMode(on) {
+  selectMode = on;
+  document.body.classList.toggle('mode-select', on);
+  const tb = document.getElementById('tb-select');
+  tb.classList.toggle('select-on', on);
+  tb.setAttribute('aria-pressed', String(on));
+  const btn = document.getElementById('selPick');
+  btn.classList.toggle('is-active', on);
+  btn.setAttribute('aria-pressed', String(on));
+  if (on) {
+    if (countryMode) setCountryMode(false);   // the two modes both own map clicks
+    showHint('Click footprints to add or remove them from the selection');
+  } else {
+    hideHint();
+  }
+}
+
+function renderSelection() {
+  const visible = getVisibleFeatures();
+  const meta = document.getElementById('selMeta');
+  const note = document.getElementById('sel-note');
+  const list = document.getElementById('selList');
+  const addLabel = document.getElementById('selAddLabel');
+  if (!list) return;
+
+  const n = selectedScenes.size;
+  if (meta) meta.textContent = n ? `${n.toLocaleString()} PICKED` : 'NONE';
+  if (addLabel) addLabel.textContent = `Add all filtered scenes (${visible.length.toLocaleString()})`;
+
+  if (!n) {
+    if (note) note.textContent = 'No scenes picked — exports use all filtered scenes.';
+    list.innerHTML = '';
+  } else {
+    if (note) note.textContent = `Exports use these ${n.toLocaleString()} scene(s), not the filter.`;
+    const CAP = 200;
+    const picked = allFeatures.filter(f => selectedScenes.has(f.properties.id));
+    const rows = picked.slice(0, CAP).map(f => {
+      const p = f.properties;
+      return `<div class="recent-row sel-row">
+        <button class="sel-open" data-sel-open="${esc(p.id)}">
+          <span class="recent-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
+          <span class="recent-body">
+            <span class="recent-id">${esc(p.id || '—')}</span>
+            <span class="recent-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
+          </span>
+        </button>
+        <button class="sel-remove" data-sel-remove="${esc(p.id)}" title="Remove from selection" aria-label="Remove ${esc(p.id)}">✕</button>
+      </div>`;
+    }).join('');
+    const more = picked.length > CAP
+      ? `<p class="recent-empty">+${(picked.length - CAP).toLocaleString()} more picked (not listed)</p>` : '';
+    list.innerHTML = rows + more;
+  }
+
+  // Format chips and the download hint describe whatever the exports will act on.
+  const forExport = getExportFeatures(visible);
+  renderExportFormats(forExport);
+  updateDownloadCount(forExport);
+}
+
+document.getElementById('tb-select').addEventListener('click', () => setSelectMode(!selectMode));
+document.getElementById('selPick').addEventListener('click', () => setSelectMode(!selectMode));
+
+document.getElementById('selAddVisible').addEventListener('click', () => {
+  const visible = getVisibleFeatures();
+  if (!visible.length) { showToast('No scenes match current filters'); return; }
+  visible.forEach(f => selectedScenes.add(f.properties.id));
+  render();
+  showToast(`${selectedScenes.size.toLocaleString()} scenes selected`);
+});
+
+document.getElementById('selClear').addEventListener('click', () => {
+  if (!selectedScenes.size) return;
+  selectedScenes.clear();
+  render();
+  showToast('Selection cleared');
+});
+
+document.getElementById('selList').addEventListener('click', e => {
+  const remove = e.target.closest('[data-sel-remove]');
+  if (remove) { setSceneSelected(remove.dataset.selRemove, false); return; }
+  const open = e.target.closest('[data-sel-open]');
+  if (open) window.showDetailById(open.dataset.selOpen);
+});
 
 // ── Export data formats ────────────────────────────────────
 // Validating every product URL on each render would mean tens of thousands of
@@ -518,14 +643,16 @@ function updateDownloadCount(visible) {
   if (!visible.length) { el.textContent = ''; return; }
 
   const { formats, scenes, files } = collectDownloadJobs(visible);
+  const noun = scenes === 1 ? 'scene has a direct download link' : 'scenes have direct download links';
   if (!formats.length) {
     el.textContent = scenes === visible.length
-      ? `${scenes.toLocaleString()} scenes have direct download links`
-      : `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} scenes have direct download links`;
+      ? `${scenes.toLocaleString()} ${noun}`
+      : `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} ${noun}`;
     return;
   }
   const fileNote = files === scenes ? '' : ` · ${files.toLocaleString()} files`;
-  el.textContent = `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} scenes publish ${formats.join(' / ')}${fileNote}`;
+  el.textContent = `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} ${
+    scenes === 1 ? 'scene publishes' : 'scenes publish'} ${formats.join(' / ')}${fileNote}`;
 }
 
 // ── Coverage stats ─────────────────────────────────────────
@@ -611,29 +738,41 @@ function openScenePicker(latlng, hits) {
   const CAP = 60;
   const rows = hits.slice(0, CAP).map(f => {
     const p = f.properties;
-    return `<button class="picker-row" data-detail-id="${esc(p.id)}">
+    // In select mode a row toggles the pick; otherwise it opens the detail panel.
+    const attr = selectMode ? 'data-pick-id' : 'data-detail-id';
+    const on   = selectMode && selectedScenes.has(p.id);
+    return `<button class="picker-row${on ? ' is-picked' : ''}" ${attr}="${esc(p.id)}">
       <span class="picker-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
       <span class="picker-body">
         <span class="picker-id">${esc(p.id || '—')}</span>
         <span class="picker-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
-      </span></button>`;
+      </span>${selectMode ? `<span class="picker-check">${on ? '✓' : '＋'}</span>` : ''}</button>`;
   }).join('');
   const more = hits.length > CAP
     ? `<div class="picker-more">+${hits.length - CAP} more — zoom in to narrow</div>` : '';
+  const bulk = selectMode
+    ? `<button class="picker-bulk" data-pick-all>Add all ${hits.length} to selection</button>` : '';
   const html =
     `<div class="scene-picker">
        <div class="picker-head">${hits.length} scenes here</div>
-       <div class="picker-list">${rows}</div>${more}
+       <div class="picker-list">${rows}</div>${more}${bulk}
      </div>`;
   L.popup({ maxWidth: 300, minWidth: 240, className: 'scene-picker-popup', autoPan: true })
     .setLatLng(latlng).setContent(html).openOn(map);
+  _pickerHits = hits;
 }
+
+let _pickerHits = [];
 
 function handleSceneClick(e) {
   if (countryMode) return;                 // country picker owns clicks in that mode
   const hits = scenesAtLatLng(e.latlng);
   if (!hits.length) return;
-  if (hits.length === 1) { showDetail(hits[0].properties); return; }
+  if (hits.length === 1) {
+    if (selectMode) toggleSceneSelected(hits[0].properties.id);
+    else showDetail(hits[0].properties);
+    return;
+  }
   openScenePicker(e.latlng, hits);
 }
 map.on('click', handleSceneClick);
@@ -713,6 +852,24 @@ window.showDetailById = id => {
 };
 
 document.getElementById('map').addEventListener('click', e => {
+  const pickAll = e.target.closest('[data-pick-all]');
+  if (pickAll) {
+    _pickerHits.forEach(f => selectedScenes.add(f.properties.id));
+    map.closePopup();
+    render();
+    showToast(`${selectedScenes.size.toLocaleString()} scenes selected`);
+    return;
+  }
+  const pick = e.target.closest('[data-pick-id]');
+  if (pick) {
+    const id = pick.dataset.pickId;
+    toggleSceneSelected(id);
+    const on = selectedScenes.has(id);
+    pick.classList.toggle('is-picked', on);
+    const check = pick.querySelector('.picker-check');
+    if (check) check.textContent = on ? '✓' : '＋';
+    return;
+  }
   const btn = e.target.closest('[data-detail-id]');
   if (!btn) return;
   window.showDetailById(btn.dataset.detailId);
@@ -1199,12 +1356,24 @@ function showDetail(p) {
       ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
   }
 
+  const picked = selectedScenes.has(p.id);
+  const selBtn = `<button class="detail-action-btn sel-toggle${picked ? ' is-picked' : ''}" id="sel-toggle" data-id="${esc(p.id)}">${
+    picked ? '✓ In selection' : '＋ Add to selection'}</button>`;
+
   document.getElementById('detail-content').innerHTML =
     `<div class="mod-h detail-h"><span class="ttl">Scene</span><span class="rule"></span><span class="meta">METADATA</span></div>
 <div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
-${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
+${formatBlock}<div class="detail-actions">${dl}${selBtn}${pv}</div>`;
+
+  document.getElementById('sel-toggle').addEventListener('click', e => {
+    const btn = e.currentTarget;
+    toggleSceneSelected(btn.dataset.id);
+    const on = selectedScenes.has(btn.dataset.id);
+    btn.classList.toggle('is-picked', on);
+    btn.textContent = on ? '✓ In selection' : '＋ Add to selection';
+  });
 
   if (products) {
     const chipsEl = document.querySelector('#detail-content .format-chips');
@@ -1342,6 +1511,7 @@ function setCountryMode(on) {
   btn.classList.toggle('country-on', on);
   btn.classList.toggle('country-active', !on && !!selectedCountry);
   if (on) {
+    if (selectMode) setSelectMode(false);   // the two modes both own map clicks
     document.body.classList.add('mode-country');
     showHint('Hover and click a country to filter scenes');
     render();
@@ -1575,7 +1745,7 @@ function restoreBboxAoi(parts) {
 
 // ── STAC export ────────────────────────────────────────────
 document.querySelector('[data-export="stac"]').addEventListener('click', () => {
-  const visible = getVisibleFeatures();
+  const visible = getExportFeatures();
   const blob = new Blob([JSON.stringify({
     type:'FeatureCollection', stac_version:'1.0.0',
     id:'open-sar-triad-export',
@@ -1620,19 +1790,21 @@ document.getElementById('export-fmt-chips').addEventListener('click', e => {
   else if (exportFormats.has(fmt)) exportFormats.delete(fmt);
   else exportFormats.add(fmt);
 
-  const visible = getVisibleFeatures();
+  const visible = getExportFeatures();
   renderExportFormats(visible);
   updateDownloadCount(visible);
 });
 
 document.querySelector('[data-export="script"]').addEventListener('click', () => {
-  const visible = getVisibleFeatures();
+  const visible = getExportFeatures();
+  const picked  = selectedScenes.size > 0;   // exports follow the hand-picked set
+  const source  = picked ? 'selected' : 'visible';
   if (!visible.length) { showToast('No scenes match current filters'); return; }
 
   const { formats, byProvider, scenes: total, files, skipped } = collectDownloadJobs(visible);
   if (!files) {
     showToast(formats.length
-      ? `No visible scene publishes ${formats.join(' / ')}`
+      ? `No ${source} scene publishes ${formats.join(' / ')}`
       : 'No scenes match current filters');
     return;
   }
@@ -1652,10 +1824,10 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
     '#!/usr/bin/env bash',
     `# open-sar-triad download script — generated ${new Date().toISOString()}`,
     `# Formats: ${formats.length ? formats.join(', ') : 'primary asset per scene'}`,
-    `# Visible: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
+    `# ${picked ? 'Selected' : 'Visible'}: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
     ...(formats.length ? [`# Files: ${files}  (${perFormat.join(', ')})`] : []),
     ...(skipped ? [formats.length
-      ? `# Note: ${skipped} of ${visible.length} visible scene(s) skipped — none of the selected formats available`
+      ? `# Note: ${skipped} of ${visible.length} ${source} scene(s) skipped — none of the selected formats available`
       : `# Note: ${skipped} scene(s) omitted — no download URL in catalog`] : []),
     '# Usage:  bash download.sh',
     '# Dry run: bash download.sh --dry-run',

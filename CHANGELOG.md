@@ -7,6 +7,16 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- Scene selection. A new Selection tray lets you hand-pick which scenes the
+  exports act on instead of always taking the whole filter. Turn on `Pick scenes
+  on map` (sidebar button or the AOI toolbar toggle) and click footprints to add
+  or remove them; picked footprints render with a heavier dashed outline. Where
+  footprints overlap, the "N scenes here" picker becomes a checklist with an
+  `Add all N to selection` shortcut. The tray also offers `Add all filtered
+  scenes`, per-row removal, and `Clear selection`, and the scene detail panel
+  gains an add/remove button. Picks survive filter changes. Both the download
+  script and the STAC export use the selection when there is one, and fall back
+  to all filtered scenes when there isn't.
 - Data-format selector in the Export tray. The generated download script can now
   fetch a chosen format — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`,
   `CPHD` or `VID` — for every scene in the current filter, instead of only each
@@ -15,6 +25,10 @@ All notable changes to open-sar-triad are documented here. The format is based o
   that don't publish a selected format are skipped and the count is reported in
   the script header and the export hint. With no format selected the script is
   unchanged from before.
+
+### Fixed
+- The country picker and the new scene-selection mode now switch each other off
+  rather than both claiming map clicks.
 
 ### Changed
 - Scene/provider actions now open Radiant Earth STAC Browser sources instead of

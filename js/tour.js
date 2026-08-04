@@ -42,9 +42,16 @@
       before: function () { if (window.expandTray) window.expandTray('#recent-mod'); },
     },
     {
+      target: '#sel-mod',
+      title:  'Selection',
+      body:   'Hand-pick scenes to export: click footprints on the map, or add the whole filter in one go.',
+      pos:    'right',
+      before: function () { if (window.expandTray) window.expandTray('#sel-mod'); },
+    },
+    {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   'Export visible scenes, generate a download script for a chosen data format, or copy a shareable state link.',
+      body:   'Export your selection (or all visible scenes), generate a download script for a chosen data format, or copy a shareable state link.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#export-mod'); },
     },
@@ -153,7 +160,7 @@
     {
       target: '#export-mod',
       title:  'Export & Share',
-      body:   'Export, generate a script for a chosen data format, or copy a share link.',
+      body:   'Export your selection or all visible scenes, generate a script for a chosen data format, or copy a share link.',
       pos:    'top',
       before: function () {
         document.getElementById('app').classList.remove('collapsed');
