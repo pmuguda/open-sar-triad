@@ -506,7 +506,6 @@ function setSelectMode(on) {
   selectMode = on;
   document.body.classList.toggle('mode-select', on);
   const btn = document.getElementById('selPick');
-  btn.classList.toggle('is-active', on);
   btn.setAttribute('aria-pressed', String(on));
   if (on) {
     if (countryMode) setCountryMode(false);   // the two modes both own map clicks
@@ -524,7 +523,6 @@ function showIsolateHint() {
 function setIsolateSelection(on) {
   isolateSelection = on && selectedScenes.size > 0;
   const btn = document.getElementById('selIsolate');
-  btn.classList.toggle('is-active', isolateSelection);
   btn.setAttribute('aria-pressed', String(isolateSelection));
   render();
   if (isolateSelection && !selectMode) showIsolateHint();
@@ -536,14 +534,21 @@ function renderSelection() {
   const meta = document.getElementById('selMeta');
   const note = document.getElementById('sel-note');
   const list = document.getElementById('selList');
-  const addLabel = document.getElementById('selAddLabel');
   const isoBtn = document.getElementById('selIsolate');
   if (!list) return;
 
   const n = selectedScenes.size;
   if (meta) meta.textContent = n ? `${n.toLocaleString()} SCENE${n === 1 ? '' : 'S'}` : 'EMPTY';
-  if (addLabel) addLabel.textContent = `Add all filtered (${visible.length.toLocaleString()})`;
   if (isoBtn) isoBtn.disabled = !n;
+
+  // The dock is icon-only, so counts live in the tooltips and one small readout.
+  const addBtn = document.getElementById('selAddVisible');
+  const clrBtn = document.getElementById('selClear');
+  const dockCount = document.getElementById('selDockCount');
+  if (addBtn) addBtn.title = `Add all ${visible.length.toLocaleString()} filtered scenes to the download list`;
+  if (clrBtn) { clrBtn.disabled = !n; clrBtn.title = n ? `Clear the download list (${n.toLocaleString()})` : 'Download list is empty'; }
+  if (isoBtn) isoBtn.title = n ? `Show only the download list (${n.toLocaleString()}) on the map` : 'Add scenes before isolating them';
+  if (dockCount) dockCount.textContent = n ? `${n.toLocaleString()} IN LIST` : '';
 
   if (!n) {
     if (note) note.textContent =
@@ -1590,24 +1595,12 @@ function showDetail(p) {
       ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
   }
 
-  const picked = selectedScenes.has(p.id);
-  const selBtn = `<button class="detail-action-btn sel-toggle${picked ? ' is-picked' : ''}" id="sel-toggle" data-id="${esc(p.id)}">${
-    picked ? '✓ In selection' : '＋ Add to selection'}</button>`;
-
   document.getElementById('detail-content').innerHTML =
     `<div class="mod-h detail-h"><span class="ttl">Scene</span><span class="rule"></span><span class="meta">METADATA</span></div>
 <div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
-${formatBlock}<div class="detail-actions">${dl}${selBtn}${pv}</div>`;
-
-  document.getElementById('sel-toggle').addEventListener('click', e => {
-    const btn = e.currentTarget;
-    toggleSceneSelected(btn.dataset.id);
-    const on = selectedScenes.has(btn.dataset.id);
-    btn.classList.toggle('is-picked', on);
-    btn.textContent = on ? '✓ In selection' : '＋ Add to selection';
-  });
+${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
 
   if (products) {
     const chipsEl = document.querySelector('#detail-content .format-chips');
