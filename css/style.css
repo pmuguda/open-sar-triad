@@ -539,6 +539,7 @@ body {
 .tb-btn.country-on { color: var(--amber); background: oklch(0.75 0.16 70 / .1); border-color: oklch(0.75 0.16 70 / .4); }
 .tb-btn.country-active { color: oklch(0.75 0.16 70); border-color: oklch(0.75 0.16 70 / .4); }
 .tb-btn.tb-clear:hover { color: oklch(0.65 0.22 20); }
+.tb-btn.select-on { color: var(--accent); background: var(--accent-2); border-color: var(--accent); }
 .tb-divider { width: 1px; height: 14px; background: var(--line); margin: 0 2px; }
 
 /* ── Hint banner ── */
@@ -824,6 +825,33 @@ body.detail-collapsed #detail-toggle { right: 0; }
 }
 .picker-sub { font-size: 9.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .picker-more { font-size: 9.5px; color: var(--ink-3); padding: 7px 12px; border-top: 1px solid var(--line); }
+.picker-body { flex: 1; }
+.picker-check { font-family: var(--font-mono); font-size: 11px; color: var(--accent); flex-shrink: 0; }
+.picker-row.is-picked { background: var(--accent-2); }
+.picker-bulk {
+  display: block; width: 100%; font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: .08em; text-transform: uppercase; padding: 8px 12px;
+  background: none; border: 0; border-top: 1px solid var(--line);
+  color: var(--accent); cursor: pointer; text-align: left;
+}
+.picker-bulk:hover { background: var(--accent-2); }
+
+/* ── Scene selection tray ── */
+.sel-list { margin-top: 8px; }
+.sel-row { padding: 0; gap: 0; }
+.sel-open {
+  display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0;
+  padding: 7px 8px; background: none; border: 0; text-align: left;
+  cursor: pointer; color: var(--ink);
+}
+.sel-remove {
+  flex-shrink: 0; width: 26px; align-self: stretch;
+  background: none; border: 0; border-left: 1px solid var(--line);
+  color: var(--ink-3); cursor: pointer; font-size: 11px; line-height: 1;
+}
+.sel-remove:hover { color: oklch(0.65 0.22 20); background: var(--bg-3); }
+.btn.ghost.is-active { border-color: var(--accent); color: var(--accent); }
+.detail-action-btn.sel-toggle.is-picked { border-color: var(--accent); color: var(--accent); }
 
 /* ── Loading overlay (scan bar) ── */
 #loading {
