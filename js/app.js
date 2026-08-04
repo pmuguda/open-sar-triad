@@ -31,6 +31,21 @@ let recentProvider = null; // 'iceye' | 'umbra' | 'capella' | null — tab filte
 const exportFormats = new Set();
 // Canonical display order across all providers; unknown labels sort after these.
 const FORMAT_ORDER = ['GRD', 'GEC', 'GEO', 'SLC', 'CSI', 'SICD', 'SIDD', 'CPHD', 'VID'];
+
+// Providers name the same product differently — asking for "SLC" returns nothing
+// from Umbra even though all 11,892 of its scenes carry complex data as SICD.
+// Group by what the product *is* (SICD/SIDD/CPHD are NGA sensor-independent
+// standards; Capella documents its own catalogue as detected vs complex) and
+// resolve to each provider's equivalent, preferred product first.
+const FAMILIES = [
+  { key: 'detected', label: 'Detected imagery',   order: ['GEO', 'GRD', 'GEC', 'SIDD'] },
+  { key: 'complex',  label: 'Complex (SLC-type)', order: ['SLC', 'SICD'] },
+  { key: 'phase',    label: 'Phase history',      order: ['CPHD'] },
+  { key: 'visual',   label: 'Visual extras',      order: ['CSI', 'VID'] },
+];
+const exportFamilies = new Set();   // multi-select, same shape as exportFormats
+let formatMode = 'family';          // 'family' | 'exact' — which control drives the export
+const sceneFormat = new Map();      // scene id → format pinned from its row badge
 let catalogFormats = [];   // union of formats present in the catalog, ordered
 
 // Hand-picked scenes. When non-empty the exports use these instead of the
@@ -542,6 +557,16 @@ function renderSelection() {
     const picked = allFeatures.filter(f => selectedScenes.has(f.properties.id));
     const rows = picked.slice(0, CAP).map(f => {
       const p = f.properties;
+      // One badge per row, whatever the list length: it shows which concrete
+      // product this scene will contribute, which is also how the reader learns
+      // that ICEYE's GRD and Umbra's GEC are the same request.
+      const fmts = sceneFormats(f);
+      const pinned = sceneFormat.has(p.id);
+      const badge = fmts.length
+        ? `<button class="sel-fmt${pinned ? ' is-pinned' : ''}" data-sel-fmt="${esc(p.id)}"
+             title="${pinned ? 'Pinned to' : 'Will download'} ${esc(fmts.join(', '))} — click to change">${
+             esc(fmts[0])}${fmts.length > 1 ? `<span class="sel-fmt-more">+${fmts.length - 1}</span>` : ''}</button>`
+        : `<button class="sel-fmt is-empty" data-sel-fmt="${esc(p.id)}" title="This scene publishes none of the selected formats — click to choose one">—</button>`;
       return `<div class="recent-row sel-row" data-sel-hover="${esc(p.id)}">
         <button class="sel-open" data-sel-open="${esc(p.id)}">
           <span class="recent-dot" style="background:${PROVIDER_COLORS[p.provider]}"></span>
@@ -549,7 +574,7 @@ function renderSelection() {
             <span class="recent-id">${esc(p.id || '—')}</span>
             <span class="recent-sub">${esc(p.provider_label)} · ${esc(p.date || 'undated')} · ${esc(p.sensor_mode || '—')}</span>
           </span>
-        </button>
+        </button>${badge}
         <button class="sel-remove" data-sel-remove="${esc(p.id)}" title="Remove from list" aria-label="Remove ${esc(p.id)}">✕</button>
       </div>`;
     }).join('');
@@ -583,7 +608,60 @@ document.getElementById('selClear').addEventListener('click', () => {
   showToast('Download list cleared');
 });
 
+// Per-scene format override. Opens under the badge listing only what this scene
+// actually publishes, so it can never offer an unavailable product.
+function openFormatPopover(badge, id) {
+  closeFormatPopover();
+  const feat = allFeatures.find(f => f.properties.id === id);
+  if (!feat) return;
+  const fmts = feat._fmtList || [];
+  if (!fmts.length) return;
+  const pinned = sceneFormat.get(id);
+  const dflt = defaultFormats(feat);
+  const pop = document.createElement('div');
+  pop.className = 'sel-fmt-pop';
+  pop.innerHTML =
+    `<div class="format-label">Download as</div>
+     <div class="format-chips">${
+       FORMAT_ORDER.filter(f => fmts.includes(f)).map(f =>
+         chipHtml(f, f, pinned === f, 1, `Download ${f} for this scene`, 'data-pin')).join('')}</div>
+     <button class="sel-fmt-clear" data-pin-clear>${
+       pinned ? `Use default${dflt.length ? ` (${esc(dflt[0])})` : ''}` : 'Following the list default'}</button>`;
+  badge.insertAdjacentElement('afterend', pop);
+  pop.dataset.for = id;
+}
+function closeFormatPopover() {
+  document.querySelector('.sel-fmt-pop')?.remove();
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.sel-fmt-pop') && !e.target.closest('[data-sel-fmt]')) closeFormatPopover();
+}, true);
+
 document.getElementById('selList').addEventListener('click', e => {
+  const pin = e.target.closest('[data-pin]');
+  if (pin) {
+    const id = pin.closest('.sel-fmt-pop').dataset.for;
+    if (sceneFormat.get(id) === pin.dataset.pin) sceneFormat.delete(id);
+    else sceneFormat.set(id, pin.dataset.pin);
+    closeFormatPopover();
+    refreshFormatUi();
+    return;
+  }
+  if (e.target.closest('[data-pin-clear]')) {
+    const id = e.target.closest('.sel-fmt-pop').dataset.for;
+    sceneFormat.delete(id);
+    closeFormatPopover();
+    refreshFormatUi();
+    return;
+  }
+  const badge = e.target.closest('[data-sel-fmt]');
+  if (badge) {
+    const id = badge.dataset.selFmt;
+    if (document.querySelector('.sel-fmt-pop')?.dataset.for === id) closeFormatPopover();
+    else openFormatPopover(badge, id);
+    return;
+  }
+  closeFormatPopover();
   const remove = e.target.closest('[data-sel-remove]');
   if (remove) { setSceneSelected(remove.dataset.selRemove, false); return; }
   const open = e.target.closest('[data-sel-open]');
@@ -624,6 +702,38 @@ function selectedFormats() {
     .concat([...exportFormats].filter(f => !FORMAT_ORDER.includes(f)).sort());
 }
 
+const selectedFamilies = () => FAMILIES.filter(f => exportFamilies.has(f.key));
+
+// The format a scene contributes for a family: its preferred product, falling
+// back to whatever equivalent that provider actually publishes.
+function resolveFamily(feat, fam) {
+  return fam.order.find(f => feat._fmtUrls[f]) || null;
+}
+
+// What a scene contributes from the list-wide choice alone, ignoring any pin.
+function defaultFormats(feat) {
+  if (formatMode === 'exact') return selectedFormats().filter(f => feat._fmtUrls[f]);
+  const out = [];
+  selectedFamilies().forEach(fam => {
+    const f = resolveFamily(feat, fam);
+    if (f && !out.includes(f)) out.push(f);   // two families can resolve alike
+  });
+  return out;
+}
+
+// Every format a scene will contribute, in emit order. A per-scene pin from the
+// row badge wins outright — that is what makes precision on a handful of scenes
+// possible without abandoning the bulk default.
+function sceneFormats(feat) {
+  const pinned = sceneFormat.get(feat.properties.id);
+  if (pinned && feat._fmtUrls[pinned]) return [pinned];
+  return defaultFormats(feat);
+}
+
+// True when nothing is chosen at all, so the script falls back to primary assets.
+const usingPrimaryAsset = () =>
+  formatMode === 'exact' ? !exportFormats.size : !exportFamilies.size;
+
 // Metadata sidecar published next to a data asset. Verified against the three
 // open-data buckets: ICEYE ships .xml for the NITF products (SICD/SIDD) and
 // .json for the rest, Capella ships one _extended.json per COG product, and
@@ -651,8 +761,9 @@ function metadataUrl(provider, assetUrl) {
 // Expand the visible scenes into the concrete files the script should fetch.
 // Shared by the hint and the generator so the two can never disagree.
 function collectDownloadJobs(visible) {
-  const formats = selectedFormats();
+  const primary = usingPrimaryAsset() && !sceneFormat.size;
   const byProvider = { iceye: [], umbra: [], capella: [] };
+  const emitted = new Set();      // format labels actually used, for the header
   let scenes = 0, files = 0, skipped = 0;
 
   visible.forEach(feat => {
@@ -660,18 +771,21 @@ function collectDownloadJobs(visible) {
     const bucket = byProvider[p.provider];
     if (!bucket) { skipped++; return; }
 
-    if (!formats.length) {
+    if (primary) {
       if (feat._dlUrl) { bucket.push({ p, fmt: null, url: feat._dlUrl }); scenes++; files++; }
       else skipped++;
       return;
     }
 
-    const hits = formats.filter(f => feat._fmtUrls[f]);
+    const hits = sceneFormats(feat);
     if (!hits.length) { skipped++; return; }
-    hits.forEach(f => bucket.push({ p, fmt: f, url: feat._fmtUrls[f] }));
+    hits.forEach(f => { bucket.push({ p, fmt: f, url: feat._fmtUrls[f] }); emitted.add(f); });
     scenes++;
     files += hits.length;
   });
+
+  const formats = FORMAT_ORDER.filter(f => emitted.has(f))
+    .concat([...emitted].filter(f => !FORMAT_ORDER.includes(f)).sort());
 
   // Group each provider's files by format (stable sort keeps scene order within
   // a format) so a multi-format script reads as one section per format.
@@ -697,34 +811,56 @@ function collectDownloadJobs(visible) {
   return { formats, byProvider, scenes, files, skipped, metaFiles, metaMissing };
 }
 
+function chipHtml(value, label, active, count, title, attr = 'data-fmt') {
+  return `<button type="button" class="fmt-chip${active ? ' is-active' : ''}${count === 0 ? ' is-empty' : ''}"` +
+    ` ${attr}="${esc(value)}" aria-pressed="${active}"${count === 0 ? ' disabled' : ''}` +
+    ` title="${esc(title)}">${esc(label)}</button>`;
+}
+
 function renderExportFormats(visible) {
-  const wrap = document.getElementById('export-fmt');
+  const wrap = document.getElementById('dl-format');
+  const fams = document.getElementById('dl-family-chips');
   const row  = document.getElementById('export-fmt-chips');
-  if (!wrap || !row) return;
+  const more = document.getElementById('dl-exact-toggle');
+  if (!wrap || !fams || !row || !more) return;
   if (!catalogFormats.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
 
+  // Family counts are per scene, not per format: a scene counts once for a
+  // family however many of that family's formats it happens to publish.
+  const famCounts = new Map(FAMILIES.map(f => [f.key, 0]));
   const counts = new Map(catalogFormats.map(f => [f, 0]));
   visible.forEach(feat => {
-    (feat._fmtList || []).forEach(f => {
-      if (counts.has(f)) counts.set(f, counts.get(f) + 1);
-    });
+    (feat._fmtList || []).forEach(f => { if (counts.has(f)) counts.set(f, counts.get(f) + 1); });
+    FAMILIES.forEach(fam => { if (resolveFamily(feat, fam)) famCounts.set(fam.key, famCounts.get(fam.key) + 1); });
   });
 
-  const chip = (fmt, label, active, count, title) =>
-    `<button type="button" class="fmt-chip${active ? ' is-active' : ''}${count === 0 ? ' is-empty' : ''}"` +
-    ` data-fmt="${esc(fmt)}" aria-pressed="${active}"${count === 0 ? ' disabled' : ''}` +
-    ` title="${esc(title)}">${esc(label)}</button>`;
+  fams.innerHTML = [
+    chipHtml('', 'ALL', exportFamilies.size === 0, visible.length,
+             'Each scene’s primary asset (default)', 'data-fam'),
+    ...FAMILIES.map(fam => {
+      const n = famCounts.get(fam.key);
+      return chipHtml(fam.key, `${fam.label} · ${n.toLocaleString()}`, exportFamilies.has(fam.key), n,
+        n ? `${n.toLocaleString()} scene(s) can supply ${fam.label} — ${fam.order.join(' → ')}`
+          : `No scene here publishes ${fam.label}`, 'data-fam');
+    }),
+  ].join('');
 
-  const chips = [
-    chip('', 'ALL', exportFormats.size === 0, visible.length,
-         'Each scene’s primary asset (default)'),
-    ...catalogFormats.map(f => chip(
+  row.innerHTML = [
+    chipHtml('', 'ALL', exportFormats.size === 0, visible.length,
+             'Each scene’s primary asset (default)'),
+    ...catalogFormats.map(f => chipHtml(
       f, `${f} · ${counts.get(f).toLocaleString()}`, exportFormats.has(f), counts.get(f),
-      counts.get(f) ? `${counts.get(f).toLocaleString()} visible scene(s) publish ${f}`
-                    : `No visible scene publishes ${f}`)),
-  ];
-  row.innerHTML = chips.join('');
+      counts.get(f) ? `${counts.get(f).toLocaleString()} scene(s) publish ${f}`
+                    : `No scene here publishes ${f}`)),
+  ].join('');
+
+  const exact = formatMode === 'exact';
+  row.hidden = !exact;
+  fams.hidden = exact;
+  more.setAttribute('aria-expanded', String(exact));
+  more.textContent = exact ? 'Use product families' : 'Exact formats';
+  more.classList.toggle('is-active', exact);
 }
 
 // ── Download count hint ────────────────────────────────────
@@ -1880,6 +2016,22 @@ function shQuote(value) {
 }
 
 // Chip row: toggle which data formats the script should fetch.
+// Redraw the format controls, the hint and the per-row badges together — they
+// all describe the same choice.
+function refreshFormatUi() {
+  renderSelection();   // rebuilds the rows/badges, then the chips and the hint
+}
+
+document.getElementById('dl-family-chips').addEventListener('click', e => {
+  const chip = e.target.closest('.fmt-chip');
+  if (!chip || chip.disabled) return;
+  const fam = chip.dataset.fam;
+  if (!fam) exportFamilies.clear();                                  // the ALL chip
+  else if (exportFamilies.has(fam)) exportFamilies.delete(fam);
+  else exportFamilies.add(fam);
+  refreshFormatUi();
+});
+
 document.getElementById('export-fmt-chips').addEventListener('click', e => {
   const chip = e.target.closest('.fmt-chip');
   if (!chip || chip.disabled) return;
@@ -1887,10 +2039,15 @@ document.getElementById('export-fmt-chips').addEventListener('click', e => {
   if (!fmt) exportFormats.clear();                                   // the ALL chip
   else if (exportFormats.has(fmt)) exportFormats.delete(fmt);
   else exportFormats.add(fmt);
+  refreshFormatUi();
+});
 
-  const visible = getExportFeatures();
-  renderExportFormats(visible);
-  updateDownloadCount(visible);
+// Switching modes clears the other one's selection, so the two controls can
+// never hold conflicting state behind a collapsed disclosure.
+document.getElementById('dl-exact-toggle').addEventListener('click', () => {
+  formatMode = formatMode === 'exact' ? 'family' : 'exact';
+  if (formatMode === 'exact') exportFamilies.clear(); else exportFormats.clear();
+  refreshFormatUi();
 });
 
 document.querySelector('[data-export="script"]').addEventListener('click', () => {

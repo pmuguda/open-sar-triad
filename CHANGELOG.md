@@ -7,6 +7,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Product families** replace the raw format row, and the control moved out of the
+  Export tray to sit under the download list where the scenes are. Pick
+  `Detected imagery`, `Complex (SLC-type)`, `Phase history` or `Visual extras`
+  and every scene contributes its own provider's equivalent product. This fixes
+  a real hole: asking for `SLC` by name returned **zero** Umbra scenes, even
+  though all 11,892 carry complex data as `SICD`. Resolution is preferred-first
+  with fallback — Detected prefers `GEO` (terrain corrected), falling back to
+  `GRD` for ICEYE and `GEC` for Umbra; Complex prefers `SLC`, falling back to
+  `SICD` for Umbra — so each scene yields one file per family rather than
+  near-duplicates.
+- Per-scene format badge on every download-list row, showing the concrete
+  product that scene will contribute. Clicking it pins a different format for
+  that one scene, from only what that scene actually publishes; `Use default`
+  clears the pin. One badge per row, so it reads the same at 3 rows or 300.
+- `Exact formats` disclosure keeps the original nine-format row for when a
+  specific product is required. Switching between the two modes clears the
+  other's selection, so they can never hold conflicting state.
 - Scene selection, via a **Download list** tray. Hand-pick which scenes the
   exports act on instead of always taking the whole filter: `Click map to add`
   turns map clicks into add/remove, `Add all filtered (N)` takes the current
@@ -24,13 +41,12 @@ All notable changes to open-sar-triad are documented here. The format is based o
   the "N scenes here" overlap picker lights up that footprint and lifts it above
   its neighbours, so choosing between stacked, near-identical scene IDs no longer
   relies on guesswork.
-- Data-format selector in the Export tray. The generated download script can
-  fetch a chosen format — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`,
-  `CPHD` or `VID` — for every scene, instead of only each scene's primary asset.
-  Several formats can be selected at once; chips report how many scenes publish
-  each format and disable when none do. Scenes that don't publish a selected
-  format are skipped and counted in the script header and the export hint. With
-  no format selected the script is unchanged from before.
+- Data-format selection for the download script. It can fetch a chosen product —
+  `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD` or `VID` — for every
+  scene, instead of only each scene's primary asset. Several can be selected at
+  once; chips report how many scenes publish each and disable when none do.
+  Scenes publishing none of them are skipped and counted in the script header and
+  the export hint. With nothing selected the script is unchanged from before.
 - Metadata sidecars in the download script. Every data file is now fetched with
   the metadata the provider publishes beside it, into the same directory: `.xml`
   for ICEYE SICD/SIDD, `.json` for ICEYE's other formats and for Capella

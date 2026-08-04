@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=download-list-1" />
+  <link rel="stylesheet" href="css/style.css?v=families-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -187,6 +187,14 @@
             Clear list
           </button>
           <div class="recent-list sel-list" id="selList"></div>
+
+          <div class="format-select dl-format" id="dl-format">
+            <div class="format-label">Data to download</div>
+            <div class="format-chips" id="dl-family-chips" role="group" aria-label="Product families"></div>
+            <button class="fmt-more" id="dl-exact-toggle" type="button" aria-expanded="false" aria-controls="export-fmt-chips">Exact formats</button>
+            <div class="format-chips fmt-exact" id="export-fmt-chips" role="group" aria-label="Exact data formats" hidden></div>
+            <p id="dl-count" class="export-note"></p>
+          </div>
         </div>
       </div>
 
@@ -200,15 +208,10 @@
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" stroke="currentColor" stroke-width="1.3"/><line x1="2" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="1.1"/><line x1="6" y1="6" x2="6" y2="14" stroke="currentColor" stroke-width="1.1"/></svg></span>
             Export as STAC collection
           </button>
-          <div class="format-select export-fmt" id="export-fmt" hidden>
-            <div class="format-label">Download script format</div>
-            <div class="format-chips" id="export-fmt-chips" role="group" aria-label="Data formats for the download script"></div>
-          </div>
           <button class="btn ghost" data-export="script">
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M5 4 2 8l3 4M11 4l3 4-3 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
             Generate download script
           </button>
-          <p id="dl-count" class="export-note"></p>
           <button class="btn ghost" data-export="link">
             <span class="gi"><svg viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5 9.5 6.5M7 4l1-1a3 3 0 0 1 4 4l-1 1M9 12l-1 1a3 3 0 0 1-4-4l1-1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
             Copy share link
@@ -391,7 +394,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=download-list-1"></script>
-<script src="js/tour.js?v=tour-v10"></script>
+<script src="js/app.js?v=families-1"></script>
+<script src="js/tour.js?v=tour-v11"></script>
 </body>
 </html>
