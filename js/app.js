@@ -539,15 +539,22 @@ function renderSelection() {
 
   const n = selectedScenes.size;
   if (meta) meta.textContent = n ? `${n.toLocaleString()} SCENE${n === 1 ? '' : 'S'}` : 'EMPTY';
-  if (isoBtn) isoBtn.disabled = !n;
 
   // The dock is icon-only, so counts live in the tooltips and one small readout.
   const addBtn = document.getElementById('selAddVisible');
   const clrBtn = document.getElementById('selClear');
   const dockCount = document.getElementById('selDockCount');
+  // aria-disabled rather than disabled: the control keeps focus and keeps
+  // announcing its name, and clicking it can say why nothing happened.
+  const softDisable = (el, off, label) => {
+    if (!el) return;
+    el.setAttribute('aria-disabled', String(off));
+    el.classList.toggle('is-off', off);
+    el.title = label;
+  };
   if (addBtn) addBtn.title = `Add all ${visible.length.toLocaleString()} filtered scenes to the download list`;
-  if (clrBtn) { clrBtn.disabled = !n; clrBtn.title = n ? `Clear the download list (${n.toLocaleString()})` : 'Download list is empty'; }
-  if (isoBtn) isoBtn.title = n ? `Show only the download list (${n.toLocaleString()}) on the map` : 'Add scenes before isolating them';
+  softDisable(clrBtn, !n, n ? `Clear the download list (${n.toLocaleString()})` : 'Download list is empty');
+  softDisable(isoBtn, !n, n ? `Show only the download list (${n.toLocaleString()}) on the map` : 'Add scenes to the list first');
   if (dockCount) dockCount.textContent = n ? `${n.toLocaleString()} IN LIST` : '';
 
   if (!n) {
@@ -570,6 +577,7 @@ function renderSelection() {
       const badge = fmts.length
         ? `<button class="sel-fmt${pinned ? ' is-pinned' : ''}" data-sel-fmt="${esc(p.id)}"
              title="${pinned ? 'Pinned to' : 'Will download'} ${esc(fmts.join(', '))} — click to change">${
+             pinned ? '<span class="sel-fmt-pin" aria-hidden="true">◆</span>' : ''}${
              esc(fmts[0])}${fmts.length > 1 ? `<span class="sel-fmt-more">+${fmts.length - 1}</span>` : ''}</button>`
         : `<button class="sel-fmt is-empty" data-sel-fmt="${esc(p.id)}" title="This scene publishes none of the selected formats — click to choose one">—</button>`;
       return `<div class="recent-row sel-row" data-sel-hover="${esc(p.id)}">
@@ -595,7 +603,10 @@ function renderSelection() {
 }
 
 document.getElementById('selPick').addEventListener('click', () => setSelectMode(!selectMode));
-document.getElementById('selIsolate').addEventListener('click', () => setIsolateSelection(!isolateSelection));
+document.getElementById('selIsolate').addEventListener('click', () => {
+  if (!selectedScenes.size) { showToast('Add scenes to the download list first'); return; }
+  setIsolateSelection(!isolateSelection);
+});
 
 document.getElementById('selAddVisible').addEventListener('click', () => {
   const visible = getVisibleFeatures();
@@ -606,7 +617,7 @@ document.getElementById('selAddVisible').addEventListener('click', () => {
 });
 
 document.getElementById('selClear').addEventListener('click', () => {
-  if (!selectedScenes.size) return;
+  if (!selectedScenes.size) { showToast('Download list is already empty'); return; }
   selectedScenes.clear();
   if (isolateSelection) setIsolateSelection(false);   // nothing left to isolate
   else render();
@@ -634,9 +645,22 @@ function openFormatPopover(badge, id) {
        pinned ? `Use default${dflt.length ? ` (${esc(dflt[0])})` : ''}` : 'Following the list default'}</button>`;
   badge.insertAdjacentElement('afterend', pop);
   pop.dataset.for = id;
+  // Keyboard users could open this and get stranded: move focus in, and let
+  // Escape close it and hand focus back to the badge that opened it.
+  pop.querySelector('.fmt-chip')?.focus();
+  pop.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    closeFormatPopover();
+    badge.focus();
+  });
 }
-function closeFormatPopover() {
-  document.querySelector('.sel-fmt-pop')?.remove();
+function closeFormatPopover(restoreTo) {
+  const pop = document.querySelector('.sel-fmt-pop');
+  if (!pop) return;
+  const held = pop.contains(document.activeElement);
+  pop.remove();
+  if (held || restoreTo) (restoreTo || document.querySelector('[data-sel-fmt]'))?.focus();
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.sel-fmt-pop') && !e.target.closest('[data-sel-fmt]')) closeFormatPopover();
@@ -650,6 +674,7 @@ document.getElementById('selList').addEventListener('click', e => {
     else sceneFormat.set(id, pin.dataset.pin);
     closeFormatPopover();
     refreshFormatUi();
+    document.querySelector(`[data-sel-fmt="${CSS.escape(id)}"]`)?.focus();
     return;
   }
   if (e.target.closest('[data-pin-clear]')) {
@@ -657,6 +682,7 @@ document.getElementById('selList').addEventListener('click', e => {
     sceneFormat.delete(id);
     closeFormatPopover();
     refreshFormatUi();
+    document.querySelector(`[data-sel-fmt="${CSS.escape(id)}"]`)?.focus();
     return;
   }
   const badge = e.target.closest('[data-sel-fmt]');
@@ -841,8 +867,8 @@ function renderExportFormats(visible) {
   });
 
   fams.innerHTML = [
-    chipHtml('', 'ALL', exportFamilies.size === 0, visible.length,
-             'Each scene’s primary asset (default)', 'data-fam'),
+    chipHtml('', 'PRIMARY', exportFamilies.size === 0, visible.length,
+             'Each scene’s primary asset — the default when no family is chosen', 'data-fam'),
     ...FAMILIES.map(fam => {
       const n = famCounts.get(fam.key);
       return chipHtml(fam.key, `${fam.label} · ${n.toLocaleString()}`, exportFamilies.has(fam.key), n,
@@ -852,8 +878,8 @@ function renderExportFormats(visible) {
   ].join('');
 
   row.innerHTML = [
-    chipHtml('', 'ALL', exportFormats.size === 0, visible.length,
-             'Each scene’s primary asset (default)'),
+    chipHtml('', 'PRIMARY', exportFormats.size === 0, visible.length,
+             'Each scene’s primary asset — the default when no format is chosen'),
     ...catalogFormats.map(f => chipHtml(
       f, `${f} · ${counts.get(f).toLocaleString()}`, exportFormats.has(f), counts.get(f),
       counts.get(f) ? `${counts.get(f).toLocaleString()} scene(s) publish ${f}`
