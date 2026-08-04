@@ -56,10 +56,20 @@ All notable changes to open-sar-triad are documented here. The format is based o
   script header.
 
 ### Changed
+- The download-list actions are now an icon dock **on the map**, sitting directly
+  beneath the scene-preview controls, instead of four full-width labelled buttons
+  in the sidebar tray. Counts moved into the tooltips, with a compact
+  `N IN LIST` readout beside the icons. The tray keeps the scene list and the
+  format control.
+
 - Scene/provider actions now open Radiant Earth STAC Browser sources instead of
   retired or generic provider pages. ICEYE and Umbra links resolve to scene-level
   STAC items when their IDs/assets allow it; Capella links to the live Capella STAC
   catalog root.
+
+### Removed
+- The `Add to selection` button in the scene detail panel. Pick mode on the map,
+  the overlap checklist and the download-list tray already cover it.
 
 ### Fixed
 - The download script could silently overwrite files. Umbra republishes some

@@ -44,7 +44,7 @@
     {
       target: '#sel-mod',
       title:  'Download list',
-      body:   'Hand-pick what to export: click footprints on the map or add the whole filter at once, then choose which product family to download.',
+      body:   'Hand-pick what to export. The icon dock at the map’s top-left adds scenes, isolates the list, or clears it; choose the product family here.',
       pos:    'right',
       before: function () { if (window.expandTray) window.expandTray('#sel-mod'); },
     },

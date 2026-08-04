@@ -78,7 +78,7 @@ The three providers represented in this tool each operate public open data progr
 - Leaflet map with a CartoDB dark basemap
 - Scene footprints rendered as colored polygons, one per acquisition
 - Home button clears AOI/country filters and returns the map to the opening world view
-- Clickable scenes open a detail panel with full scene metadata, STAC Browser/provider links, and direct download actions
+- Clickable scenes open a detail panel with full scene metadata, STAC Browser/provider links, and a direct download action
 - Where several footprints overlap the same spot, a click opens a "N scenes here" picker to choose among the stacked acquisitions instead of only the topmost
 
 **Scene previews**
@@ -112,10 +112,11 @@ The three providers represented in this tool each operate public open data progr
 - Skipped automatically when opening a shared link (recipient lands directly on the filtered view)
 - Skip or replay via the `?` button in the bottom-right corner
 
-**Download list** — collapsible Download list tray in the sidebar
-- Hand-pick the scenes to export instead of taking the whole filter. `Click map to add` turns map clicks into add/remove; picked footprints are drawn with a heavier dashed outline and a denser fill
-- `Show only these on map` hides everything else so the map shows just your list — including picks the current filter excludes. Coverage numbers and stats keep describing the filter, and a banner says so while it is on
-- `Add all filtered (N)` takes the current filter in one click; the tray lists every pick with a per-row remove, and `Clear list` empties it
+**Download list** — an icon dock on the map, plus the Download list tray in the sidebar
+- Four icon controls sit on the map at top-left, directly beneath the scene-preview controls: **add by clicking** (turns map clicks into add/remove), **show only these on map**, **add all filtered**, and **clear list**. Counts live in the tooltips, with an `N IN LIST` readout beside them
+- Picked footprints are drawn with a heavier dashed outline and a denser fill
+- **Show only these on map** hides everything else so the map shows just your list — including picks the current filter excludes. Coverage numbers and stats keep describing the filter, and a banner says so while it is on
+- The sidebar tray lists every pick with a per-row remove, plus the format control
 - Hovering a row — in the list or in the "N scenes here" overlap picker — lights up that footprint on the map and lifts it above its neighbours, so picking from a deep stack of near-identical scene IDs is no longer guesswork
 - Where footprints overlap, the "N scenes here" picker turns into a checklist with an `Add all N to the download list` shortcut
 - Picks survive filter changes — narrow the map freely without losing your list
