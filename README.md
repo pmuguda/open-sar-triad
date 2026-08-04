@@ -45,6 +45,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Architecture](#architecture)
 - [Data Pipeline](#data-pipeline)
 - [Filter Reference](#filter-reference)
+- [Product families](#product-families)
 - [Metadata sidecars](#metadata-sidecars)
 - [Local Development](#local-development)
 - [Deployment](#deployment)
@@ -119,11 +120,11 @@ The three providers represented in this tool each operate public open data progr
 - Where footprints overlap, the "N scenes here" picker turns into a checklist with an `Add all N to the download list` shortcut
 - Picks survive filter changes — narrow the map freely without losing your list
 - With an empty list, both exports fall back to all filtered scenes
+- **Data to download** sits under the list: pick one or more product families and every scene contributes its provider's equivalent (see [Product families](#product-families)). Each row shows a badge of the concrete product it will contribute — `GRD`, `GEC`, `SICD` … — and clicking that badge pins a different format for that one scene. An `Exact formats` disclosure swaps the families for the raw nine-format row when a specific product is required
 
 **Export & Share** — collapsible Export tray in the sidebar
 - Export the selected scenes — or all currently visible scenes when nothing is selected — as a STAC-compliant GeoJSON collection
 - Generate a bash download script for the selected scenes (or all filtered scenes) that saves assets into `iceye/`, `umbra/`, and `capella/` subdirectories (with `--dry-run` support)
-- Pick which data format(s) that script should fetch — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`, `CPHD`, `VID` — instead of downloading each scene's primary asset one at a time from the detail panel. Chips show how many scenes publish each format and grey out when none do; picking several formats is allowed, and the script then writes to `<provider>/<FORMAT>/`
 - Every data file is downloaded with the metadata sidecar the provider publishes next to it, saved into the same directory (see [Metadata sidecars](#metadata-sidecars))
 - Copy a shareable link that encodes the full filter state and map view into the URL hash — recipients open the exact same view
 
@@ -235,7 +236,10 @@ Key global state managed by `app.js`:
 | `selectedScenes` | Scene ids hand-picked for export; empty means "use the filter" |
 | `selectMode` | When true, map clicks toggle selection instead of opening the detail panel |
 | `isolateSelection` | When true, the map draws only the download list (counts still describe the filter) |
-| `exportFormats` | Data formats the download script should fetch; empty means each scene's primary asset |
+| `exportFamilies` | Product families the download script should fetch; empty means each scene's primary asset |
+| `exportFormats` | Exact data formats, used when `formatMode` is `'exact'` |
+| `formatMode` | `'family'` or `'exact'` — which control drives the export |
+| `sceneFormat` | Per-scene format pins set from a download-list row badge; a pin wins over the family choice |
 | `lookFilter` | Active look-direction filter: `''` (all), `'left'`, or `'right'` |
 
 Key functions in `app.js`:
@@ -254,7 +258,9 @@ Key functions in `app.js`:
 | `highlightScene()` | Lights up one footprint and lifts it above its neighbours, for list hover feedback |
 | `renderSelection()` | Rebuilds the Download list tray and refreshes the export format chips and download hint |
 | `setSelectMode()` | Switches map clicks between opening the detail panel and toggling selection |
-| `renderExportFormats()` | Rebuilds the Export tray format chips with per-format counts for the current filter state |
+| `renderExportFormats()` | Rebuilds the family chips and the exact-format row with counts for the current export set |
+| `resolveFamily()` | The format a scene contributes for a family: preferred product, else that provider's equivalent |
+| `sceneFormats()` | Every format a scene will contribute — its pin if set, otherwise the family/exact choice |
 | `collectDownloadJobs()` | Expands the visible scenes into the concrete files the download script should fetch |
 | `updateModes()` | Renders the stacked sensor-mode breakdown |
 | `showDetail()` | Populates the right-side `05 Scene` detail panel with scene metadata, provider/product links, and format-specific downloads |
@@ -358,6 +364,37 @@ https://pmuguda.github.io/open-sar-triad#from=2024-01-01&to=2025-06-01&mode=spot
 ```
 
 Clicking **Copy Share Link** in the Export panel copies the current URL to the clipboard. Opening a shared URL restores all filters immediately: bbox AOIs redraw as visible rectangles, selected countries are highlighted after country boundaries load, and date range is applied after the timeline initializes. The onboarding tour is suppressed when a shared URL is detected so the recipient lands directly on the filtered view.
+
+---
+
+## Product families
+
+Each provider has its own name for the same product, so asking for `SLC` by name returns
+**nothing** from Umbra — even though all 11,892 of its scenes carry complex data, labelled
+`SICD`. The download control therefore groups by what the product *is* and resolves to each
+provider's equivalent, preferred product first.
+
+| Family | ICEYE | Umbra | Capella | Resolution order |
+|--------|-------|-------|---------|------------------|
+| Detected imagery | 373 | 11,892 | 2,364 | `GEO` → `GRD` → `GEC` → `SIDD` |
+| Complex (SLC-type) | 364 | 11,892 | 2,283 | `SLC` → `SICD` |
+| Phase history | 6 | 11,892 | 1,174 | `CPHD` |
+| Visual extras | 264 | 11,892 | 12 | `CSI` → `VID` |
+
+*(Scene counts from the current catalog; every family covers every provider.)*
+
+A scene contributes **one file per family** — the order picks the preferred product and falls
+back rather than downloading near-duplicates. Detected prefers `GEO` (terrain corrected via
+DEM); ICEYE publishes no `GEO` so it resolves to `GRD`, and Umbra to `GEC`. Complex prefers
+`SLC`; Umbra publishes none, so it resolves to `SICD`.
+
+The grouping follows the domain rather than inventing one: `SICD`, `SIDD` and `CPHD` are NGA
+standards defined to be sensor-independent, and Capella documents its own catalogue as
+detected versus complex. `CPHD` is kept separate from complex here because it is
+pre-image-formation and far larger; `CSI`/`VID` are visualisation derivatives.
+
+Per-scene overrides (the badge on each download-list row) and the `Exact formats` disclosure
+both bypass the families when a specific product is needed.
 
 ---
 

@@ -750,6 +750,8 @@ body.detail-collapsed #detail-toggle { right: 0; }
   color: var(--ink-3); margin-bottom: 7px;
 }
 .format-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+/* `display:flex` outranks the UA rule for [hidden], so state it explicitly. */
+.format-chips[hidden] { display: none; }
 .fmt-chip {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
   padding: 4px 10px; cursor: pointer; color: var(--ink-2);
@@ -850,6 +852,42 @@ body.detail-collapsed #detail-toggle { right: 0; }
 }
 .sel-remove:hover { color: oklch(0.65 0.22 20); background: var(--bg-3); }
 .btn.ghost.is-active { border-color: var(--accent); color: var(--accent); }
+/* Format control under the download list */
+.dl-format { margin: 14px 0 0; }
+.dl-format[hidden] { display: none; }
+.fmt-more {
+  display: block; margin: 8px 0 0; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.fmt-more:hover, .fmt-more.is-active { color: var(--accent); }
+.fmt-exact { margin-top: 8px; }
+
+/* Per-row badge: the concrete product this scene will contribute */
+.sel-fmt {
+  flex-shrink: 0; align-self: stretch; min-width: 44px;
+  padding: 0 7px; background: none; cursor: pointer;
+  border: 0; border-left: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em;
+  color: var(--ink-2); white-space: nowrap;
+}
+.sel-fmt:hover { color: var(--accent); background: var(--bg-3); }
+.sel-fmt.is-pinned { color: var(--accent); font-weight: 600; }
+.sel-fmt.is-empty { color: var(--ink-3); opacity: .6; }
+.sel-fmt-more { color: var(--ink-3); margin-left: 2px; }
+.sel-fmt-pop {
+  grid-column: 1 / -1; width: 100%;
+  padding: 9px 10px; background: var(--bg-3); border: 1px solid var(--line-2);
+}
+.sel-fmt-pop .format-label { margin-bottom: 6px; }
+.sel-fmt-clear {
+  margin-top: 8px; padding: 0; background: none; border: 0; cursor: pointer;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.sel-fmt-clear:hover { color: var(--accent); }
+
 .btn.ghost:disabled { opacity: .38; cursor: not-allowed; }
 .btn.ghost:disabled:hover { border-color: var(--line); color: var(--ink-2); }
 #sel-note { margin: 0 0 11px; }
