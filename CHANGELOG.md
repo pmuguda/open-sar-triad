@@ -7,34 +7,53 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
-- Scene selection. A new Selection tray lets you hand-pick which scenes the
-  exports act on instead of always taking the whole filter. Turn on `Pick scenes
-  on map` (sidebar button or the AOI toolbar toggle) and click footprints to add
-  or remove them; picked footprints render with a heavier dashed outline. Where
-  footprints overlap, the "N scenes here" picker becomes a checklist with an
-  `Add all N to selection` shortcut. The tray also offers `Add all filtered
-  scenes`, per-row removal, and `Clear selection`, and the scene detail panel
-  gains an add/remove button. Picks survive filter changes. Both the download
-  script and the STAC export use the selection when there is one, and fall back
-  to all filtered scenes when there isn't.
-- Data-format selector in the Export tray. The generated download script can now
+- Scene selection, via a **Download list** tray. Hand-pick which scenes the
+  exports act on instead of always taking the whole filter: `Click map to add`
+  turns map clicks into add/remove, `Add all filtered (N)` takes the current
+  filter in one click, rows have a per-row remove, and `Clear list` empties it.
+  The scene detail panel gains an add/remove button, and where footprints
+  overlap the "N scenes here" picker becomes a checklist with an `Add all N to
+  the download list` shortcut. Picked footprints render with a heavier dashed
+  outline. Picks survive filter changes. Both the download script and the STAC
+  export use the list when it has anything in it, and fall back to all filtered
+  scenes when it doesn't.
+- `Show only these on map`. Hides every other footprint so the map shows just
+  your list, including picks the current filter excludes. Coverage numbers and
+  stats keep describing the filter, and a banner says so while it is on.
+- Hover feedback when picking scenes. Hovering a row in the download list or in
+  the "N scenes here" overlap picker lights up that footprint and lifts it above
+  its neighbours, so choosing between stacked, near-identical scene IDs no longer
+  relies on guesswork.
+- Data-format selector in the Export tray. The generated download script can
   fetch a chosen format — `GRD`, `GEC`, `GEO`, `SLC`, `CSI`, `SICD`, `SIDD`,
-  `CPHD` or `VID` — for every scene in the current filter, instead of only each
-  scene's primary asset. Several formats can be selected at once; chips report
-  how many visible scenes publish each format and disable when none do. Scenes
-  that don't publish a selected format are skipped and the count is reported in
-  the script header and the export hint. With no format selected the script is
-  unchanged from before.
-
-### Fixed
-- The country picker and the new scene-selection mode now switch each other off
-  rather than both claiming map clicks.
+  `CPHD` or `VID` — for every scene, instead of only each scene's primary asset.
+  Several formats can be selected at once; chips report how many scenes publish
+  each format and disable when none do. Scenes that don't publish a selected
+  format are skipped and counted in the script header and the export hint. With
+  no format selected the script is unchanged from before.
+- Metadata sidecars in the download script. Every data file is now fetched with
+  the metadata the provider publishes beside it, into the same directory: `.xml`
+  for ICEYE SICD/SIDD, `.json` for ICEYE's other formats and for Capella
+  (`_extended.json`), and one `stac.v2.json` per Umbra acquisition — downloaded
+  once even when several Umbra formats are selected. Assets that publish no
+  sidecar (ICEYE CPHD, Capella SICD/SIDD/CPHD) are skipped and counted in the
+  script header.
 
 ### Changed
 - Scene/provider actions now open Radiant Earth STAC Browser sources instead of
   retired or generic provider pages. ICEYE and Umbra links resolve to scene-level
   STAC items when their IDs/assets allow it; Capella links to the live Capella STAC
   catalog root.
+
+### Fixed
+- The download script could silently overwrite files. Umbra republishes some
+  acquisitions under a second prefix (`sar-data/tasks/<campaign>/…` as well as
+  `sar-data/task-data/…`), so two distinct scenes can share an asset basename —
+  590 destinations collided in a full default script, and `curl -o` wrote them to
+  the same path. Clashing files now get their own scene-id folder; everything
+  else keeps the flat layout.
+- The country picker and the scene-selection mode now switch each other off
+  rather than both claiming map clicks.
 
 ## [2.1.2] — 2026-07-11
 
