@@ -6,8 +6,9 @@ authors:
   - family-names: "Muguda Sanjeevamurthy"
     given-names: "Pavan"
     website: "https://pmuguda.github.io/"
-version: "2.1.2"
-date-released: "2026-07-11"
+version: "2.2.0"
+date-released: "2026-08-05"
+# TODO: still the v2.1.2 deposit. Replace with the v2.2.0 DOI once Zenodo mints it.
 doi: "10.5281/zenodo.20562327"
 abstract: "open-sar-triad is a browser-based discovery console for exploring, filtering, previewing, sharing, and exporting open commercial SAR scene catalogs from ICEYE, Umbra, and Capella."
 keywords:
@@ -29,8 +30,9 @@ preferred-citation:
     - family-names: "Muguda Sanjeevamurthy"
       given-names: "Pavan"
       website: "https://pmuguda.github.io/"
-  version: "2.1.2"
-  date-released: "2026-07-11"
+  version: "2.2.0"
+  date-released: "2026-08-05"
+  # TODO: still the v2.1.2 deposit. Replace with the v2.2.0 DOI once Zenodo mints it.
   doi: "10.5281/zenodo.20562327"
   repository-code: "https://github.com/pmuguda/open-sar-triad"
   url: "https://pmuguda.github.io/open-sar-triad"

@@ -6,6 +6,12 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-08-05
+
+Scene selection and product-family downloads. The release adds a download list you
+hand-pick, a format control that resolves each provider's own name for the same
+product, and metadata sidecars alongside every downloaded asset.
+
 ### Added
 - **Instant labels on every icon-only map control.** Hovering or keyboard-focusing
   a dock or preview button now shows its label immediately, in both themes.
@@ -271,6 +277,7 @@ First public release.
 - Security hardening: CSP, X-Content-Type-Options, SRI hashes, XSS protections,
   URL-scheme validation.
 
+[2.2.0]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.2.0
 [2.1.2]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.2
 [2.1.1]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.1
 [2.1.0]: https://github.com/pmuguda/open-sar-triad/releases/tag/v2.1.0
