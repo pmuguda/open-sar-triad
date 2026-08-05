@@ -50,6 +50,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Local Development](#local-development)
 - [Deployment](#deployment)
 - [Progressive Web App](#progressive-web-app)
+- [Accessibility](#accessibility)
 - [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
 - [Dependencies](#dependencies)
@@ -113,7 +114,9 @@ The three providers represented in this tool each operate public open data progr
 - Skip or replay via the `?` button in the bottom-right corner
 
 **Download list** — an icon dock on the map, plus the Download list tray in the sidebar
-- Four icon controls sit on the map at top-left, directly beneath the scene-preview controls: **add by clicking** (turns map clicks into add/remove), **show only these on map**, **add all filtered**, and **clear list**. Counts live in the tooltips, with an `N IN LIST` readout beside them
+- Four icon controls sit on the map at top-left, in their own headed pane beneath the scene-preview controls: **add by clicking** (a cursor — turns map clicks into add/remove), **show only these on map** (focus brackets), **add all filtered** (a plus), and **clear list** (a trash can). The pane header reads `DOWNLOAD LIST · N` and is a live region, so the number deciding what gets downloaded is announced when it changes
+- Every icon names itself the instant you hover or keyboard-focus it, and the label describes what the next click will do rather than the current state. Nothing depends on `title`, which waits about a second, never fires for keyboard users, and never appears on touch
+- **Clear list** is undoable. The confirmation offers `Undo` for seven seconds and restores the isolate state along with the scenes
 - Picked footprints are drawn with a heavier dashed outline and a denser fill
 - **Show only these on map** hides everything else so the map shows just your list — including picks the current filter excludes. Coverage numbers and stats keep describing the filter, and a banner says so while it is on
 - The sidebar tray lists every pick with a per-row remove, plus the format control
@@ -464,6 +467,39 @@ No app store, signing step, review, or approval process is required.
 
 ---
 
+## Accessibility
+
+Contrast figures below are computed by converting the stylesheet's oklch tokens to sRGB,
+not judged by eye. Keyboard and screen-reader behaviour is verified in a real browser.
+
+- **Contrast.** Text on an accent fill uses a per-theme `--on-accent` token (11.50:1 dark /
+  5.12:1 paper); a hardcoded near-black previously measured 3.69:1 in the paper theme, below
+  AA. `--ink-3` carries real body text — tray notes, each scene row's `provider · date ·
+  mode`, field labels — and sits at 4.57:1 dark / 4.71:1 paper. On-map dock icons measure
+  4.59:1 against a translucent pane over imagery.
+- **Focus.** One `:focus-visible` ring applies to every control. Transitions name their
+  properties rather than using `transition: all`, which was animating `outline-width` and
+  delaying the ring.
+- **Keyboard paths.** The per-scene format popover moves focus into itself, closes on
+  Escape, and returns focus to the badge that opened it.
+- **Icon-only controls.** Every map-dock and preview button carries an `aria-label`, plus a
+  visible label that appears on hover *and* on `:focus-visible` with no delay. `title` is not
+  used for any of them — it is invisible to keyboard and touch users.
+- **Disabled state.** Dock buttons use `aria-disabled` rather than `disabled`, so they stay
+  focusable, keep announcing their name, and can explain the empty state out loud instead of
+  through a tooltip a disabled button never shows.
+- **State without colour.** A pinned format badge carries a `◆` marker rather than differing
+  by colour alone.
+- **Live regions.** The dock header (`Download list · N`) is a polite live region, so the
+  count that determines what gets downloaded is announced when it changes.
+- **Targets.** Interactive controls meet the 24×24 minimum.
+- **Motion.** Tooltip transitions are disabled under `prefers-reduced-motion: reduce`.
+
+Known gaps: the sidebar download-list note and format hint are not yet live regions, and the
+list caps rendering at 200 rows with no sort or search.
+
+---
+
 ## Security Notes
 
 open-sar-triad is a static, client-side application with no custom backend and no user accounts. The main security controls are:
@@ -542,7 +578,7 @@ Steps performed by the workflow:
 
 If you use open-sar-triad in research, teaching, reports, operational analysis, or derivative tools, please cite it:
 
-> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.1.2). Zenodo. https://doi.org/10.5281/zenodo.20562327
+> Muguda Sanjeevamurthy, Pavan. (2026). open-sar-triad: Browser-based discovery console for commercial open SAR (Version 2.2.0). Zenodo. https://doi.org/10.5281/zenodo.20562327
 
 BibTeX:
 
@@ -551,12 +587,15 @@ BibTeX:
   author = {Muguda Sanjeevamurthy, Pavan},
   title = {open-sar-triad: Browser-based discovery console for commercial open SAR},
   year = {2026},
-  version = {2.1.2},
+  version = {2.2.0},
   doi = {10.5281/zenodo.20562327},
   url = {https://github.com/pmuguda/open-sar-triad},
   note = {Live application: https://pmuguda.github.io/open-sar-triad}
 }
 ```
+
+The DOI above resolves to the v2.1.2 deposit; Zenodo mints a new one when a release is
+published, and both this section and `CITATION.cff` should be updated with it.
 
 The repository also includes [`CITATION.cff`](CITATION.cff), which GitHub can use to generate citation formats automatically.
 
