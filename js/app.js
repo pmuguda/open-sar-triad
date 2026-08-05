@@ -507,6 +507,7 @@ function setSelectMode(on) {
   document.body.classList.toggle('mode-select', on);
   const btn = document.getElementById('selPick');
   btn.setAttribute('aria-pressed', String(on));
+  btn.dataset.tip = on ? 'Stop adding by map click' : 'Click the map to add scenes';
   if (on) {
     if (countryMode) setCountryMode(false);   // the two modes both own map clicks
     showHint('Click footprints to add or remove them from the download list');
@@ -540,22 +541,26 @@ function renderSelection() {
   const n = selectedScenes.size;
   if (meta) meta.textContent = n ? `${n.toLocaleString()} SCENE${n === 1 ? '' : 'S'}` : 'EMPTY';
 
-  // The dock is icon-only, so counts live in the tooltips and one small readout.
+  // The dock is icon-only, so every button carries a `data-tip` that appears the
+  // instant it is hovered or focused, and the pane header states what they act on.
   const addBtn = document.getElementById('selAddVisible');
   const clrBtn = document.getElementById('selClear');
-  const dockCount = document.getElementById('selDockCount');
+  const dockHead = document.getElementById('selDockCount');
   // aria-disabled rather than disabled: the control keeps focus and keeps
   // announcing its name, and clicking it can say why nothing happened.
   const softDisable = (el, off, label) => {
     if (!el) return;
     el.setAttribute('aria-disabled', String(off));
     el.classList.toggle('is-off', off);
-    el.title = label;
+    el.dataset.tip = label;
   };
-  if (addBtn) addBtn.title = `Add all ${visible.length.toLocaleString()} filtered scenes to the download list`;
-  softDisable(clrBtn, !n, n ? `Clear the download list (${n.toLocaleString()})` : 'Download list is empty');
-  softDisable(isoBtn, !n, n ? `Show only the download list (${n.toLocaleString()}) on the map` : 'Add scenes to the list first');
-  if (dockCount) dockCount.textContent = n ? `${n.toLocaleString()} IN LIST` : '';
+  if (addBtn) addBtn.dataset.tip = `Add all ${visible.length.toLocaleString()} filtered scenes`;
+  softDisable(clrBtn, !n, n ? `Empty the list (${n.toLocaleString()} scenes)` : 'The list is already empty');
+  softDisable(isoBtn, !n, n
+    ? (isolateSelection ? 'Show every filtered scene again' : `Show only these ${n.toLocaleString()} on the map`)
+    : 'Add scenes to the list first');
+  // Live region: the number that decides what gets downloaded must not change silently.
+  if (dockHead) dockHead.textContent = `Download list · ${n ? n.toLocaleString() : 'empty'}`;
 
   if (!n) {
     if (note) note.textContent =
@@ -623,10 +628,21 @@ document.getElementById('selAddVisible').addEventListener('click', () => {
 
 document.getElementById('selClear').addEventListener('click', () => {
   if (!selectedScenes.size) { showToast('Download list is already empty'); return; }
+  // Clearing can discard thousands of picks made one map click at a time.
+  // Undo is cheaper than a confirmation dialog and interrupts nobody.
+  const undo = [...selectedScenes];
+  const wasIsolated = isolateSelection;
   selectedScenes.clear();
   if (isolateSelection) setIsolateSelection(false);   // nothing left to isolate
   else render();
-  showToast('Download list cleared');
+  showToast(`Download list cleared · ${undo.length.toLocaleString()} scenes`, {
+    label: 'Undo',
+    run: () => {
+      undo.forEach(id => selectedScenes.add(id));
+      if (wasIsolated) setIsolateSelection(true); else render();
+      showToast(`${undo.length.toLocaleString()} scenes restored`);
+    },
+  });
 });
 
 // Per-scene format override. Opens under the badge listing only what this scene
@@ -1562,7 +1578,10 @@ function showDrapeControl(sceneId) {
   if (!ctl) return;
   ctl.querySelector('.drape-id').textContent = sceneId || 'scene';
   ctl.querySelector('#drape-opacity').value = '100';
-  ctl.querySelector('#drape-toggle').setAttribute('aria-pressed', 'false');
+  const tgl = ctl.querySelector('#drape-toggle');
+  tgl.setAttribute('aria-pressed', 'false');
+  tgl.dataset.tip = 'Hide this preview';
+  tgl.setAttribute('aria-label', 'Hide preview');
   ctl.classList.remove('hidden');
 }
 
@@ -1581,6 +1600,9 @@ function showDrapeControl(sceneId) {
     if (sceneOverlay) { const el = sceneOverlay.getElement(); if (el) el.style.display = _drapeHidden ? 'none' : ''; }
     if (sceneOutline) sceneOutline.setStyle({ opacity: _drapeHidden ? 0 : 1 });
     e.currentTarget.setAttribute('aria-pressed', String(_drapeHidden));
+    // The label names what the click will do next, not the state it is in.
+    e.currentTarget.dataset.tip = _drapeHidden ? 'Show this preview' : 'Hide this preview';
+    e.currentTarget.setAttribute('aria-label', _drapeHidden ? 'Show preview' : 'Hide preview');
   });
   ctl.querySelector('#drape-close').addEventListener('click', clearDrape);
 })();
@@ -1731,14 +1753,23 @@ document.querySelectorAll('.seg[data-group]').forEach(seg => {
 
 // ── Toast ──────────────────────────────────────────────────
 let toastTimer;
-function showToast(msg) {
+// `action` is an optional { label, run } — a recovery offered in the same breath
+// as the news, which is the only moment the user is still thinking about it.
+function showToast(msg, action) {
   const el = document.getElementById('toast');
   const msgEl = document.getElementById('toastMsg');
+  const actEl = document.getElementById('toastAct');
   if (!el || !msgEl) return;
   msgEl.textContent = msg;
+  if (actEl) {
+    actEl.hidden = !action;
+    actEl.textContent = action ? action.label : '';
+    actEl.onclick = action ? () => { el.classList.remove('show'); action.run(); } : null;
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+  // An offered action needs long enough to reach for; plain news does not.
+  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 7000 : 2400);
 }
 
 // ── Reset ──────────────────────────────────────────────────

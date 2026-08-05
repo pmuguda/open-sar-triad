@@ -7,6 +7,16 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Instant labels on every icon-only map control.** Hovering or keyboard-focusing
+  a dock or preview button now shows its label immediately, in both themes.
+  `title` was the wrong tool: it waits about a second, never fires for keyboard
+  users, and never appears on touch — so four unlabelled glyphs were the entire
+  interface for the download list.
+- **Undo on clearing the download list.** Clearing can discard thousands of picks
+  made one map click at a time and had no recovery at all. The toast now offers
+  `Undo` for seven seconds and restores the isolate state along with the scenes.
+  The toast stays click-through so it never swallows a map click; only the button
+  inside it opts back in.
 - **Product families** replace the raw format row, and the control moved out of the
   Export tray to sit under the download list where the scenes are. Pick
   `Detected imagery`, `Complex (SLC-type)`, `Phase history` or `Visual extras`
@@ -56,11 +66,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
   script header.
 
 ### Changed
+- **The two map panes now say what they own.** The preview controls and the
+  download-list dock governed unrelated things — one draped image versus a list
+  of up to 8,878 scenes — while sharing a position, a material and a 10px gap, so
+  they read as one control cluster. Each now carries a header naming its scope
+  (`Preview`, `Download list · N`) and the gap widened to 18px.
+- **Every glyph in those panes is unique again.** Two eyes sat 40px apart meaning
+  "hide this preview" and "show only the list on the map"; two `✕` sat 40px apart
+  meaning "close a picture" and "irreversibly empty the list". Isolate became
+  focus brackets, clear-list became a trash can, and pick-on-map became a cursor
+  instead of a checkbox nobody read as "click the map".
+- `Clear` no longer sits flush against `Add all filtered` — the two widest
+  blast-radius controls in the product were adjacent and unlabelled.
+- The dock's `N IN LIST` readout became the pane header and a polite live region,
+  so the number that decides what gets downloaded no longer changes silently.
 - The download-list actions are now an icon dock **on the map**, sitting directly
   beneath the scene-preview controls, instead of four full-width labelled buttons
-  in the sidebar tray. Counts moved into the tooltips, with a compact
-  `N IN LIST` readout beside the icons. The tray keeps the scene list and the
-  format control.
+  in the sidebar tray. The tray keeps the scene list and the format control.
 
 - Scene/provider actions now open Radiant Earth STAC Browser sources instead of
   retired or generic provider pages. ICEYE and Umbra links resolve to scene-level

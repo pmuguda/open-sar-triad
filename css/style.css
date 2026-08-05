@@ -528,6 +528,17 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast .ok { color: var(--accent); }
+/* The toast is click-through so it never swallows a map click; the one control
+   inside it opts back in, so Undo stays reachable without blocking the map. */
+.toast-act {
+  pointer-events: auto; cursor: pointer;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); background: transparent;
+  border: 1px solid var(--accent); padding: 3px 9px; margin-left: 2px;
+  transition: color .12s, background-color .12s;
+}
+.toast-act:hover { color: var(--on-accent); background: var(--accent); }
+.toast-act[hidden] { display: none; }
 
 /* ── AOI toolbar ── */
 #aoi-toolbar {
@@ -550,6 +561,27 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
 .tb-btn.country-active { color: oklch(0.75 0.16 70); border-color: oklch(0.75 0.16 70 / .4); }
 .tb-btn.tb-clear:hover { color: oklch(0.65 0.22 20); }
 .tb-divider { width: 1px; height: 14px; background: var(--line); margin: 0 2px; }
+
+/* ── Instant labels for icon-only controls ──
+   `title` is the wrong tool here: it waits about a second, never fires for
+   keyboard users, and never appears on touch. This shows on hover AND on
+   focus-visible, immediately, so the icons are legible by every route. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 7px); left: 0; z-index: 20;
+  padding: 4px 7px; white-space: nowrap; pointer-events: none;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em;
+  color: var(--ink); background: var(--bg); border: 1px solid var(--line-2);
+  box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; translate: 0 -2px;
+  transition: opacity .1s, visibility .1s, translate .1s;
+}
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after { opacity: 1; visibility: visible; translate: 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  [data-tip]::after { transition: none; translate: 0 0; }
+}
 
 /* ── Hint banner ── */
 #hint-banner {
@@ -789,10 +821,12 @@ body.detail-collapsed #detail-toggle { right: 0; }
 
 /* ── Drape controls ── */
 .drape-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-/* Top-left stack: preview controls, then the download-list dock beneath them. */
+/* Top-left stack: preview controls, then the download-list dock beneath them.
+   The gap is wide enough that the two never read as one control cluster —
+   they govern unrelated things and each carries its own header saying so. */
 #map-dock {
   position: absolute; top: 88px; left: 14px; z-index: 600;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 18px;
   pointer-events: none;
 }
 #map-dock > * { pointer-events: auto; }
@@ -805,6 +839,7 @@ body.detail-collapsed #detail-toggle { right: 0; }
   box-shadow: var(--shadow);
 }
 #drape-ctl.hidden { display: none; }
+#drape-ctl .pane-head { margin: -10px -11px 0; padding: 6px 11px; }
 .drape-row { display: flex; align-items: center; gap: 7px; }
 .drape-id {
   flex: 1; min-width: 0; font-size: 10px; color: var(--ink-2);
@@ -907,20 +942,27 @@ body.detail-collapsed #detail-toggle { right: 0; }
 }
 .sel-fmt-clear:hover { color: var(--ink); }
 
-/* Download-list actions, docked on the map under the preview controls */
+/* Download-list actions, docked on the map under the preview controls.
+   Headed and self-contained: the preview pane above governs one draped image,
+   this one governs the list, and nothing but the shared material connects them. */
 #dl-dock {
-  display: flex; align-items: center; gap: 1px;
-  background: oklch(from var(--bg-2) l c h / .9); border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: stretch;
+  background: oklch(from var(--bg-2) l c h / .92); border: 1px solid var(--line);
   padding: 3px; user-select: none; box-shadow: var(--shadow);
+  backdrop-filter: blur(4px);
 }
+.dl-dock-head, .pane-head {
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3);
+  padding: 4px 5px 5px; white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.dl-dock-row { display: flex; align-items: center; gap: 1px; padding-top: 3px; }
 #dl-dock .tb-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-2); border-color: var(--accent); }
 #dl-dock .tb-btn.is-off { opacity: .45; }
 #dl-dock .tb-btn.is-off:hover { color: var(--ink-3); background: transparent; border-color: transparent; }
-.dl-dock-count {
-  font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
-  color: var(--ink-2); padding: 0 8px 0 6px; white-space: nowrap;
-}
-.dl-dock-count:empty { display: none; }
+/* Clear empties the whole list. Keep it off the elbow of the button that fills it. */
+#selClear { margin-left: 7px; }
 
 .btn.ghost:disabled { opacity: .38; cursor: not-allowed; }
 .btn.ghost:disabled:hover { border-color: var(--line); color: var(--ink-2); }

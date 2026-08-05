@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=accent-1" />
+  <link rel="stylesheet" href="css/style.css?v=dock-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -234,15 +234,20 @@
     <!-- top-left map dock: preview controls, then download-list actions -->
     <div id="map-dock">
     <div id="drape-ctl" class="hidden">
+      <!-- Header names the scope, exactly as the dock below does: this pane acts
+           on the one draped image, that one acts on the download list. -->
+      <div class="pane-head">Preview</div>
       <div class="drape-row">
-        <span class="drape-id" title="Draped scene"></span>
-        <button class="drape-btn" id="drape-toggle" title="Hide / show preview" aria-label="Hide or show preview" aria-pressed="false">
+        <span class="drape-id"></span>
+        <button class="drape-btn" id="drape-toggle" data-tip="Hide this preview" aria-label="Hide or show preview" aria-pressed="false">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
-        <button class="drape-btn" id="drape-fs" title="View fullscreen" aria-label="View fullscreen">
+        <button class="drape-btn" id="drape-fs" data-tip="View fullscreen" aria-label="View fullscreen">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
-        <button class="drape-btn" id="drape-close" title="Remove preview" aria-label="Remove preview">✕</button>
+        <button class="drape-btn" id="drape-close" data-tip="Remove preview" aria-label="Remove preview">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
       <div class="drape-row drape-op">
         <span class="drape-op-label">OPACITY</span>
@@ -250,29 +255,36 @@
       </div>
     </div>
 
+      <!-- Its own pane, not a second row of the preview controls: the header names
+           what these four buttons act on, and every glyph is unique to this dock. -->
       <div id="dl-dock" role="group" aria-label="Download list actions">
-        <button class="tb-btn" id="selPick" aria-label="Add scenes by clicking the map" aria-pressed="false" title="Click map to add scenes to the download list">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M5.6 8.2 7.6 10.2 11 6.2"/><path d="M17 5.5v12H6"/>
-          </svg>
-        </button>
-        <button class="tb-btn" id="selIsolate" aria-label="Show only the download list on the map" aria-pressed="false" aria-disabled="true" title="Show only the download list on the map">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1.8 10S4.7 4.6 10 4.6 18.2 10 18.2 10 15.3 15.4 10 15.4 1.8 10 1.8 10Z"/><circle cx="10" cy="10" r="2.3"/>
-          </svg>
-        </button>
-        <div class="tb-divider"></div>
-        <button class="tb-btn" id="selAddVisible" aria-label="Add all filtered scenes to the download list" title="Add all filtered scenes to the download list">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-            <path d="M10 4v12M4 10h12"/>
-          </svg>
-        </button>
-        <button class="tb-btn tb-clear" id="selClear" aria-label="Clear the download list" title="Clear the download list">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-            <path d="M5 5l10 10M15 5L5 15"/>
-          </svg>
-        </button>
-        <span class="dl-dock-count" id="selDockCount" aria-live="polite"></span>
+        <div class="dl-dock-head" id="selDockCount" aria-live="polite">Download list · empty</div>
+        <div class="dl-dock-row">
+          <button class="tb-btn" id="selPick" aria-label="Add scenes by clicking the map" aria-pressed="false" data-tip="Click the map to add scenes">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4.6 3.1v12.1l3-2.8 2.1 4.4 2.2-1.1-2-4.2 4.3-.4z"/>
+            </svg>
+          </button>
+          <button class="tb-btn" id="selIsolate" aria-label="Show only the download list on the map" aria-pressed="false" aria-disabled="true" data-tip="Show only the list on the map">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7V4.6A1.6 1.6 0 0 1 4.6 3H7M13 3h2.4A1.6 1.6 0 0 1 17 4.6V7M17 13v2.4a1.6 1.6 0 0 1-1.6 1.6H13M7 17H4.6A1.6 1.6 0 0 1 3 15.4V13"/>
+              <rect x="8.1" y="8.1" width="3.8" height="3.8" rx=".6" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+          <div class="tb-divider"></div>
+          <button class="tb-btn" id="selAddVisible" aria-label="Add all filtered scenes to the download list" data-tip="Add every filtered scene">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+              <path d="M10 4v12M4 10h12"/>
+            </svg>
+          </button>
+          <button class="tb-btn tb-clear" id="selClear" aria-label="Clear the download list" aria-disabled="true" data-tip="Empty the list">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6h12M7.5 6V4.7c0-.6.5-1.1 1.1-1.1h2.8c.6 0 1.1.5 1.1 1.1V6"/>
+              <path d="M5.7 6l.7 9.4c0 .6.5 1 1 1h5.2c.5 0 1-.4 1-1L14.3 6"/>
+              <path d="M8.7 9.1v4.6M11.3 9.1v4.6"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -349,7 +361,7 @@
     </div>
 
     <!-- Toast -->
-    <div class="toast" id="toast"><span class="ok">✦</span><span id="toastMsg">Done</span></div>
+    <div class="toast" id="toast"><span class="ok">✦</span><span id="toastMsg">Done</span><button type="button" class="toast-act" id="toastAct" hidden></button></div>
 
     <!-- Temporal scrubber -->
     <div class="timeline" id="timeline">
@@ -405,7 +417,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=p0-fix-1"></script>
+<script src="js/app.js?v=dock-1"></script>
 <script src="js/tour.js?v=tour-v12"></script>
 </body>
 </html>
