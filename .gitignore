@@ -6,6 +6,10 @@ package.json
 package-lock.json
 .claude/
 vendor/
+# Impeccable design-tooling runtime state (pid/port/token for its live server).
+# Critique snapshots under .impeccable/critique/ are intentionally NOT ignored.
+.impeccable/live/
+
 index-offline.html
 index-record.html
 data/scenes-small.geojson
