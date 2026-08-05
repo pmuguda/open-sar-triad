@@ -572,13 +572,18 @@ function renderSelection() {
       // One badge per row, whatever the list length: it shows which concrete
       // product this scene will contribute, which is also how the reader learns
       // that ICEYE's GRD and Umbra's GEC are the same request.
+      // What this row will actually contribute. With no family chosen the scene
+      // still downloads its primary asset, so name that product rather than
+      // showing a dash — a dash means "nothing at all", and must stay rare.
       const fmts = sceneFormats(f);
       const pinned = sceneFormat.has(p.id);
-      const badge = fmts.length
+      const primaryHere = !fmts.length && usingPrimaryAsset() && f._dlUrl;
+      const shown = fmts.length ? fmts : (primaryHere ? [f._primaryFmt || 'ASSET'] : []);
+      const badge = shown.length
         ? `<button class="sel-fmt${pinned ? ' is-pinned' : ''}" data-sel-fmt="${esc(p.id)}"
-             title="${pinned ? 'Pinned to' : 'Will download'} ${esc(fmts.join(', '))} — click to change">${
+             title="${pinned ? 'Pinned to' : primaryHere ? 'Primary asset —' : 'Will download'} ${esc(shown.join(', '))} — click to change">${
              pinned ? '<span class="sel-fmt-pin" aria-hidden="true">◆</span>' : ''}${
-             esc(fmts[0])}${fmts.length > 1 ? `<span class="sel-fmt-more">+${fmts.length - 1}</span>` : ''}</button>`
+             esc(shown[0])}${shown.length > 1 ? `<span class="sel-fmt-more">+${shown.length - 1}</span>` : ''}</button>`
         : `<button class="sel-fmt is-empty" data-sel-fmt="${esc(p.id)}" title="This scene publishes none of the selected formats — click to choose one">—</button>`;
       return `<div class="recent-row sel-row" data-sel-hover="${esc(p.id)}">
         <button class="sel-open" data-sel-open="${esc(p.id)}">
@@ -634,6 +639,7 @@ function openFormatPopover(badge, id) {
   if (!fmts.length) return;
   const pinned = sceneFormat.get(id);
   const dflt = defaultFormats(feat);
+  if (!dflt.length && usingPrimaryAsset() && feat._primaryFmt) dflt.push(feat._primaryFmt);
   const pop = document.createElement('div');
   pop.className = 'sel-fmt-pop';
   pop.innerHTML =
@@ -719,9 +725,13 @@ function buildFormatCache(features) {
       urls[fmt] = safe;
       present.add(fmt);
     }
+    const dlUrl = safeUrl(p.download);
     hide(feat, '_fmtUrls', urls);
     hide(feat, '_fmtList', Object.keys(urls));
-    hide(feat, '_dlUrl',   safeUrl(p.download));
+    hide(feat, '_dlUrl',   dlUrl);
+    // Which product the primary asset actually is, so a row can say "GRD"
+    // rather than a bare dash when no family is chosen.
+    hide(feat, '_primaryFmt', Object.keys(urls).find(f => urls[f] === dlUrl) || null);
   });
   catalogFormats = FORMAT_ORDER.filter(f => present.has(f))
     .concat([...present].filter(f => !FORMAT_ORDER.includes(f)).sort());
@@ -792,24 +802,28 @@ function metadataUrl(provider, assetUrl) {
 // Expand the visible scenes into the concrete files the script should fetch.
 // Shared by the hint and the generator so the two can never disagree.
 function collectDownloadJobs(visible) {
-  const primary = usingPrimaryAsset() && !sceneFormat.size;
+  // Resolve per scene, never globally: pinning one row's format must not change
+  // what every other row contributes. `sceneFormats` already prefers the pin,
+  // so a scene only falls through to its primary asset when nothing else claims
+  // it — which is exactly the no-family, no-pin case.
+  const primaryMode = usingPrimaryAsset();
   const byProvider = { iceye: [], umbra: [], capella: [] };
   const emitted = new Set();      // format labels actually used, for the header
-  let scenes = 0, files = 0, skipped = 0;
+  let scenes = 0, files = 0, skipped = 0, primaryFiles = 0;
 
   visible.forEach(feat => {
     const p = feat.properties;
     const bucket = byProvider[p.provider];
     if (!bucket) { skipped++; return; }
 
-    if (primary) {
-      if (feat._dlUrl) { bucket.push({ p, fmt: null, url: feat._dlUrl }); scenes++; files++; }
-      else skipped++;
+    const hits = sceneFormats(feat);
+    if (!hits.length) {
+      if (primaryMode && feat._dlUrl) {
+        bucket.push({ p, fmt: null, url: feat._dlUrl });
+        scenes++; files++; primaryFiles++;
+      } else skipped++;
       return;
     }
-
-    const hits = sceneFormats(feat);
-    if (!hits.length) { skipped++; return; }
     hits.forEach(f => { bucket.push({ p, fmt: f, url: feat._fmtUrls[f] }); emitted.add(f); });
     scenes++;
     files += hits.length;
@@ -839,7 +853,8 @@ function collectDownloadJobs(visible) {
     metaFiles++;
   }));
 
-  return { formats, byProvider, scenes, files, skipped, metaFiles, metaMissing };
+  return { formats, byProvider, scenes, files, skipped, metaFiles, metaMissing,
+           primaryMode, primaryFiles };
 }
 
 function chipHtml(value, label, active, count, title, attr = 'data-fmt') {
@@ -900,7 +915,7 @@ function updateDownloadCount(visible) {
   if (!el) return;
   if (!visible.length) { el.textContent = ''; return; }
 
-  const { formats, scenes, files } = collectDownloadJobs(visible);
+  const { formats, scenes, files, primaryFiles } = collectDownloadJobs(visible);
   const noun = scenes === 1 ? 'scene has a direct download link' : 'scenes have direct download links';
   if (!formats.length) {
     el.textContent = scenes === visible.length
@@ -909,6 +924,15 @@ function updateDownloadCount(visible) {
     return;
   }
   const fileNote = files === scenes ? '' : ` · ${files.toLocaleString()} files`;
+  // A pin can coexist with untouched scenes on their primary asset; saying
+  // "13 of 13 publish CPHD" when one does would be the same falsehood the
+  // script header used to print.
+  if (primaryFiles) {
+    const chosen = scenes - primaryFiles;
+    el.textContent = `${chosen.toLocaleString()} pinned to ${formats.join(' / ')} · ${
+      primaryFiles.toLocaleString()} on their primary asset${fileNote}`;
+    return;
+  }
   el.textContent = `${scenes.toLocaleString()} of ${visible.length.toLocaleString()} ${
     scenes === 1 ? 'scene publishes' : 'scenes publish'} ${formats.join(' / ')}${fileNote}`;
 }
@@ -2075,8 +2099,8 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   const source  = picked ? 'selected' : 'visible';
   if (!visible.length) { showToast('No scenes match current filters'); return; }
 
-  const { formats, byProvider, scenes: total, files, skipped, metaFiles, metaMissing } =
-    collectDownloadJobs(visible);
+  const { formats, byProvider, scenes: total, files, skipped, metaFiles, metaMissing,
+          primaryMode, primaryFiles } = collectDownloadJobs(visible);
   if (!files) {
     showToast(formats.length
       ? `No ${source} scene publishes ${formats.join(' / ')}`
@@ -2098,14 +2122,16 @@ document.querySelector('[data-export="script"]').addEventListener('click', () =>
   const lines = [
     '#!/usr/bin/env bash',
     `# open-sar-triad download script — generated ${new Date().toISOString()}`,
-    `# Formats: ${formats.length ? formats.join(', ') : 'primary asset per scene'}`,
+    `# Formats: ${formats.length
+        ? formats.join(', ') + (primaryFiles ? `  (+ primary asset for ${primaryFiles} unpinned scene(s))` : '')
+        : 'primary asset per scene'}`,
     `# ${picked ? 'Selected' : 'Visible'}: ${visible.length} scenes  |  Downloadable: ${total}  (ICEYE: ${counts.iceye}, Umbra: ${counts.umbra}, Capella: ${counts.capella})`,
     ...(formats.length ? [`# Files: ${files}  (${perFormat.join(', ')})`] : []),
     `# Metadata: ${metaFiles} sidecar file(s) alongside the data` +
       (metaMissing ? `  (${metaMissing} asset(s) publish none)` : ''),
-    ...(skipped ? [formats.length
-      ? `# Note: ${skipped} of ${visible.length} ${source} scene(s) skipped — none of the selected formats available`
-      : `# Note: ${skipped} scene(s) omitted — no download URL in catalog`] : []),
+    ...(skipped ? [primaryMode
+      ? `# Note: ${skipped} scene(s) omitted — no download URL in catalog`
+      : `# Note: ${skipped} of ${visible.length} ${source} scene(s) skipped — none of the selected formats available`] : []),
     '# Usage:  bash download.sh',
     '# Dry run: bash download.sh --dry-run',
     '# Requires: curl',

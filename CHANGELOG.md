@@ -92,6 +92,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
   the overlap checklist and the download-list tray already cover it.
 
 ### Fixed
+- Pinning a format on one scene no longer drops every other scene from the
+  download script. `collectDownloadJobs` computed
+  `usingPrimaryAsset() && !sceneFormat.size`, so a single per-scene pin
+  disabled the primary-asset fallback **globally** — every unpinned scene then
+  resolved to nothing and was counted as skipped, and the script header
+  explained the loss with a falsehood ("none of the selected formats
+  available" when no format was selected). Resolution is now per scene: a pin
+  claims its own row, everything else falls through to its primary asset.
+- The download list no longer reports itself as empty on arrival. With no
+  product family chosen, every row badge rendered `—` ("publishes none of the
+  selected formats") directly above a line stating thousands of scenes had
+  download links. A row now names the product it will actually contribute —
+  its primary asset's own format — and `—` is reserved for a scene that
+  genuinely has nothing.
+- The download hint and script header stay truthful when a pin and untouched
+  scenes coexist: "1 pinned to CPHD · 12 on their primary asset" rather than
+  claiming all 13 publish CPHD.
 - Accessibility pass over the download-list UI, from measured contrast rather
   than eyeball:
   - Text on an `--accent` fill hardcoded a near-black, which measured **3.69:1**
