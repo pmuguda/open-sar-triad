@@ -66,6 +66,26 @@ All notable changes to open-sar-triad are documented here. The format is based o
   retired or generic provider pages. ICEYE and Umbra links resolve to scene-level
   STAC items when their IDs/assets allow it; Capella links to the live Capella STAC
   catalog root.
+- Amber now means one thing. It had been signalling six: selection state, hover,
+  keyboard focus, decorative chrome, numeric readouts and brand furniture — so
+  with a selection active, several unrelated things glowed identically and the
+  hierarchy collapsed. Accent is now reserved for **"you chose this"**, with
+  focus kept distinct by form (an outline, never a fill):
+  - Hover has its own vocabulary — brighter text, a lighter border and a subtle
+    fill — across all 18 hover rules. Previously hovering anything pre-echoed
+    selection, and one control (the preview fullscreen button) took a full accent
+    fill on hover, making hover and selected indistinguishable.
+  - Counts and dates (`.recent-age`, the dock's `N IN LIST`) drop to `--ink-2`;
+    they are data, not state.
+  - Ambient chrome in the sidebar rail — the dash before each section title, the
+    tray chevrons — and the preview pane's outline step down to neutral, since
+    they sit right where the chips need to stand out.
+  - Brand furniture (logo, wordmark separators, viewport corners, timeline) keeps
+    its accent: it is identity, not a state claim.
+
+  Accent references in the stylesheet drop from 87 to 51, and the hover border
+  moved to `--ink-3` rather than `--line-2` after measuring — the latter was only
+  a 1.46:1 step from the idle border, i.e. an invisible hover.
 
 ### Removed
 - The `Add to selection` button in the scene detail panel. Pick mode on the map,
