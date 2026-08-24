@@ -818,9 +818,10 @@ function metadataUrl(provider, assetUrl) {
 // Save a metadata sidecar next to a single-scene download. A cross-origin file
 // of a viewable type (.json / .xml) can't be force-downloaded by an anchor —
 // the browser would just display it, navigating the app away — so fetch it and
-// save the blob where CORS and the CSP connect-src allow (Capella today, Umbra
-// once its download host is in connect-src). Anything blocked falls back to
-// opening the sidecar in a new tab, which is non-destructive either way.
+// save the blob. All three open-data buckets send Access-Control-Allow-Origin:*
+// and their download hosts are in the CSP connect-src, so this path works for
+// ICEYE, Umbra and Capella. A genuine network error falls back to opening the
+// sidecar in a new tab, which is non-destructive either way.
 async function downloadSidecar(url) {
   const safe = safeUrl(url);
   if (!safe) return;
