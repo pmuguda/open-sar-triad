@@ -815,6 +815,32 @@ function metadataUrl(provider, assetUrl) {
   return null;
 }
 
+// Save a metadata sidecar next to a single-scene download. A cross-origin file
+// of a viewable type (.json / .xml) can't be force-downloaded by an anchor —
+// the browser would just display it, navigating the app away — so fetch it and
+// save the blob where CORS and the CSP connect-src allow (Capella today, Umbra
+// once its download host is in connect-src). Anything blocked falls back to
+// opening the sidecar in a new tab, which is non-destructive either way.
+async function downloadSidecar(url) {
+  const safe = safeUrl(url);
+  if (!safe) return;
+  try {
+    const res = await fetch(safe);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const obj = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = obj;
+    a.download = safe.split('/').pop() || 'metadata';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(obj), 4000);
+  } catch {
+    window.open(safe, '_blank', 'noopener,noreferrer');
+  }
+}
+
 // Expand the visible scenes into the concrete files the script should fetch.
 // Shared by the hint and the generator so the two can never disagree.
 function collectDownloadJobs(visible) {
@@ -1660,11 +1686,11 @@ function showDetail(p) {
       `<button class="fmt-chip${i === 0 ? ' is-active' : ''}" data-fmt="${esc(f)}" data-url="${esc(p.products[f])}">${esc(f)}</button>`
     ).join('');
     formatBlock = `<div class="format-select"><div class="format-label">Data format</div><div class="format-chips">${chips}</div></div>`;
-    dl = `<a class="detail-action-btn primary" id="dl-asset" href="${esc(p.products[first])}" target="_blank" rel="noopener noreferrer">Download ${esc(first)}</a>`;
+    dl = `<a class="detail-action-btn primary" id="dl-asset" data-provider="${esc(p.provider)}" href="${esc(p.products[first])}" target="_blank" rel="noopener noreferrer">Download ${esc(first)}</a>`;
   } else {
     const dlUrl = safeUrl(p.download);
     dl = dlUrl
-      ? `<a class="detail-action-btn primary" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
+      ? `<a class="detail-action-btn primary" id="dl-asset" data-provider="${esc(p.provider)}" href="${esc(dlUrl)}" target="_blank" rel="noopener noreferrer">Download Asset</a>` : '';
   }
 
   document.getElementById('detail-content').innerHTML =
@@ -1672,19 +1698,39 @@ function showDetail(p) {
 <div class="detail-provider ${esc(p.provider)}">${esc(p.provider_label)}</div>
 <div class="detail-id">${esc(p.id||'—')}</div>
 <table class="detail-table"><tbody>${rows}</tbody></table>
-${formatBlock}<div class="detail-actions">${dl}${pv}</div>`;
+${formatBlock}<div class="detail-actions">${dl}${pv}</div>${dl ? '<p class="detail-sidecar-note" id="dl-sidecar-note"></p>' : ''}`;
 
-  if (products) {
-    const chipsEl = document.querySelector('#detail-content .format-chips');
-    const dlBtn = document.getElementById('dl-asset');
-    chipsEl.addEventListener('click', e => {
-      const chip = e.target.closest('.fmt-chip');
-      if (!chip) return;
-      chipsEl.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('is-active'));
-      chip.classList.add('is-active');
-      dlBtn.href = chip.dataset.url;
-      dlBtn.textContent = `Download ${chip.dataset.fmt}`;
+  // Bring the provider's metadata sidecar down with any single-scene download,
+  // matching what the generated bash script fetches. The sidecar depends on the
+  // active format (Capella swaps it per chip), so resolve it from the button's
+  // current href every time rather than caching it once.
+  const dlBtn = document.getElementById('dl-asset');
+  if (dlBtn) {
+    const noteEl = document.getElementById('dl-sidecar-note');
+    const syncSidecar = () => {
+      const meta = metadataUrl(dlBtn.dataset.provider, safeUrl(dlBtn.href));
+      dlBtn.dataset.meta = meta || '';
+      if (noteEl) noteEl.textContent = meta
+        ? 'Its metadata sidecar downloads alongside the data file.'
+        : 'No metadata sidecar is published for this format.';
+    };
+    syncSidecar();
+    dlBtn.addEventListener('click', () => {
+      if (dlBtn.dataset.meta) downloadSidecar(dlBtn.dataset.meta);
     });
+
+    if (products) {
+      const chipsEl = document.querySelector('#detail-content .format-chips');
+      chipsEl.addEventListener('click', e => {
+        const chip = e.target.closest('.fmt-chip');
+        if (!chip) return;
+        chipsEl.querySelectorAll('.fmt-chip').forEach(c => c.classList.remove('is-active'));
+        chip.classList.add('is-active');
+        dlBtn.href = chip.dataset.url;
+        dlBtn.textContent = `Download ${chip.dataset.fmt}`;
+        syncSidecar();
+      });
+    }
   }
 
   const panel = document.getElementById('detail-panel');
