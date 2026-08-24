@@ -6,6 +6,22 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **Metadata sidecar with single-scene downloads.** The `05 Scene` detail
+  panel's download button fetched only the data asset, so a hand-picked
+  single-file download arrived undocumented even though the generated bash
+  script already fetched each provider's sidecar. The panel now pulls the
+  matching sidecar for every product/format, using the same `metadataUrl()`
+  derivation. Capella and Umbra save the sidecar directly; ICEYE opens it in a
+  new tab (no CORS). The four products that publish none — ICEYE CPHD, Capella
+  SICD/SIDD/CPHD — say so under the button instead of promising one. The
+  sidecar re-resolves per format, so Capella chip switches update it.
+
+### Changed
+- CSP `connect-src` now includes the Umbra product-download host
+  (`umbra-open-data-catalog.s3.us-west-2.amazonaws.com`) so its sidecar
+  downloads as a file rather than only opening in a tab.
+
 ## [2.2.0] — 2026-08-05
 
 Scene selection and product-family downloads. The release adds a download list you
