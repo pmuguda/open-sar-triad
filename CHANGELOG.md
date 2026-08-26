@@ -19,6 +19,12 @@ All notable changes to open-sar-triad are documented here. The format is based o
   so Capella chip switches update it.
 
 ### Changed
+- **Basemap moved from CARTO to Esri Gray Canvas.** CARTO retired its anonymous
+  `basemaps.cartocdn.com` tiles and began serving an "API key required"
+  placeholder over the map. The dark and paper basemaps now use Esri's keyless
+  World Dark/Light Gray Canvas services — the same host already used for the
+  satellite layer — with `maxNativeZoom` so the map stays filled past the
+  service's native zoom, and updated Esri/OSM attribution.
 - CSP `connect-src` now includes the ICEYE, Umbra and Capella product-download
   hosts so single-scene metadata sidecars can be fetched and saved directly.
 - Service worker cache bumped to `v44` (and the `app.js`/`style.css` cache-bust

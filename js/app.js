@@ -104,17 +104,24 @@ const HomeControl = L.Control.extend({
 });
 new HomeControl().addTo(map);
 
+// Esri Gray Canvas basemaps. CARTO retired its anonymous basemap tiles and now
+// serves an "API key required" placeholder, so the map moved to Esri's keyless
+// canvas services — the same host already used for the satellite layer. Esri
+// tiles use {z}/{y}/{x} order and carry no {s} subdomain or {r} retina suffix.
+const ESRI_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas';
 const TILE = {
-  dark:  'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-  paper: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+  dark:  `${ESRI_CANVAS}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+  paper: `${ESRI_CANVAS}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
   labels: {
-    dark:  'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-    paper: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+    dark:  `${ESRI_CANVAS}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
+    paper: `${ESRI_CANVAS}/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
   }
 };
-const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
-let baseLayer  = L.tileLayer(TILE.dark,  { subdomains: 'abcd', attribution: ATTR, detectRetina: true }).addTo(map);
-let labelLayer = L.tileLayer(TILE.labels.dark, { subdomains: 'abcd', detectRetina: true, opacity: 0.55, pane: 'overlayPane' }).addTo(map);
+const ATTR = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+// Gray Canvas is cached to z16; maxNativeZoom upscales it past that instead of
+// requesting tiles that do not exist (which would blank the basemap when zoomed in).
+let baseLayer  = L.tileLayer(TILE.dark,  { attribution: ATTR, maxZoom: 19, maxNativeZoom: 16 }).addTo(map);
+let labelLayer = L.tileLayer(TILE.labels.dark, { maxZoom: 19, maxNativeZoom: 16, opacity: 0.9, pane: 'overlayPane' }).addTo(map);
 
 // Esri World Imagery satellite basemap — lets you compare draped SAR against
 // optical ground truth to confirm georeferencing.
