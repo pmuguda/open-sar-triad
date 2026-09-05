@@ -26,8 +26,11 @@ jobs:
       - name: Fetch Search Console stats
         env:
           GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
-          GSC_SITE_URL: sc-domain:pmuguda.com
+          # Must match the property string exactly as shown in the Search Console
+          # property dropdown (URL-prefix property: scheme, www, trailing slash).
+          GSC_SITE_URL: https://www.pmuguda.com/open-sar-triad/
           GSC_PAGE_CONTAINS: /open-sar-triad
+          GSC_WINDOW_DAYS: 90
         run: python scripts/fetch_gsc.py
 
       - name: Commit updated usage data

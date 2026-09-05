@@ -540,11 +540,11 @@ Search Console data is private to verified owners, so it is never fetched in the
 **One-time setup** (until this is done the workflow exits green without writing, and the panel reports that data is not yet available):
 
 1. In Google Cloud console, create a project, enable the **Google Search Console API**, create a **service account**, and download its JSON key.
-2. In Search Console, open the `sc-domain:pmuguda.com` property → Settings → Users and permissions → add the service account's email (Restricted access is enough).
+2. In Search Console, open the **`https://www.pmuguda.com/open-sar-triad/`** property (the URL-prefix property shown in the property dropdown) → Settings → Users and permissions → add the service account's email (Restricted access is enough). `GSC_SITE_URL` in the workflow must match this property string exactly.
 3. In this repository, go to Settings → Secrets and variables → Actions and add a secret named **`GSC_SERVICE_ACCOUNT_JSON`** whose value is the full contents of the JSON key.
 4. Run **Fetch Search Console Usage** from the Actions tab once to publish the first `data/usage.json`.
 
-The script (`scripts/fetch_gsc.py`) reports a 28-day window ending three days ago, because Search Console data lags by two to three days. It exits non-zero on a real API or auth error so a broken key is noticed rather than silently serving stale numbers.
+The script (`scripts/fetch_gsc.py`) reports a 90-day window (`GSC_WINDOW_DAYS`) ending three days ago, because Search Console data lags by two to three days. It exits non-zero on a real API or auth error so a broken key is noticed rather than silently serving stale numbers.
 
 ---
 

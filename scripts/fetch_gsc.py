@@ -18,9 +18,9 @@ Setup (one time):
 
 Environment:
   GSC_SERVICE_ACCOUNT_JSON   service-account key JSON (required to run)
-  GSC_SITE_URL               property, default sc-domain:pmuguda.com
+  GSC_SITE_URL               property, default https://www.pmuguda.com/open-sar-triad/
   GSC_PAGE_CONTAINS          page filter, default /open-sar-triad
-  GSC_WINDOW_DAYS            reporting window, default 28
+  GSC_WINDOW_DAYS            reporting window, default 90
 
 Exit codes: 0 on success or when not configured (secret absent, so the
 scheduled job stays green before setup); 1 on a real API/auth error.
@@ -34,9 +34,11 @@ from pathlib import Path
 
 OUT_PATH = Path(__file__).parent.parent / "data" / "usage.json"
 
-SITE_URL      = os.environ.get("GSC_SITE_URL", "sc-domain:pmuguda.com")
+# URL-prefix property: must match the Search Console property string exactly
+# (scheme, www, trailing slash). A domain property would be "sc-domain:host".
+SITE_URL      = os.environ.get("GSC_SITE_URL", "https://www.pmuguda.com/open-sar-triad/")
 PAGE_CONTAINS = os.environ.get("GSC_PAGE_CONTAINS", "/open-sar-triad")
-WINDOW_DAYS   = int(os.environ.get("GSC_WINDOW_DAYS", "28"))
+WINDOW_DAYS   = int(os.environ.get("GSC_WINDOW_DAYS", "90"))
 # Search Console data lags by roughly 2-3 days; end the window 3 days ago so the
 # last few days are complete rather than partial.
 LAG_DAYS = 3
