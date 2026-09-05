@@ -26,9 +26,10 @@ jobs:
       - name: Fetch Search Console stats
         env:
           GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
-          # Must match the property string exactly as shown in the Search Console
-          # property dropdown (URL-prefix property: scheme, www, trailing slash).
-          GSC_SITE_URL: https://www.pmuguda.com/open-sar-triad/
+          # Comma-separated properties, merged. Each must match the Search Console
+          # property string exactly (scheme, host, trailing slash). The app is
+          # reachable at both the canonical URL and the GitHub Pages URL.
+          GSC_SITE_URL: https://www.pmuguda.com/open-sar-triad/,https://pmuguda.github.io/open-sar-triad/
           GSC_PAGE_CONTAINS: /open-sar-triad
           GSC_WINDOW_DAYS: 90
         run: python scripts/fetch_gsc.py

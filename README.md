@@ -540,7 +540,7 @@ Search Console data is private to verified owners, so it is never fetched in the
 **One-time setup** (until this is done the workflow exits green without writing, and the panel reports that data is not yet available):
 
 1. In Google Cloud console, create a project, enable the **Google Search Console API**, create a **service account**, and download its JSON key.
-2. In Search Console, open the **`https://www.pmuguda.com/open-sar-triad/`** property (the URL-prefix property shown in the property dropdown) → Settings → Users and permissions → add the service account's email (Restricted access is enough). `GSC_SITE_URL` in the workflow must match this property string exactly.
+2. In Search Console, add the service account's email as a user (Restricted access is enough) on **each** property the app is reachable from — **`https://www.pmuguda.com/open-sar-triad/`** (canonical) and **`https://pmuguda.github.io/open-sar-triad/`** (GitHub Pages). Do it once per property: Settings → Users and permissions → Add user. `GSC_SITE_URL` in the workflow lists these comma-separated and the results are merged; each string must match the property exactly. If the account is missing from one, the job still publishes the others and prints a warning naming it.
 3. In this repository, go to Settings → Secrets and variables → Actions and add a secret named **`GSC_SERVICE_ACCOUNT_JSON`** whose value is the full contents of the JSON key.
 4. Run **Fetch Search Console Usage** from the Actions tab once to publish the first `data/usage.json`.
 
