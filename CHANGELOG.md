@@ -6,6 +6,16 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+- **Data pipeline was silently frozen.** Upstream moved the parquet geometry to a
+  WKB `geometry` column and dropped `geometry_geojson`, so decoding now requires
+  `shapely` — which was missing from `requirements.txt`. Without it every row
+  failed to parse, `fetch_catalog.py` fell back to cached data, and the weekly job
+  kept "succeeding" while the catalog stayed at 14,733. Added `shapely>=2.0`, and
+  the fetch now **fails loudly** (non-zero exit) when a provider returns rows but
+  zero parsed scenes, so a future schema change cannot freeze the catalog
+  silently. Refreshed catalog: 14,798 scenes (ICEYE 373 → 437, +75 acquisitions).
+
 ### Added
 - **Metadata sidecar with single-scene downloads.** The `05 Scene` detail
   panel's download button fetched only the data asset, so a hand-picked

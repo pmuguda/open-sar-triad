@@ -296,6 +296,10 @@ def normalize_row(row, provider_id):
     }
 
 
+class SchemaError(RuntimeError):
+    """Raised when upstream rows were fetched but none parsed — a schema change."""
+
+
 def fetch_provider(provider_id):
     info = PROVIDER_META[provider_id]
     all_rows = []
@@ -325,6 +329,16 @@ def fetch_provider(provider_id):
             features.append(feat)
 
     print(f"  [{info['label']}] ✓ {len(features)} scenes")
+
+    # Fail loudly on a schema change: if the upstream parquet had rows but none
+    # of them parsed into scenes, the fallback would silently freeze the catalog
+    # (this happened once when the geometry column moved to WKB and shapely was
+    # missing). Raise so the run goes red instead of quietly serving stale data.
+    if len(merged) and not features:
+        raise SchemaError(
+            f"{info['label']}: fetched {len(merged)} rows but parsed 0 scenes — "
+            "upstream parquet schema may have changed"
+        )
     return features
 
 
@@ -395,9 +409,15 @@ def main():
             pass
 
     all_features = {}
+    schema_failures = []
     for pid in ("iceye", "umbra", "capella"):
         try:
             all_features[pid] = fetch_provider(pid)
+        except SchemaError as e:
+            # Not transient: surface it so the run fails after writing fallback.
+            print(f"  [{pid}] SCHEMA ERROR: {e}", file=sys.stderr)
+            schema_failures.append(pid)
+            all_features[pid] = []
         except Exception as e:
             print(f"  [{pid}] ERROR: {e}", file=sys.stderr)
             all_features[pid] = []
@@ -444,6 +464,16 @@ def main():
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(geojson, separators=(",", ":")))
     print(f"\nWrote {len(merged)} total scenes → {OUT_PATH}")
+
+    # Cached fallback was written so the site keeps working, but a parse failure
+    # is a real breakage — exit non-zero so the scheduled run goes red.
+    if schema_failures:
+        print(
+            f"\nERROR: parsed 0 scenes for: {', '.join(schema_failures)}. "
+            "Wrote cached fallback and failing the run so this is not ignored.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":
