@@ -2396,15 +2396,13 @@ function initTimeline(features) {
     render();
   });
 
-  // Apply pending date restore from URL hash
+  // Apply pending date restore from URL hash. `from` and `to` are restored
+  // independently: a URL with no `to` means the end of the window tracks the
+  // newest month (already set above), so newly ingested scenes are never clipped.
   const dr = window._pendingDateRestore;
-  if (dr && dr.from && dr.to) {
-    const fromM = dr.from.slice(0, 7);
-    const toM   = dr.to.slice(0, 7);
-    const fi = MONTHS.indexOf(fromM);
-    const ti = MONTHS.indexOf(toM);
-    if (fi >= 0) tlFrom = fi;
-    if (ti >= 0) tlTo   = ti;
+  if (dr && (dr.from || dr.to)) {
+    if (dr.from) { const fi = MONTHS.indexOf(dr.from.slice(0, 7)); if (fi >= 0) tlFrom = fi; }
+    if (dr.to)   { const ti = MONTHS.indexOf(dr.to.slice(0, 7));   if (ti >= 0) tlTo   = ti; }
     setTimelineRange(tlFrom, tlTo);
     window._pendingDateRestore = null;
   }
@@ -2499,7 +2497,11 @@ function encodeState() {
   if (hidden.length) p.set('hide', hidden.join(','));
   if (MONTHS.length) {
     p.set('from', MONTHS[tlFrom]);
-    p.set('to',   MONTHS[tlTo]);
+    // Only pin `to` when the user has deliberately narrowed the end of the window.
+    // A handle resting on the newest month means "everything up to now" — writing
+    // that month into the URL froze it as a hard upper bound, so scenes ingested
+    // in later months were silently clipped for anyone with a saved/sticky hash.
+    if (tlTo < MONTHS.length - 1) p.set('to', MONTHS[tlTo]);
   }
   const modeSel = document.getElementById('modeSel');
   const mode = modeSel ? modeSel.value : '';

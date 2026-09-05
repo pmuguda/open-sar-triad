@@ -13,6 +13,15 @@ All notable changes to open-sar-triad are documented here. The format is based o
   date before ingestion history exists. The state is saved in the shareable URL.
 
 ### Fixed
+- **Newly ingested scenes were silently hidden by a stale date range.** The
+  shareable URL always wrote the acquisition window's `to` month into the hash —
+  even when the right handle simply sat on the newest month. Because the browser
+  (and the installed PWA) keeps that hash across reloads, the moment the catalog
+  grew into a new month the restored `to` clipped every scene in it: the 21
+  August 2026 acquisitions were dropped, showing 14,777 instead of 14,798. `to`
+  is now only written when the user has deliberately narrowed the end of the
+  window, and `from`/`to` restore independently, so an open-ended window keeps
+  tracking the newest month as data arrives.
 - **Returning visitors saw a stale scene count.** The service worker served
   `data/scenes.geojson` cache-first, but the weekly refresh updates the data
   without bumping the cache version — so the installed PWA and returning
