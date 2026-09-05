@@ -116,6 +116,28 @@ def enrich_countries(rows):
     return out
 
 
+def print_accessible_sites(service):
+    """On a permission error, show which properties the service account CAN see,
+    so a mismatch between GSC_SITE_URL and the property it was granted is obvious
+    instead of a bare 403."""
+    try:
+        sites = service.sites().list().execute().get("siteEntry", [])
+    except Exception:
+        return
+    if not sites:
+        print("DIAG: the service account has access to NO Search Console properties. "
+              "In Search Console open the property, then Settings -> Users and "
+              "permissions -> Add user, and add the service account's email.",
+              file=sys.stderr)
+        return
+    print("DIAG: the service account can see these properties:", file=sys.stderr)
+    for s in sites:
+        print(f"  - {s.get('siteUrl')}  ({s.get('permissionLevel')})", file=sys.stderr)
+    print(f"DIAG: but GSC_SITE_URL is '{SITE_URL}'. Either set GSC_SITE_URL to one of "
+          "the properties above, or grant the account access to that property.",
+          file=sys.stderr)
+
+
 def main():
     creds = load_credentials()
     if creds is None:
@@ -123,13 +145,21 @@ def main():
         return 0
 
     from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
     service = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
 
     end   = date.today() - timedelta(days=LAG_DAYS)
     start = end - timedelta(days=WINDOW_DAYS - 1)
 
-    # Totals over the window (no dimension).
-    total_rows = query(service, start, end, [])
+    # Totals over the window (no dimension). A 403 here almost always means the
+    # service account was not added as a user on the property; say which
+    # properties it can actually see before failing.
+    try:
+        total_rows = query(service, start, end, [])
+    except HttpError as e:
+        if getattr(e.resp, "status", None) == 403:
+            print_accessible_sites(service)
+        raise
     t = total_rows[0] if total_rows else {}
     totals = {
         "clicks":      int(t.get("clicks", 0)),
