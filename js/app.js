@@ -2745,37 +2745,80 @@ function syncRecentOnlyToggle() {
   }
 
   async function drawMap(countries) {
-    const byId = new Map(countries.filter(c => c.iso_n3).map(c => [String(Number(c.iso_n3)), c]));
+    const key  = id => String(Number(id));
+    const byId = new Map(countries.filter(c => c.iso_n3).map(c => [key(c.iso_n3), c]));
     const max  = Math.max(1, ...countries.map(c => c.clicks || 0));
     const topo = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r => r.json());
     const geo  = topojson.feature(topo, topo.objects.countries);
+    // Antarctica spans the whole antimeridian and draws as a streak across the
+    // map; drop it, and unwrap the polygons that cross ±180° (Russia, Fiji) the
+    // same way the main map does.
+    geo.features = geo.features.filter(f => +f.id !== 10);
+    geo.features.forEach(f => unwrapAntimeridian(f.geometry));
+
     const color = accent();
     // Log scale so one dominant country does not flatten everyone else to nothing.
-    const alpha = v => v <= 0 ? 0.07 : 0.22 + 0.7 * Math.log1p(v) / Math.log1p(max);
+    const alpha = v => 0.3 + 0.65 * Math.log1p(v) / Math.log1p(max);
+    const strokeIdle  = 'rgba(255,255,255,0.28)';
+    const strokeHover = 'rgba(255,255,255,0.8)';
+    // Land with no visitors reads as a neutral basemap; visited land takes the accent.
+    const styleFor = c => c && c.clicks > 0
+      ? { color: strokeIdle, weight: 0.6, fillColor: color,     fillOpacity: alpha(c.clicks) }
+      : { color: strokeIdle, weight: 0.6, fillColor: '#8a93a3', fillOpacity: 0.28 };
 
     usageMap = L.map('usage-map', {
       zoomControl: false, attributionControl: false, scrollWheelZoom: false,
-      doubleClickZoom: false, worldCopyJump: true, minZoom: 1, maxZoom: 4,
-    }).setView([22, 10], 1);
+      doubleClickZoom: false, worldCopyJump: false, minZoom: 1, maxZoom: 4,
+      maxBounds: [[-62, -185], [86, 185]], maxBoundsViscosity: 1,
+    });
+    usageMap.fitBounds([[-55, -170], [75, 180]]);
 
     L.geoJSON(geo, {
-      style: f => {
-        const c = byId.get(String(Number(f.id)));
-        return { color: 'rgba(255,255,255,0.22)', weight: 0.5, fillColor: color, fillOpacity: alpha(c ? c.clicks : 0) };
-      },
+      style: f => styleFor(byId.get(key(f.id))),
       onEachFeature: (f, lyr) => {
-        const c = byId.get(String(Number(f.id)));
+        const c = byId.get(key(f.id));
         const n = c ? c.clicks : 0;
         const name = (c && c.name) || (f.properties && f.properties.name) || 'Unknown';
         lyr.bindTooltip(`${name} · ${fmt(n)} visitor${n === 1 ? '' : 's'}`, { sticky: true, className: 'usage-tip' });
-        lyr.on('mouseover', function () { this.setStyle({ weight: 1.4, color: 'rgba(255,255,255,0.7)' }); });
-        lyr.on('mouseout',  function () { this.setStyle({ weight: 0.5, color: 'rgba(255,255,255,0.22)' }); });
+        lyr.on('mouseover', function () { this.setStyle({ weight: 1.4, color: strokeHover }); });
+        lyr.on('mouseout',  function () { this.setStyle(styleFor(c)); });
       },
     }).addTo(usageMap);
 
+    // Numbers on the map: a count badge at the centroid of every visited country.
+    const visited = countries.filter(c => c.clicks > 0 && c.iso_n3).sort((a, b) => b.clicks - a.clicks);
+    visited.forEach(c => {
+      const f = geo.features.find(x => key(x.id) === key(c.iso_n3));
+      const cen = f && centroid(f.geometry);
+      if (!cen) return;
+      L.marker([cen[1], cen[0]], {
+        interactive: false, keyboard: false,
+        icon: L.divIcon({ className: 'usage-count', html: `<span>${fmt(c.clicks)}</span>`, iconSize: [24, 24], iconAnchor: [12, 12] }),
+      }).addTo(usageMap);
+    });
+
+    // Ranked legend on the map with the numbers, so nothing depends on hovering.
+    const shown = visited.slice(0, 10);
+    const rank = L.control({ position: 'topright' });
+    rank.onAdd = () => {
+      const div = L.DomUtil.create('div', 'usage-rank');
+      div.innerHTML =
+        `<div class="usage-rank-h">Visitors by country</div>` +
+        shown.map(c =>
+          `<div class="usage-rank-row"><span class="sw" style="background:${color};opacity:${alpha(c.clicks).toFixed(2)}"></span>` +
+          `<span class="nm">${esc(c.name)}</span><span class="ct">${fmt(c.clicks)}</span></div>`).join('') +
+        (visited.length > shown.length ? `<div class="usage-rank-more">+${visited.length - shown.length} more</div>` : '') +
+        (!visited.length ? `<div class="usage-rank-more">No visitors in this window yet</div>` : '');
+      L.DomEvent.disableClickPropagation(div);
+      return div;
+    };
+    rank.addTo(usageMap);
+
+    // Scale reference under the map. (Never append a hex alpha to the accent —
+    // it is an oklch() string, so build the ramp from transparent instead.)
     const legend = document.createElement('div');
     legend.className = 'usage-legend';
-    legend.innerHTML = `<span>0</span><span class="ramp" style="background:linear-gradient(90deg, ${color}12, ${color})"></span><span>${fmt(max)} visitors</span>`;
+    legend.innerHTML = `<span>1</span><span class="ramp" style="background:linear-gradient(90deg, transparent, ${color})"></span><span>${fmt(max)} visitor${max === 1 ? '' : 's'}</span>`;
     document.getElementById('usage-map').insertAdjacentElement('afterend', legend);
     setTimeout(() => usageMap && usageMap.invalidateSize(), 60);
   }

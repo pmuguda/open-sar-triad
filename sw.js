@@ -1,11 +1,11 @@
-const CACHE_NAME = 'open-sar-triad-v49';
+const CACHE_NAME = 'open-sar-triad-v50';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=usage-1',
+  './css/style.css?v=usage-2',
   './css/tour.css?v=tour-logo-1',
-  './js/app.js?v=usage-1',
+  './js/app.js?v=usage-2',
   './js/tour.js?v=tour-v12',
   './data/scenes.geojson',
   './assets/logo.svg',
@@ -58,8 +58,15 @@ self.addEventListener('fetch', event => {
     // serving it cache-first froze the map at a stale scene count. Revalidate it
     // in the background instead: the cached copy loads instantly and the next
     // visit reflects the newest data, with no manual version bump needed.
-    if (url.pathname.endsWith('/data/scenes.geojson') || url.pathname.endsWith('/data/usage.json')) {
+    if (url.pathname.endsWith('/data/scenes.geojson')) {
       event.respondWith(staleWhileRevalidate(request));
+      return;
+    }
+    // usage.json is a few KB and republished daily: always prefer the network so
+    // the visitors panel never shows a superseded publish, falling back to cache
+    // only when offline.
+    if (url.pathname.endsWith('/data/usage.json')) {
+      event.respondWith(networkFirst(request, './data/usage.json'));
       return;
     }
     event.respondWith(cacheFirst(request));
