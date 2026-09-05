@@ -1850,7 +1850,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   ['iceye','umbra','capella'].forEach(id => { providerActive[id] = true; });
   document.querySelectorAll('.lg[data-sensor]').forEach(el => el.setAttribute('aria-pressed', 'true'));
 
-  if (MONTHS.length) setTimelineRange(Math.max(0, MONTHS.length - 24), MONTHS.length - 1);
+  if (MONTHS.length) setTimelineRange(0, MONTHS.length - 1);
 
   const modeSel = document.getElementById('modeSel');
   if (modeSel) modeSel.value = '';
@@ -2350,8 +2350,9 @@ function initTimeline(features) {
     m++; if (m > 12) { m = 1; y++; }
   }
 
-  const defaultFromIdx = Math.max(0, MONTHS.length - 24);
-  tlFrom = defaultFromIdx;
+  // Default to the full extent — earliest month to newest — so every scene in
+  // the catalog is visible until the user deliberately narrows the window.
+  tlFrom = 0;
   tlTo   = MONTHS.length - 1;
 
   buildTimelineHist(features);
@@ -2496,12 +2497,13 @@ function encodeState() {
   const hidden = ['iceye','umbra','capella'].filter(id => !providerActive[id]);
   if (hidden.length) p.set('hide', hidden.join(','));
   if (MONTHS.length) {
-    p.set('from', MONTHS[tlFrom]);
-    // Only pin `to` when the user has deliberately narrowed the end of the window.
-    // A handle resting on the newest month means "everything up to now" — writing
-    // that month into the URL froze it as a hard upper bound, so scenes ingested
-    // in later months were silently clipped for anyone with a saved/sticky hash.
-    if (tlTo < MONTHS.length - 1) p.set('to', MONTHS[tlTo]);
+    // Only pin an end of the window when the user has deliberately moved it off
+    // its extreme. A handle resting at the earliest or newest month means "all
+    // of it" — writing that month into the URL froze it as a hard bound, so
+    // scenes ingested in later months were silently clipped for anyone with a
+    // saved/sticky hash. An untouched full range writes neither.
+    if (tlFrom > 0)                p.set('from', MONTHS[tlFrom]);
+    if (tlTo < MONTHS.length - 1)  p.set('to',   MONTHS[tlTo]);
   }
   const modeSel = document.getElementById('modeSel');
   const mode = modeSel ? modeSel.value : '';

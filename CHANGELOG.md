@@ -6,6 +6,14 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Changed
+- **Acquisition window defaults to the full extent.** The slider now opens at the
+  extremes — earliest month to newest — so the whole catalog is visible by
+  default, and "Reset filters" returns it there. It previously opened on the last
+  24 months, which is why a fresh load never showed the full scene count. An
+  untouched full range is no longer written into the shareable URL at all, so a
+  saved link can never pin a stale bound on either end.
+
 ### Added
 - **"Show recent only on map" toggle** in the Recent tray. Filters the map (and
   the coverage/stats counts) to scenes ingested in the last 30 days — using the
