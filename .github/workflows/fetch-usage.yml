@@ -1,0 +1,47 @@
+name: Fetch Search Console Usage
+
+on:
+  schedule:
+    - cron: '0 4 * * *'    # daily at 04:00 UTC (GSC data lags ~2-3 days)
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements-usage.txt
+
+      # Exits 0 with a notice when the secret is not configured yet, so this job
+      # stays green until the one-time service-account setup is done.
+      - name: Fetch Search Console stats
+        env:
+          GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
+          GSC_SITE_URL: sc-domain:pmuguda.com
+          GSC_PAGE_CONTAINS: /open-sar-triad
+        run: python scripts/fetch_gsc.py
+
+      - name: Commit updated usage data
+        run: |
+          if [ ! -f data/usage.json ]; then
+            echo "No usage.json produced (not configured); nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/usage.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update usage stats [$(date -u '+%Y-%m-%d')]"
+            git push
+          fi

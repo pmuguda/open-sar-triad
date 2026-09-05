@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=recent-1" />
+  <link rel="stylesheet" href="css/style.css?v=usage-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -310,7 +310,29 @@
       <div class="lg" data-sensor="umbra"   aria-pressed="true" style="--sc:var(--umbra)"><span class="d"></span>Umbra</div>
       <div class="lg" data-sensor="capella" aria-pressed="true" style="--sc:var(--capella)"><span class="d"></span>Capella</div>
     </div>
+    <button class="helpbtn usagebtn" id="usageBtn" title="Who is using open-sar-triad" aria-label="Who is using open-sar-triad" aria-expanded="false" aria-controls="usage-modal">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+        <circle cx="8" cy="8" r="6.2"/>
+        <path d="M1.8 8h12.4M8 1.8c2.2 2 2.2 10.4 0 12.4M8 1.8c-2.2 2-2.2 10.4 0 12.4M3 4.6c3 1.2 7 1.2 10 0M3 11.4c3-1.2 7-1.2 10 0"/>
+      </svg>
+    </button>
     <button class="helpbtn" id="helpBtn">?</button>
+
+    <!-- Visitors world map (Google Search Console, published to data/usage.json) -->
+    <div id="usage-modal" class="usage-modal" hidden role="dialog" aria-modal="true" aria-labelledby="usage-title">
+      <div class="usage-card">
+        <div class="mod-h usage-h">
+          <span class="ttl" id="usage-title">Who is using open-sar-triad</span><span class="rule"></span><span class="meta">VISITORS</span>
+          <button type="button" class="usage-close" data-usage-close aria-label="Close">×</button>
+        </div>
+        <div id="usage-body">
+          <div class="usage-stats" id="usage-stats"></div>
+          <div id="usage-map" class="usage-map" aria-label="World map of visitors by country"></div>
+          <p class="usage-meta" id="usage-meta"></p>
+          <p class="usage-note">Visitors are people who reached this site from Google Search over the last 28 days, as reported by Search Console. Direct and shared-link visits are not counted, so real usage is higher.</p>
+        </div>
+      </div>
+    </div>
 
     <!-- Floating AOI toolbar (draggable) -->
     <div id="aoi-toolbar">
@@ -418,7 +440,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=range-1"></script>
+<script src="js/app.js?v=usage-1"></script>
 <script src="js/tour.js?v=tour-v12"></script>
 </body>
 </html>

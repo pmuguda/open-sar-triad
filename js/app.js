@@ -2707,6 +2707,97 @@ function syncRecentOnlyToggle() {
   syncRecentOnlyToggle();
 })();
 
+// ── Visitors world map (Google Search Console) ─────────────
+// data/usage.json is published by .github/workflows/fetch-usage.yml. Countries
+// carry the ISO numeric id, which is what the world-atlas polygons are keyed by,
+// so the page only has to join and colour.
+(function initUsagePanel() {
+  const btn   = document.getElementById('usageBtn');
+  const modal = document.getElementById('usage-modal');
+  if (!btn || !modal) return;
+  const closeBtn = modal.querySelector('[data-usage-close]');
+  let usageMap = null, loadPromise = null;
+
+  const fmt = n => Number(n || 0).toLocaleString('en-US');
+  const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00c9ff';
+
+  async function loadUsage() {
+    const body = document.getElementById('usage-body');
+    let usage;
+    try {
+      const r = await fetch('data/usage.json', { cache: 'no-cache' });
+      if (!r.ok) throw new Error(String(r.status));
+      usage = await r.json();
+    } catch {
+      body.innerHTML = '<p class="usage-empty">Visitor data is not available yet. It is published once the Search Console fetch has run.</p>';
+      return;
+    }
+    const t = usage.totals || {};
+    const countries = (usage.countries || []).filter(c => c.clicks > 0);
+    document.getElementById('usage-stats').innerHTML =
+      `<div class="usage-stat"><span class="k">Visitors</span><span class="v">${fmt(t.clicks)}</span><span class="s">arrived from Google Search</span></div>` +
+      `<div class="usage-stat"><span class="k">Impressions</span><span class="v">${fmt(t.impressions)}</span><span class="s">times shown in search results</span></div>` +
+      `<div class="usage-stat"><span class="k">Countries</span><span class="v">${fmt(countries.length)}</span><span class="s">with at least one visitor</span></div>`;
+    const w = usage.window || {};
+    document.getElementById('usage-meta').textContent =
+      `${w.start || '?'} → ${w.end || '?'} · updated ${usage.updated || '?'} · Google Search Console`;
+    await drawMap(countries);
+  }
+
+  async function drawMap(countries) {
+    const byId = new Map(countries.filter(c => c.iso_n3).map(c => [String(Number(c.iso_n3)), c]));
+    const max  = Math.max(1, ...countries.map(c => c.clicks || 0));
+    const topo = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r => r.json());
+    const geo  = topojson.feature(topo, topo.objects.countries);
+    const color = accent();
+    // Log scale so one dominant country does not flatten everyone else to nothing.
+    const alpha = v => v <= 0 ? 0.07 : 0.22 + 0.7 * Math.log1p(v) / Math.log1p(max);
+
+    usageMap = L.map('usage-map', {
+      zoomControl: false, attributionControl: false, scrollWheelZoom: false,
+      doubleClickZoom: false, worldCopyJump: true, minZoom: 1, maxZoom: 4,
+    }).setView([22, 10], 1);
+
+    L.geoJSON(geo, {
+      style: f => {
+        const c = byId.get(String(Number(f.id)));
+        return { color: 'rgba(255,255,255,0.22)', weight: 0.5, fillColor: color, fillOpacity: alpha(c ? c.clicks : 0) };
+      },
+      onEachFeature: (f, lyr) => {
+        const c = byId.get(String(Number(f.id)));
+        const n = c ? c.clicks : 0;
+        const name = (c && c.name) || (f.properties && f.properties.name) || 'Unknown';
+        lyr.bindTooltip(`${name} · ${fmt(n)} visitor${n === 1 ? '' : 's'}`, { sticky: true, className: 'usage-tip' });
+        lyr.on('mouseover', function () { this.setStyle({ weight: 1.4, color: 'rgba(255,255,255,0.7)' }); });
+        lyr.on('mouseout',  function () { this.setStyle({ weight: 0.5, color: 'rgba(255,255,255,0.22)' }); });
+      },
+    }).addTo(usageMap);
+
+    const legend = document.createElement('div');
+    legend.className = 'usage-legend';
+    legend.innerHTML = `<span>0</span><span class="ramp" style="background:linear-gradient(90deg, ${color}12, ${color})"></span><span>${fmt(max)} visitors</span>`;
+    document.getElementById('usage-map').insertAdjacentElement('afterend', legend);
+    setTimeout(() => usageMap && usageMap.invalidateSize(), 60);
+  }
+
+  function open() {
+    modal.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    if (!loadPromise) loadPromise = loadUsage();
+    loadPromise.then(() => usageMap && usageMap.invalidateSize());
+    closeBtn.focus();
+  }
+  function close() {
+    modal.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    btn.focus();
+  }
+  btn.addEventListener('click', () => (modal.hidden ? open() : close()));
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
+
 document.getElementById('recent-tabs').addEventListener('click', e => {
   const btn = e.target.closest('.recent-tab');
   if (!btn) return;

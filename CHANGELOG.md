@@ -6,6 +6,17 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **Visitors world map.** A globe button beside `?` opens a panel with a
+  choropleth of where visitors come from — countries shaded by visitor count with
+  hover tooltips — plus totals for the last 28 days. The figures come from Google
+  Search Console: a new daily workflow (`fetch-usage.yml`) calls the Search
+  Console API with a service-account key held as a GitHub Secret and publishes
+  only aggregated numbers to `data/usage.json`; nothing private reaches the page.
+  Country codes are resolved to ISO numeric ids server-side so they join directly
+  to the existing world-atlas polygons. Until the secret is configured the job
+  exits green without writing and the panel says data is not yet available.
+
 ### Changed
 - **Acquisition window defaults to the full extent.** The slider now opens at the
   extremes — earliest month to newest — so the whole catalog is visible by

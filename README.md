@@ -53,6 +53,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Accessibility](#accessibility)
 - [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
+- [Visitor Map](#visitor-map)
 - [Dependencies](#dependencies)
 - [Citation](#citation)
 - [License](#license)
@@ -527,6 +528,23 @@ Steps performed by the workflow:
 4. Run `scripts/fetch_catalog.py`.
 5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
 6. The deploy workflow then picks up the push and publishes the updated catalog to GitHub Pages.
+
+---
+
+## Visitor Map
+
+The globe button beside `?` opens a world map of where visitors come from — countries shaded by visitor count, with hover tooltips — plus 28-day totals. The numbers come from **Google Search Console**, so "visitors" means people who reached the site from Google Search; direct and shared-link visits are not counted.
+
+Search Console data is private to verified owners, so it is never fetched in the browser. The workflow at `.github/workflows/fetch-usage.yml` runs daily at 04:00 UTC (and on manual dispatch), calls the Search Console API with a service-account key held as a GitHub Secret, and commits only aggregated numbers to `data/usage.json`. Country codes are resolved to ISO numeric ids server-side so the page joins them straight onto the existing world-atlas polygons.
+
+**One-time setup** (until this is done the workflow exits green without writing, and the panel reports that data is not yet available):
+
+1. In Google Cloud console, create a project, enable the **Google Search Console API**, create a **service account**, and download its JSON key.
+2. In Search Console, open the `sc-domain:pmuguda.com` property → Settings → Users and permissions → add the service account's email (Restricted access is enough).
+3. In this repository, go to Settings → Secrets and variables → Actions and add a secret named **`GSC_SERVICE_ACCOUNT_JSON`** whose value is the full contents of the JSON key.
+4. Run **Fetch Search Console Usage** from the Actions tab once to publish the first `data/usage.json`.
+
+The script (`scripts/fetch_gsc.py`) reports a 28-day window ending three days ago, because Search Console data lags by two to three days. It exits non-zero on a real API or auth error so a broken key is noticed rather than silently serving stale numbers.
 
 ---
 
