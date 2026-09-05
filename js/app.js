@@ -2785,11 +2785,28 @@ function syncRecentOnlyToggle() {
       },
     }).addTo(usageMap);
 
-    // Numbers on the map: a count badge at the centroid of every visited country.
+    // Numbers on the map: a count badge on every visited country. Place it on the
+    // LARGEST polygon part (the mainland), not the first: centroid() uses the
+    // first part, which for Norway is Svalbard and put the badge in the Arctic.
+    const largestPartCentroid = geom => {
+      if (!geom) return null;
+      if (geom.type !== 'MultiPolygon') return centroid(geom);
+      let best = null, bestArea = -1;
+      geom.coordinates.forEach(poly => {
+        const ring = poly[0]; let a = 0;
+        for (let i = 0, n = ring.length; i < n; i++) {
+          const [x1, y1] = ring[i], [x2, y2] = ring[(i + 1) % n];
+          a += x1 * y2 - x2 * y1;
+        }
+        a = Math.abs(a) / 2;
+        if (a > bestArea) { bestArea = a; best = poly; }
+      });
+      return best ? centroid({ type: 'Polygon', coordinates: best }) : centroid(geom);
+    };
     const visited = countries.filter(c => c.clicks > 0 && c.iso_n3).sort((a, b) => b.clicks - a.clicks);
     visited.forEach(c => {
       const f = geo.features.find(x => key(x.id) === key(c.iso_n3));
-      const cen = f && centroid(f.geometry);
+      const cen = f && largestPartCentroid(f.geometry);
       if (!cen) return;
       L.marker([cen[1], cen[0]], {
         interactive: false, keyboard: false,
