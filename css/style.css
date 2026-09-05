@@ -491,11 +491,18 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
   background: oklch(from var(--bg-2) l c h / .92); border: 1px solid var(--line-2); box-shadow: var(--shadow);
   padding: 8px 10px; min-width: 170px; max-width: 220px; font-family: var(--font-mono); color: var(--ink);
 }
-.usage-rank-h { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+.usage-rank-h {
+  display: flex; align-items: center; gap: 7px; padding-left: 17px;
+  font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px;
+}
+.usage-rank-h .nm { flex: 1; }
 .usage-rank-row { display: flex; align-items: center; gap: 7px; font-size: 10.5px; line-height: 1.7; }
 .usage-rank-row .sw { width: 10px; height: 10px; flex: 0 0 10px; border: 1px solid var(--line); }
 .usage-rank-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.usage-rank-row .ct { font-weight: 600; }
+.usage-rank .ct { width: 34px; text-align: right; font-weight: 600; }
+.usage-rank .im { width: 34px; text-align: right; color: var(--ink-3); }
+.usage-legend-sep { width: 1px; height: 12px; background: var(--line-2); margin: 0 4px; }
+.usage-legend-seen { display: inline-block; width: 12px; height: 8px; }
 .usage-rank-more { font-size: 9.5px; color: var(--ink-3); margin-top: 4px; }
 @media (max-width: 640px) { .usage-rank { display: none; } }
 @media (max-width: 640px) {

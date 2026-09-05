@@ -2733,11 +2733,15 @@ function syncRecentOnlyToggle() {
       return;
     }
     const t = usage.totals || {};
-    const countries = (usage.countries || []).filter(c => c.clicks > 0);
+    // Every country Search Console reports: those that visited (clicks) and
+    // those that only saw the site in results (impressions). Both are mapped,
+    // in different tiers, so the count matches the Search Console table.
+    const countries = (usage.countries || []).filter(c => c.clicks > 0 || c.impressions > 0);
+    const visitedN  = countries.filter(c => c.clicks > 0).length;
     document.getElementById('usage-stats').innerHTML =
       `<div class="usage-stat"><span class="k">Visitors</span><span class="v">${fmt(t.clicks)}</span><span class="s">arrived from Google Search</span></div>` +
       `<div class="usage-stat"><span class="k">Impressions</span><span class="v">${fmt(t.impressions)}</span><span class="s">times shown in search results</span></div>` +
-      `<div class="usage-stat"><span class="k">Countries</span><span class="v">${fmt(countries.length)}</span><span class="s">with at least one visitor</span></div>`;
+      `<div class="usage-stat"><span class="k">Countries</span><span class="v">${fmt(countries.length)}</span><span class="s">reached in search · ${fmt(visitedN)} with visitors</span></div>`;
     const w = usage.window || {};
     document.getElementById('usage-meta').textContent =
       `${w.start || '?'} → ${w.end || '?'} · updated ${usage.updated || '?'} · Google Search Console`;
@@ -2761,10 +2765,13 @@ function syncRecentOnlyToggle() {
     const alpha = v => 0.3 + 0.65 * Math.log1p(v) / Math.log1p(max);
     const strokeIdle  = 'rgba(255,255,255,0.28)';
     const strokeHover = 'rgba(255,255,255,0.8)';
-    // Land with no visitors reads as a neutral basemap; visited land takes the accent.
-    const styleFor = c => c && c.clicks > 0
-      ? { color: strokeIdle, weight: 0.6, fillColor: color,     fillOpacity: alpha(c.clicks) }
-      : { color: strokeIdle, weight: 0.6, fillColor: '#8a93a3', fillOpacity: 0.28 };
+    // Three tiers: visited (accent, scaled by visitors), seen in search results
+    // only (faint accent with an accent outline), and no data (neutral basemap).
+    const styleFor = c => {
+      if (c && c.clicks > 0)      return { color: strokeIdle, weight: 0.6, fillColor: color,     fillOpacity: alpha(c.clicks) };
+      if (c && c.impressions > 0) return { color: color,      weight: 0.9, fillColor: color,     fillOpacity: 0.14 };
+      return                             { color: strokeIdle, weight: 0.6, fillColor: '#8a93a3', fillOpacity: 0.28 };
+    };
 
     usageMap = L.map('usage-map', {
       zoomControl: false, attributionControl: false, scrollWheelZoom: false,
@@ -2777,9 +2784,11 @@ function syncRecentOnlyToggle() {
       style: f => styleFor(byId.get(key(f.id))),
       onEachFeature: (f, lyr) => {
         const c = byId.get(key(f.id));
-        const n = c ? c.clicks : 0;
+        const n = c ? c.clicks : 0, imp = c ? c.impressions : 0;
         const name = (c && c.name) || (f.properties && f.properties.name) || 'Unknown';
-        lyr.bindTooltip(`${name} · ${fmt(n)} visitor${n === 1 ? '' : 's'}`, { sticky: true, className: 'usage-tip' });
+        lyr.bindTooltip(
+          `${name} · ${fmt(n)} visitor${n === 1 ? '' : 's'} · ${fmt(imp)} impression${imp === 1 ? '' : 's'}`,
+          { sticky: true, className: 'usage-tip' });
         lyr.on('mouseover', function () { this.setStyle({ weight: 1.4, color: strokeHover }); });
         lyr.on('mouseout',  function () { this.setStyle(styleFor(c)); });
       },
@@ -2815,17 +2824,24 @@ function syncRecentOnlyToggle() {
     });
 
     // Ranked legend on the map with the numbers, so nothing depends on hovering.
-    const shown = visited.slice(0, 10);
+    // Lists every reported country — visitors first, then impression-only — with
+    // both figures, matching the Search Console countries table.
+    const ranked = countries.slice().sort((a, b) => (b.clicks - a.clicks) || (b.impressions - a.impressions));
+    const shown  = ranked.slice(0, 12);
     const rank = L.control({ position: 'topright' });
     rank.onAdd = () => {
       const div = L.DomUtil.create('div', 'usage-rank');
       div.innerHTML =
-        `<div class="usage-rank-h">Visitors by country</div>` +
-        shown.map(c =>
-          `<div class="usage-rank-row"><span class="sw" style="background:${color};opacity:${alpha(c.clicks).toFixed(2)}"></span>` +
-          `<span class="nm">${esc(c.name)}</span><span class="ct">${fmt(c.clicks)}</span></div>`).join('') +
-        (visited.length > shown.length ? `<div class="usage-rank-more">+${visited.length - shown.length} more</div>` : '') +
-        (!visited.length ? `<div class="usage-rank-more">No visitors in this window yet</div>` : '');
+        `<div class="usage-rank-h"><span class="nm">Country</span><span class="ct" title="Visitors (clicks)">Visits</span><span class="im" title="Impressions in search results">Seen</span></div>` +
+        shown.map(c => {
+          const sw = c.clicks > 0
+            ? `background:${color};opacity:${alpha(c.clicks).toFixed(2)}`
+            : `background:${color};opacity:.18;outline:1px solid ${color}`;
+          return `<div class="usage-rank-row"><span class="sw" style="${sw}"></span>` +
+                 `<span class="nm">${esc(c.name)}</span><span class="ct">${fmt(c.clicks)}</span><span class="im">${fmt(c.impressions)}</span></div>`;
+        }).join('') +
+        (ranked.length > shown.length ? `<div class="usage-rank-more">+${ranked.length - shown.length} more</div>` : '') +
+        (!ranked.length ? `<div class="usage-rank-more">No search traffic in this window yet</div>` : '');
       L.DomEvent.disableClickPropagation(div);
       return div;
     };
@@ -2835,7 +2851,10 @@ function syncRecentOnlyToggle() {
     // it is an oklch() string, so build the ramp from transparent instead.)
     const legend = document.createElement('div');
     legend.className = 'usage-legend';
-    legend.innerHTML = `<span>1</span><span class="ramp" style="background:linear-gradient(90deg, transparent, ${color})"></span><span>${fmt(max)} visitor${max === 1 ? '' : 's'}</span>`;
+    legend.innerHTML =
+      `<span>1</span><span class="ramp" style="background:linear-gradient(90deg, transparent, ${color})"></span><span>${fmt(max)} visitor${max === 1 ? '' : 's'}</span>` +
+      `<span class="usage-legend-sep"></span>` +
+      `<span class="usage-legend-seen" style="background:${color};opacity:.35;outline:1px solid ${color}"></span><span>seen in search, no visit</span>`;
     document.getElementById('usage-map').insertAdjacentElement('afterend', legend);
     setTimeout(() => usageMap && usageMap.invalidateSize(), 60);
   }
