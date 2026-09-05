@@ -2761,16 +2761,29 @@ function syncRecentOnlyToggle() {
     geo.features.forEach(f => unwrapAntimeridian(f.geometry));
 
     const color = accent();
-    // Log scale so one dominant country does not flatten everyone else to nothing.
-    const alpha = v => 0.3 + 0.65 * Math.log1p(v) / Math.log1p(max);
+    // Sequential colour ramp from a dark accent to the full accent. The accent is
+    // an oklch() string, so resolve it to RGB through a canvas rather than parse it.
+    const cssToRgb = css => {
+      try {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+        const ctx = cv.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1);
+        const d = ctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+      } catch { return [240, 185, 79]; }
+    };
+    const hi = cssToRgb(color), lo = hi.map(v => Math.round(v * 0.38));
+    const lerp = (a, b, t) => Math.round(a + (b - a) * t);
+    const rampAt = t => `rgb(${lerp(lo[0], hi[0], t)},${lerp(lo[1], hi[1], t)},${lerp(lo[2], hi[2], t)})`;
+    // Log position so one dominant country does not flatten everyone else to the dark end.
+    const tOf = v => max <= 1 ? 1 : Math.log1p(v) / Math.log1p(max);
     const strokeIdle  = 'rgba(255,255,255,0.28)';
     const strokeHover = 'rgba(255,255,255,0.8)';
-    // Three tiers: visited (accent, scaled by visitors), seen in search results
-    // only (faint accent with an accent outline), and no data (neutral basemap).
+    // Three tiers: visited (ramp colour by visitor count — the colourbar decodes
+    // it), seen in search results only (faint accent with an accent outline),
+    // and no data (neutral basemap).
     const styleFor = c => {
-      if (c && c.clicks > 0)      return { color: strokeIdle, weight: 0.6, fillColor: color,     fillOpacity: alpha(c.clicks) };
-      if (c && c.impressions > 0) return { color: color,      weight: 0.9, fillColor: color,     fillOpacity: 0.14 };
-      return                             { color: strokeIdle, weight: 0.6, fillColor: '#8a93a3', fillOpacity: 0.28 };
+      if (c && c.clicks > 0)      return { color: strokeIdle, weight: 0.6, fillColor: rampAt(tOf(c.clicks)), fillOpacity: 0.92 };
+      if (c && c.impressions > 0) return { color: color,      weight: 0.9, fillColor: color,                 fillOpacity: 0.14 };
+      return                             { color: strokeIdle, weight: 0.6, fillColor: '#8a93a3',             fillOpacity: 0.28 };
     };
 
     usageMap = L.map('usage-map', {
@@ -2823,39 +2836,44 @@ function syncRecentOnlyToggle() {
       }).addTo(usageMap);
     });
 
-    // Ranked legend on the map with the numbers, so nothing depends on hovering.
-    // Lists every reported country — visitors first, then impression-only — with
-    // both figures, matching the Search Console countries table.
+    // No list is drawn over the map: it would grow with every new country and
+    // cover the land. The colourbar below the map decodes the colours, badges
+    // and tooltips give exact figures, and the full table sits under the map.
     const ranked = countries.slice().sort((a, b) => (b.clicks - a.clicks) || (b.impressions - a.impressions));
-    const shown  = ranked.slice(0, 12);
-    const rank = L.control({ position: 'topright' });
-    rank.onAdd = () => {
-      const div = L.DomUtil.create('div', 'usage-rank');
-      div.innerHTML =
-        `<div class="usage-rank-h"><span class="nm">Country</span><span class="ct" title="Visitors (clicks)">Visits</span><span class="im" title="Impressions in search results">Seen</span></div>` +
-        shown.map(c => {
-          const sw = c.clicks > 0
-            ? `background:${color};opacity:${alpha(c.clicks).toFixed(2)}`
-            : `background:${color};opacity:.18;outline:1px solid ${color}`;
-          return `<div class="usage-rank-row"><span class="sw" style="${sw}"></span>` +
-                 `<span class="nm">${esc(c.name)}</span><span class="ct">${fmt(c.clicks)}</span><span class="im">${fmt(c.impressions)}</span></div>`;
-        }).join('') +
-        (ranked.length > shown.length ? `<div class="usage-rank-more">+${ranked.length - shown.length} more</div>` : '') +
-        (!ranked.length ? `<div class="usage-rank-more">No search traffic in this window yet</div>` : '');
-      L.DomEvent.disableClickPropagation(div);
-      return div;
-    };
-    rank.addTo(usageMap);
 
-    // Scale reference under the map. (Never append a hex alpha to the accent —
-    // it is an oklch() string, so build the ramp from transparent instead.)
+    // Colourbar under the map: the same ramp the countries are painted with,
+    // tick-labelled with visitor counts at their (log-scaled) positions.
+    let ticks;
+    if (max <= 8) {
+      ticks = Array.from({ length: max }, (_, i) => i + 1);
+    } else {
+      ticks = [...new Set([1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].filter(v => v < max).concat([max]))];
+    }
+    const tickHtml = ticks.map(v =>
+      `<span class="tick" style="left:${(tOf(v) * 100).toFixed(1)}%"><i></i>${fmt(v)}</span>`).join('');
     const legend = document.createElement('div');
-    legend.className = 'usage-legend';
+    legend.className = 'usage-colorbar';
     legend.innerHTML =
-      `<span>1</span><span class="ramp" style="background:linear-gradient(90deg, transparent, ${color})"></span><span>${fmt(max)} visitor${max === 1 ? '' : 's'}</span>` +
+      `<span class="usage-cb-title">Visitors</span>` +
+      `<span class="usage-cb-bar" style="background:linear-gradient(90deg, ${rampAt(0)}, ${rampAt(1)})">${tickHtml}</span>` +
       `<span class="usage-legend-sep"></span>` +
-      `<span class="usage-legend-seen" style="background:${color};opacity:.35;outline:1px solid ${color}"></span><span>seen in search, no visit</span>`;
+      `<span class="usage-legend-seen" style="background:${color};opacity:.3;outline:1px solid ${color}"></span>` +
+      `<span class="usage-cb-note">seen in search, no visit</span>`;
     document.getElementById('usage-map').insertAdjacentElement('afterend', legend);
+
+    // Full table below the map — collapsed by default and scrollable, so it can
+    // hold any number of countries without ever covering the map.
+    const table = document.createElement('details');
+    table.className = 'usage-table';
+    table.innerHTML =
+      `<summary>All ${fmt(ranked.length)} countries · visits and impressions</summary>` +
+      `<div class="usage-table-scroll"><table>` +
+      `<thead><tr><th>Country</th><th>Visits</th><th>Seen</th></tr></thead><tbody>` +
+      ranked.map(c =>
+        `<tr><td><span class="sw" style="background:${c.clicks > 0 ? rampAt(tOf(c.clicks)) : color};opacity:${c.clicks > 0 ? 1 : .3}"></span>${esc(c.name)}</td>` +
+        `<td>${fmt(c.clicks)}</td><td>${fmt(c.impressions)}</td></tr>`).join('') +
+      `</tbody></table></div>`;
+    legend.insertAdjacentElement('afterend', table);
     setTimeout(() => usageMap && usageMap.invalidateSize(), 60);
   }
 

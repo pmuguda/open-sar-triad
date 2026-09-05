@@ -8,8 +8,13 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ### Added
 - **Visitors world map.** A globe button beside `?` opens a panel with a
-  choropleth of where visitors come from — countries shaded by visitor count with
-  hover tooltips — plus totals for the last 28 days. The figures come from Google
+  choropleth of where visitors come from: countries painted on a sequential
+  colour ramp by visitor count, decoded by a tick-labelled colourbar under the
+  map, with a count badge on each visited country's mainland and hover tooltips.
+  Countries that only saw the site in search results are drawn as a faint,
+  outlined tier so the country count matches Search Console; the full table sits
+  collapsed under the map so it never overlaps the land however many countries
+  appear. Totals cover a 90-day window. The figures come from Google
   Search Console: a new daily workflow (`fetch-usage.yml`) calls the Search
   Console API with a service-account key held as a GitHub Secret and publishes
   only aggregated numbers to `data/usage.json`; nothing private reaches the page.

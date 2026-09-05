@@ -486,25 +486,42 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
   border-radius: 50%; background: var(--bg-2); border: 1.5px solid var(--accent); color: var(--ink);
   font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; box-shadow: var(--shadow);
 }
-/* ranked legend drawn on the map */
-.usage-rank {
-  background: oklch(from var(--bg-2) l c h / .92); border: 1px solid var(--line-2); box-shadow: var(--shadow);
-  padding: 8px 10px; min-width: 170px; max-width: 220px; font-family: var(--font-mono); color: var(--ink);
+/* colourbar under the map */
+.usage-colorbar {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-bottom: 14px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
 }
-.usage-rank-h {
-  display: flex; align-items: center; gap: 7px; padding-left: 17px;
-  font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px;
+.usage-cb-title { flex: 0 0 auto; }
+.usage-cb-bar { position: relative; flex: 1; max-width: 320px; height: 8px; border: 1px solid var(--line-2); }
+.usage-cb-bar .tick {
+  position: absolute; top: 100%; transform: translateX(-50%); padding-top: 3px;
+  font-size: 9.5px; letter-spacing: 0; text-transform: none; color: var(--ink-2); white-space: nowrap;
 }
-.usage-rank-h .nm { flex: 1; }
-.usage-rank-row { display: flex; align-items: center; gap: 7px; font-size: 10.5px; line-height: 1.7; }
-.usage-rank-row .sw { width: 10px; height: 10px; flex: 0 0 10px; border: 1px solid var(--line); }
-.usage-rank-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.usage-rank .ct { width: 34px; text-align: right; font-weight: 600; }
-.usage-rank .im { width: 34px; text-align: right; color: var(--ink-3); }
-.usage-legend-sep { width: 1px; height: 12px; background: var(--line-2); margin: 0 4px; }
-.usage-legend-seen { display: inline-block; width: 12px; height: 8px; }
-.usage-rank-more { font-size: 9.5px; color: var(--ink-3); margin-top: 4px; }
-@media (max-width: 640px) { .usage-rank { display: none; } }
+.usage-cb-bar .tick i { display: block; width: 1px; height: 4px; margin: 0 auto 1px; background: var(--ink-3); }
+.usage-legend-sep { width: 1px; height: 12px; background: var(--line-2); margin: 0 2px; flex: 0 0 1px; }
+.usage-legend-seen { display: inline-block; width: 12px; height: 8px; flex: 0 0 12px; }
+.usage-cb-note { flex: 0 0 auto; }
+
+/* full country table, collapsed under the map */
+.usage-table { margin-top: 6px; border: 1px solid var(--line); }
+.usage-table summary {
+  cursor: pointer; padding: 6px 10px; font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); list-style: none;
+}
+.usage-table summary::-webkit-details-marker { display: none; }
+.usage-table summary::before { content: '▸ '; }
+.usage-table[open] summary::before { content: '▾ '; }
+.usage-table summary:hover { color: var(--ink); }
+.usage-table-scroll { max-height: 220px; overflow: auto; border-top: 1px solid var(--line); }
+.usage-table table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 10.5px; }
+.usage-table th, .usage-table td { padding: 4px 10px; text-align: right; white-space: nowrap; }
+.usage-table th:first-child, .usage-table td:first-child { text-align: left; }
+.usage-table th { position: sticky; top: 0; background: var(--bg-2); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; }
+.usage-table td { border-top: 1px solid var(--line); }
+.usage-table td:nth-child(2) { font-weight: 600; }
+.usage-table td:nth-child(3) { color: var(--ink-3); }
+.usage-table .sw { display: inline-block; width: 10px; height: 10px; margin-right: 7px; vertical-align: -1px; border: 1px solid var(--line); }
+@media (max-width: 640px) { .usage-colorbar { flex-wrap: wrap; } .usage-cb-bar { flex-basis: 100%; max-width: none; } }
 @media (max-width: 640px) {
   .usage-stats { grid-template-columns: 1fr; }
   .usage-map { height: 260px; }
