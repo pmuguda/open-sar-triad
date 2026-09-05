@@ -6,7 +6,19 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **"Show recent only on map" toggle** in the Recent tray. Filters the map (and
+  the coverage/stats counts) to scenes ingested in the last 30 days — using the
+  same `first_seen` definition as the Recent list, falling back to acquisition
+  date before ingestion history exists. The state is saved in the shareable URL.
+
 ### Fixed
+- **Returning visitors saw a stale scene count.** The service worker served
+  `data/scenes.geojson` cache-first, but the weekly refresh updates the data
+  without bumping the cache version — so the installed PWA and returning
+  browsers kept showing the old total indefinitely. The catalog is now served
+  stale-while-revalidate, so a refreshed catalog appears on the next visit with
+  no manual cache-version bump required.
 - **Data pipeline was silently frozen.** Upstream moved the parquet geometry to a
   WKB `geometry` column and dropped `geometry_geojson`, so decoding now requires
   `shapely` — which was missing from `requirements.txt`. Without it every row

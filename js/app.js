@@ -25,6 +25,8 @@ let lookFilter  = '';   // '' | 'left' | 'right'
 let dataLoaded  = false;
 let pendingCountryRestore = null;
 let recentProvider = null; // 'iceye' | 'umbra' | 'capella' | null — tab filter
+let recentOnly = false;    // when true, the map shows only recently-ingested scenes
+const RECENT_WINDOW_DAYS = 30;
 
 // Data formats the download script should fetch. Empty = each scene's primary
 // asset (the historical behaviour). Export-only: never filters the map.
@@ -268,15 +270,32 @@ function getFilters() {
     bbox, countryGeometry,
     orbit: orbitFilter,
     look:  lookFilter,
+    recentOnly,
   };
+}
+
+// Recent = ingested within the last RECENT_WINDOW_DAYS. Uses first_seen when the
+// weekly pipeline has stamped it; before that history exists, falls back to the
+// acquisition date so the filter is still useful. Kept in one place so the map
+// filter and the Recent tray share the same definition.
+function recentCutoffISO() {
+  return new Date(Date.now() - RECENT_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10);
+}
+function isRecentFeature(p, cutoff, trackingActive) {
+  return trackingActive
+    ? !!p.first_seen && p.first_seen >= cutoff
+    : !!p.date && p.date >= cutoff;
 }
 
 // ── Visible features ───────────────────────────────────────
 function getVisibleFeatures() {
   const f = getFilters();
+  const recentCutoff = f.recentOnly ? recentCutoffISO() : null;
+  const trackingActive = f.recentOnly && allFeatures.some(x => x.properties.first_seen);
   return allFeatures.filter(feat => {
     const p = feat.properties;
     if (!f[p.provider]) return false;
+    if (f.recentOnly && !isRecentFeature(p, recentCutoff, trackingActive)) return false;
     if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
     if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
@@ -2487,6 +2506,7 @@ function encodeState() {
   if (mode)        p.set('mode',  mode);
   if (orbitFilter) p.set('orbit', orbitFilter);
   if (lookFilter)  p.set('look',  lookFilter);
+  if (recentOnly)  p.set('recent', '1');
   if (selectedCountry) {
     p.set('country', selectedCountry.name);
   } else if (aoiBbox) {
@@ -2524,6 +2544,8 @@ function restoreState() {
 
   const look = p.get('look');
   if (look) { lookFilter = look; setSegVal('look', look); }
+
+  if (p.get('recent') === '1') { recentOnly = true; syncRecentOnlyToggle(); }
 
   const mode = p.get('mode');
   const modeSel = document.getElementById('modeSel');
@@ -2661,6 +2683,25 @@ document.getElementById('recentList').addEventListener('click', e => {
   const btn = e.target.closest('.recent-row');
   if (btn) focusFeature(btn.dataset.recentId);
 });
+
+// ── Recent-only map filter ─────────────────────────────────
+function syncRecentOnlyToggle() {
+  const btn = document.getElementById('recentOnlyToggle');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(recentOnly));
+  btn.textContent = recentOnly ? 'Showing recent only' : 'Show recent only on map';
+}
+(function initRecentOnlyToggle() {
+  const btn = document.getElementById('recentOnlyToggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    recentOnly = !recentOnly;
+    syncRecentOnlyToggle();
+    render();
+    if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
+  });
+  syncRecentOnlyToggle();
+})();
 
 document.getElementById('recent-tabs').addEventListener('click', e => {
   const btn = e.target.closest('.recent-tab');

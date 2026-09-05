@@ -1,11 +1,11 @@
-const CACHE_NAME = 'open-sar-triad-v45';
+const CACHE_NAME = 'open-sar-triad-v46';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/style.css?v=sidecar-1',
+  './css/style.css?v=recent-1',
   './css/tour.css?v=tour-logo-1',
-  './js/app.js?v=sidecar-2',
+  './js/app.js?v=recent-1',
   './js/tour.js?v=tour-v12',
   './data/scenes.geojson',
   './assets/logo.svg',
@@ -54,6 +54,14 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(request.url);
   if (url.origin === self.location.origin) {
+    // The scene catalog is refreshed weekly by CI without bumping CACHE_NAME, so
+    // serving it cache-first froze the map at a stale scene count. Revalidate it
+    // in the background instead: the cached copy loads instantly and the next
+    // visit reflects the newest data, with no manual version bump needed.
+    if (url.pathname.endsWith('/data/scenes.geojson')) {
+      event.respondWith(staleWhileRevalidate(request));
+      return;
+    }
     event.respondWith(cacheFirst(request));
     return;
   }

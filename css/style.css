@@ -672,6 +672,18 @@ body.detail-collapsed #detail-toggle { right: 0; }
 .recent-tab:hover { background: var(--bg-3); color: var(--ink); border-color: var(--ink-3); }
 .recent-tab.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 
+.recent-only-toggle {
+  display: block; width: 100%; margin: 0 0 8px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+  padding: 6px 8px; border: 1px solid var(--line); background: none;
+  color: var(--ink-3); cursor: pointer; text-transform: uppercase;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.recent-only-toggle:hover { background: var(--bg-3); color: var(--ink); border-color: var(--ink-3); }
+.recent-only-toggle[aria-pressed="true"] {
+  background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600;
+}
+
 .recent-list {
   display: flex; flex-direction: column;
   max-height: 300px; overflow-y: auto; overscroll-behavior: contain;
