@@ -30,7 +30,9 @@ jobs:
           # property string exactly (scheme, host, trailing slash). The app is
           # reachable at both the canonical URL and the GitHub Pages URL.
           GSC_SITE_URL: https://www.pmuguda.com/open-sar-triad/,https://pmuguda.github.io/open-sar-triad/
-          GSC_PAGE_CONTAINS: /open-sar-triad
+          # Empty: both properties are already scoped to /open-sar-triad/, and a
+          # page filter would force "by page" aggregation that drops country rows.
+          GSC_PAGE_CONTAINS: ""
           GSC_WINDOW_DAYS: 90
         run: python scripts/fetch_gsc.py
 

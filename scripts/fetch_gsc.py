@@ -72,16 +72,24 @@ def query(service, site_url, start, end, dimensions, row_limit=1000):
         "endDate": end.isoformat(),
         "dimensions": dimensions,
         "rowLimit": row_limit,
-        "dimensionFilterGroups": [{
+    }
+    # A page filter forces Search Console's "by page" aggregation, which drops
+    # dimension rows (country, device, query) at low volumes — the first live run
+    # returned totals but zero countries. The properties are already scoped to
+    # the app, so the filter is only applied when explicitly configured (e.g. for
+    # a whole-domain property).
+    if PAGE_CONTAINS:
+        body["dimensionFilterGroups"] = [{
             "filters": [{
                 "dimension": "page",
                 "operator": "contains",
                 "expression": PAGE_CONTAINS,
             }]
-        }],
-    }
+        }]
     resp = service.searchanalytics().query(siteUrl=site_url, body=body).execute()
-    return resp.get("rows", [])
+    rows = resp.get("rows", [])
+    print(f"    {site_url} {dimensions or ['(totals)']}: {len(rows)} rows")
+    return rows
 
 
 def country_meta(code):
