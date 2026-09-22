@@ -55,8 +55,10 @@ jobs:
           python -m build python
           python -m twine check python/dist/*
 
-      # A tagged release must match the version in pyproject.toml, otherwise the
-      # tag and the published artifact disagree forever.
+      # The web app and the Python client version independently in this repo:
+      # app releases are tagged vX.Y.Z, client releases python-vX.Y.Z. A tagged
+      # client release must match pyproject.toml, or the tag and the published
+      # artifact disagree forever.
       - name: Check the tag matches the package version
         if: github.event_name == 'release'
         run: |
@@ -64,11 +66,12 @@ jobs:
           import tomllib, pathlib
           print(tomllib.loads(pathlib.Path('python/pyproject.toml').read_text())['project']['version'])
           ")
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#python-}"
+          TAG="${TAG#v}"
           echo "pyproject version: $VERSION"
-          echo "release tag      : $TAG"
+          echo "release tag      : $GITHUB_REF_NAME -> $TAG"
           if [ "$VERSION" != "$TAG" ]; then
-            echo "::error::Tag '$TAG' does not match pyproject version '$VERSION'"
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match pyproject version '$VERSION'"
             exit 1
           fi
 
@@ -109,9 +112,13 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
 
+  # Only a python-v* release publishes the package. Without this guard an app
+  # release such as v2.3.0 would try to publish the Python client too.
   publish-pypi:
     needs: build
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    if: |
+      (github.event_name == 'release' && startsWith(github.ref_name, 'python-v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

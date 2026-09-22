@@ -594,7 +594,9 @@ Publishing uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishe
 
 One-time setup at [pypi.org/manage/account/publishing](https://pypi.org/manage/account/publishing/) — add a *pending publisher* with project `open-sar-triad`, owner `pmuguda`, repository `open-sar-triad`, workflow `publish.yml`, environment `pypi`. Repeat with environment `testpypi` at [test.pypi.org](https://test.pypi.org/manage/account/publishing/) if you want a dry run first.
 
-After that, publishing is a GitHub Release. The workflow runs the test suite, builds the sdist and wheel, checks the release tag matches the version in `pyproject.toml`, smoke-tests the built wheel in a clean virtualenv, and only then uploads.
+The app and the client version independently: app releases are tagged `vX.Y.Z`, client releases `python-vX.Y.Z`, and only a `python-v*` release publishes to PyPI.
+
+After that, publishing is a GitHub Release on a `python-v*` tag. The workflow runs the test suite, builds the sdist and wheel, checks the release tag matches the version in `pyproject.toml`, smoke-tests the built wheel in a clean virtualenv, and only then uploads.
 
 ### Endpoints
 
