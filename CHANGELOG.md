@@ -7,6 +7,12 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **PyPI release workflow** using Trusted Publishing, so no API token is created,
+  stored or rotated: PyPI verifies over OIDC that the upload came from this
+  repository's `publish.yml`. Publishing is a GitHub Release; the workflow runs
+  the test suite, builds the sdist and wheel, verifies the release tag matches
+  the version in `pyproject.toml`, smoke-tests the wheel in a clean virtualenv,
+  and only then uploads. A manual dispatch can target TestPyPI first.
 - **Catalog validation now gates the weekly commit.** `scripts/validate_catalog.py`
   runs between the fetch and the commit, so a bad ingestion fails the workflow
   instead of being committed and deployed. It checks invariants (unique ids,

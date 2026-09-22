@@ -586,7 +586,15 @@ scenes.download("data/", family="complex", dry_run=True)
 pip install open-sar-triad
 ```
 
-No API key, no account, no rate limits: there is no server to authenticate against. Every endpoint is a file rebuilt on each deploy and served from the CDN.
+No API key, no account, no rate limits: there is no server to authenticate against. Every endpoint is a file rebuilt on each deploy and served from the CDN. The client itself has **no required dependencies**.
+
+### Releasing the client
+
+Publishing uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/), so there is no API token to create, store or rotate: PyPI verifies over OpenID Connect that the upload came from this repository's `publish.yml`.
+
+One-time setup at [pypi.org/manage/account/publishing](https://pypi.org/manage/account/publishing/) — add a *pending publisher* with project `open-sar-triad`, owner `pmuguda`, repository `open-sar-triad`, workflow `publish.yml`, environment `pypi`. Repeat with environment `testpypi` at [test.pypi.org](https://test.pypi.org/manage/account/publishing/) if you want a dry run first.
+
+After that, publishing is a GitHub Release. The workflow runs the test suite, builds the sdist and wheel, checks the release tag matches the version in `pyproject.toml`, smoke-tests the built wheel in a clean virtualenv, and only then uploads.
 
 ### Endpoints
 

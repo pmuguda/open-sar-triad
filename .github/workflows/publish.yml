@@ -1,0 +1,124 @@
+name: Publish to PyPI
+
+# Publishing uses PyPI Trusted Publishing (OpenID Connect), so there is no API
+# token to create, store or rotate. PyPI verifies that the request genuinely
+# came from this repository's publish.yml running in the named environment.
+#
+# One-time setup on PyPI (https://pypi.org/manage/account/publishing/):
+#   PyPI Project Name : open-sar-triad
+#   Owner             : pmuguda
+#   Repository name   : open-sar-triad
+#   Workflow name     : publish.yml
+#   Environment name  : pypi
+#
+# Then publish by creating a GitHub Release, or run this workflow manually.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to publish'
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+jobs:
+  # Never publish something that does not pass its own tests.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install -r requirements-dev.txt
+          pip install -e python
+      - run: pytest tests/ -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build python
+          python -m twine check python/dist/*
+
+      # A tagged release must match the version in pyproject.toml, otherwise the
+      # tag and the published artifact disagree forever.
+      - name: Check the tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          VERSION=$(python -c "
+          import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('python/pyproject.toml').read_text())['project']['version'])
+          ")
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "pyproject version: $VERSION"
+          echo "release tag      : $TAG"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "::error::Tag '$TAG' does not match pyproject version '$VERSION'"
+            exit 1
+          fi
+
+      # Prove the artifact works before it reaches anyone, installed clean with
+      # no optional dependencies present.
+      - name: Smoke test the built wheel
+        run: |
+          python -m venv /tmp/check
+          /tmp/check/bin/pip install python/dist/*.whl
+          /tmp/check/bin/python -c "
+          import opensartriad
+          from opensartriad import Catalog, Scene
+          s = Scene('x','umbra','2025-01-01','spotlight',None,None,
+                    formats=['GEC','SICD'], bbox=[0,0,1,1])
+          assert s.resolve('complex') == 'SICD'
+          assert s.resolve('detected') == 'GEC'
+          print('wheel ok, version', opensartriad.__version__)
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: python/dist/
+
+  publish-testpypi:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write          # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: build
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write          # required for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

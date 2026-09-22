@@ -38,6 +38,9 @@ scenes.download("data/", family="complex", dry_run=True)
 pip install open-sar-triad
 ```
 
+The client has **no required dependencies**: it is standard library only, so this
+pulls in nothing else.
+
 Optional extras:
 
 ```bash
