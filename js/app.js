@@ -2406,6 +2406,22 @@ function initTimeline(features) {
     if (dr.to)   { const ti = MONTHS.indexOf(dr.to.slice(0, 7));   if (ti >= 0) tlTo   = ti; }
     setTimelineRange(tlFrom, tlTo);
     window._pendingDateRestore = null;
+
+    // A restored window is a snapshot of what the catalog looked like when the
+    // link was made. Scenes ingested since then fall outside it, and the map
+    // would simply not show them with nothing on screen to say why. Count what
+    // the window is hiding and offer to widen it back to the full extent.
+    const lo = MONTHS[tlFrom], hi = MONTHS[tlTo];
+    const hidden = features.reduce((n, f) => {
+      const mo = (f.properties.date || '').slice(0, 7);
+      return mo && (mo < lo || mo > hi) ? n + 1 : n;
+    }, 0);
+    if (hidden > 0) {
+      setTimeout(() => showToast(
+        `${hidden.toLocaleString()} scene${hidden === 1 ? '' : 's'} outside your saved date range`,
+        { label: 'Show all dates', run: () => { setTimelineRange(0, MONTHS.length - 1); render(); } }
+      ), 1200);
+    }
   }
 }
 
