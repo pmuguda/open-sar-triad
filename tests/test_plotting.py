@@ -394,3 +394,65 @@ def test_plot_footprint_rings_a_scene_too_small_to_see(world):
 def test_plot_footprint_leaves_a_large_scene_alone(world):
     big = _make("umbra", "big", (0, 0, 20, 15), mode="stripmap")
     assert not _scatters(P.plot_footprint(big, pad=2))
+
+
+def _polys(ax):
+    """PolyCollections drawn for scenes, excluding the basemap's (zorder 0)."""
+    from matplotlib.collections import PolyCollection
+    return [c for c in ax.collections
+            if isinstance(c, PolyCollection) and c.get_zorder() > 0]
+
+
+def test_a_plot_never_mixes_markers_and_geometry(world):
+    """The complaint: dots for most scenes, rectangles for a few, nothing saying which.
+
+    Two scenes of similar size must not land on opposite sides of an invisible
+    threshold, so the choice is made once for the whole plot.
+    """
+    mixed = _tiny(n=4) + [_make("iceye", "swath", (-8, 55, -4, 59), mode="stripmap")]
+    ax = P.plot_coverage(mixed)
+    assert bool(_scatters(ax)) != bool(_polys(ax)), "plot drew both shapes"
+
+
+def test_auto_picks_markers_when_any_scene_would_be_invisible(world):
+    mixed = _tiny(n=4) + [_make("iceye", "swath", (-8, 55, -4, 59))]
+    ax = P.plot_coverage(mixed)
+    assert _scatters(ax) and not _polys(ax)
+
+
+def test_auto_picks_geometry_when_every_scene_is_visible(world):
+    big = [_make("umbra", "a", (0, 0, 30, 20)), _make("iceye", "b", (40, 10, 70, 35))]
+    ax = P.plot_coverage(big)
+    assert _polys(ax) and not _scatters(ax)
+
+
+def test_markers_true_forces_markers_at_any_zoom(world):
+    big = [_make("umbra", "a", (0, 0, 30, 20))]
+    ax = P.plot_coverage(big, markers=True)
+    assert _scatters(ax) and not _polys(ax)
+
+
+def test_markers_false_forces_geometry_even_when_invisible(world):
+    ax = P.plot_coverage(_tiny(n=4), markers=False)
+    assert _polys(ax) and not _scatters(ax)
+
+
+def test_legend_key_says_which_representation_was_drawn(world):
+    """A round key for a map of dots, a swatch for a map of polygons."""
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    dots = P.plot_coverage(_tiny(n=4)).get_legend().legend_handles
+    assert all(isinstance(h, Line2D) for h in dots)
+    plt.close("all")
+
+    shapes = P.plot_coverage([_make("umbra", "a", (0, 0, 30, 20))]).get_legend().legend_handles
+    assert all(isinstance(h, Patch) for h in shapes)
+
+
+def test_footprints_flag_is_inert_on_a_marker_plot(world):
+    """It would otherwise fetch a provider record per scene to draw nothing."""
+    tiny = _tiny(n=3)
+    for s in tiny:
+        s._catalog = None          # any geometry access would now raise
+    assert _scatters(P.plot_coverage(tiny, footprints=True))

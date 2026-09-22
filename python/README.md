@@ -289,17 +289,29 @@ scenes.plot_coverage(
 
 A SAR footprint is a few kilometres across. On a world or continental view that is thinner than one pixel, so drawn at true scale a search returning ninety scenes renders an empty map.
 
-Footprints too small to see at the current zoom are therefore drawn as **markers**. Markers landing on the same target are **merged**, and the merged marker grows with the number of scenes behind it, so repeat tasking over one city reads as one bright dot rather than ninety invisible boxes. Zoom in, and the same scenes go back to being polygons at true scale.
+So `plot_coverage` draws scenes **either as geometry or as markers, never as a mix of the two in one plot**. A plot showing some scenes as polygons and others as dots gives you no way to tell what a shape means, and puts two scenes of similar size on opposite sides of an invisible threshold.
+
+`markers` decides which:
+
+| value | behaviour |
+|---|---|
+| `"auto"` (default) | markers if any scene would come out below `min_footprint_px`, geometry otherwise |
+| `True` | always markers, whatever the zoom |
+| `False` | always geometry, at true scale, even where that is too small to see |
+
+On a marker plot, markers landing on the same target are **merged**, and the merged marker grows with the number of scenes behind it, so repeat tasking over one city reads as one bright dot rather than ninety invisible boxes. Zoom in far enough that every scene is visible and the same call draws geometry instead. The legend key changes shape with it, round for a map of dots and a swatch for a map of polygons, so the plot says which it is.
 
 ```python
 scenes.plot_coverage(
-    markers=False,        # literal geometry only, nothing added
-    min_footprint_px=12,  # be more willing to substitute a marker
+    markers=False,        # literal geometry only, nothing substituted
+    min_footprint_px=12,  # be quicker to switch the plot to markers
     marker_size=40,       # base marker area, in points squared
 )
 ```
 
-`plot_footprint` does the equivalent for a single scene: if the footprint is smaller than a pixel or two inside the `pad` degrees of context you asked for, it draws a ring around it so you can find it. Pass `locator=False` for the polygon alone.
+`footprints=True` has no effect on a plot drawn as markers, and is skipped rather than fetching a provider record per scene to draw nothing.
+
+`plot_footprint` handles a single scene differently, since one scene cannot be inconsistent with itself: if the footprint is smaller than a pixel or two inside the `pad` degrees of context you asked for, it draws the polygon at true scale and rings it so you can find it. Pass `locator=False` for the polygon alone.
 
 ### About the basemap
 

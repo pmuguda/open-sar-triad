@@ -339,19 +339,37 @@ def _style_map_axes(ax, bbox=None, *, background="#161a21", grid=True):
 # --------------------------------------------------------------------------- #
 def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
                   bbox=None, alpha=0.35, linewidth=0.4, figsize=(13, 6.5),
-                  legend=True, title=None, markers=True,
+                  legend=True, title=None, markers="auto",
                   min_footprint_px=MIN_FOOTPRINT_PX, marker_size=26):
     """Scene coverage on a world map, coloured by provider.
 
-    By default this draws each scene's bounding box, which comes free with the
-    search index. Pass ``footprints=True`` for true acquisition polygons, which
-    is more accurate but downloads the full per-provider records first.
+    Scenes are drawn either as geometry or as markers, never as a mix of the
+    two in one plot. A plot that shows some scenes as polygons and others as
+    dots gives the reader no way to tell what a shape means, and puts two
+    scenes of similar size on opposite sides of an invisible threshold.
 
-    Footprints too small to see at the current zoom are drawn as markers, and
-    markers landing on the same spot are merged and scaled by how many scenes
-    they stand for. Without that a wide view of real SAR data renders nothing:
-    the scenes are there, they are just thinner than a pixel. Pass
-    ``markers=False`` for the literal geometry and nothing else.
+    ``markers`` decides which:
+
+    ``"auto"`` (default)
+        Markers if any scene would come out smaller than ``min_footprint_px``
+        pixels, geometry otherwise. A SAR footprint is a few kilometres across,
+        so on a world or continental view this means markers: drawn at true
+        scale those scenes are thinner than a pixel and the map comes out empty.
+        Zoom in far enough that every scene is visible and the same call draws
+        geometry.
+    ``True``
+        Always markers, whatever the zoom.
+    ``False``
+        Always geometry, at true scale, even where that is too small to see.
+
+    Markers landing on the same target are merged, and the merged marker grows
+    with the number of scenes behind it, so repeat tasking over one city reads
+    as one bright dot rather than ninety invisible boxes.
+
+    Geometry is each scene's bounding box by default, which comes free with the
+    search index. ``footprints=True`` uses true acquisition polygons, which is
+    more accurate but downloads the full per-provider records first. It has no
+    effect on a plot drawn as markers.
     """
     plt = _require_matplotlib()
     from matplotlib.collections import PolyCollection
@@ -372,16 +390,21 @@ def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
     min_deg = min_footprint_px * deg_per_px
     merge_deg = MARKER_MERGE_PX * deg_per_px
 
-    polys_by: dict[str, list] = {}
-    dots_by: dict[str, list] = {}
+    items = [s for s in scenes if s.bbox]
+    if markers == "auto":
+        use_markers = any(max(s.bbox[2] - s.bbox[0], s.bbox[3] - s.bbox[1]) < min_deg
+                          for s in items)
+    else:
+        use_markers = bool(markers)
+
     totals: dict[str, int] = {}
-    for s in scenes:
+    grouped: dict[str, list] = {}
+    for s in items:
         totals[s.provider] = totals.get(s.provider, 0) + 1
         w, so, e, n = s.bbox
-        if markers and max(e - w, n - so) < min_deg:
-            dots_by.setdefault(s.provider, []).append(((w + e) / 2, (so + n) / 2))
-            continue
-        if footprints:
+        if use_markers:
+            grouped.setdefault(s.provider, []).append(((w + e) / 2, (so + n) / 2))
+        elif footprints:
             geom = s.geometry
             if geom.get("type") == "Polygon":
                 polys = [geom["coordinates"][0]]
@@ -389,31 +412,36 @@ def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
                 polys = [p[0] for p in geom["coordinates"]]
             else:
                 continue
-            polys_by.setdefault(s.provider, []).extend(
+            grouped.setdefault(s.provider, []).extend(
                 [[(x, y) for x, y, *_ in ring] for ring in polys])
         else:
-            polys_by.setdefault(s.provider, []).append(
+            grouped.setdefault(s.provider, []).append(
                 [(w, so), (e, so), (e, n), (w, n)])
 
     merged_any = False
     handles = []
     for provider in sorted(totals, key=lambda p: -totals[p]):
         colour = PROVIDER_COLORS.get(provider, "#cccccc")
-        polys = polys_by.get(provider)
-        if polys:
-            ax.add_collection(PolyCollection(
-                polys, facecolors=colour, edgecolors=colour, alpha=alpha,
-                linewidths=linewidth, zorder=2))
-        dots = dots_by.get(provider)
-        if dots:
-            xs, ys, counts = _merge_markers(dots, merge_deg)
+        drawn = grouped.get(provider)
+        if drawn and use_markers:
+            xs, ys, counts = _merge_markers(drawn, merge_deg)
             merged_any = merged_any or any(c > 1 for c in counts)
             ax.scatter(xs, ys, s=[_marker_area(c, marker_size) for c in counts],
                        facecolors=colour, edgecolors="#0d1016", linewidths=.5,
                        alpha=.85, zorder=3)
-        handles.append(Patch(facecolor=colour, edgecolor=colour,
-                             alpha=min(1, alpha * 2),
-                             label=f"{provider} ({totals[provider]:,})"))
+        elif drawn:
+            ax.add_collection(PolyCollection(
+                drawn, facecolors=colour, edgecolors=colour, alpha=alpha,
+                linewidths=linewidth, zorder=2))
+        label = f"{provider} ({totals[provider]:,})"
+        # Match the legend key to what was actually drawn, so the plot says
+        # which of the two it is without the reader having to guess.
+        handles.append(
+            Line2D([], [], linestyle="none", marker="o", markerfacecolor=colour,
+                   markeredgecolor="#0d1016", markersize=8, label=label)
+            if use_markers else
+            Patch(facecolor=colour, edgecolor=colour,
+                  alpha=min(1, alpha * 2), label=label))
 
     if merged_any:
         handles.append(Line2D([], [], linestyle="none", marker="o",

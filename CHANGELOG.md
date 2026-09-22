@@ -15,9 +15,19 @@ All notable changes to open-sar-triad are documented here. The format is based o
   markers landing on the same target are merged and scaled by how many scenes
   they stand for, so repeat tasking over one city reads as one bright dot rather
   than ninety invisible boxes. Zooming in returns the same scenes to polygons at
-  true scale. `markers=False` restores the literal geometry. `plot_footprint`
-  does the equivalent for a single scene by ringing a footprint that is smaller
-  than the context around it; `locator=False` turns that off.
+  true scale. `plot_footprint` does the equivalent for a single scene by ringing
+  a footprint that is smaller than the context around it; `locator=False` turns
+  that off.
+
+  A plot now draws scenes **either as geometry or as markers, never as a mix of
+  the two**. Deciding per scene meant one map showed most scenes as dots and a
+  few as rectangles, with nothing saying which was which, and put two scenes of
+  similar size on opposite sides of an invisible threshold. The choice is made
+  once for the whole plot: `markers="auto"` (the default) picks markers if any
+  scene would be too small to see and geometry otherwise, `markers=True` and
+  `markers=False` force either. The legend key changes shape to match, so the
+  plot says which representation it used. `footprints=True` is skipped on a
+  marker plot rather than fetching a provider record per scene to draw nothing.
 
   Merging groups markers by distance to a group's running centroid rather than by
   cells of a fixed grid. A grid cut any cluster that straddled a boundary, so the

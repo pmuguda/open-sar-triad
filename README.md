@@ -632,7 +632,7 @@ scene.plot_footprint()     # one scene, with surrounding geography
 
 Each returns a matplotlib `Axes` and accepts `ax=`, so they compose into your own figures. The basemap reuses the same `world-atlas` geometry the web map draws, decoded in about forty lines instead of depending on cartopy or contextily, and a blocked CDN degrades to a warning rather than breaking the plot.
 
-A SAR footprint is thinner than a pixel on a world view, so footprints too small to see are drawn as markers, merged per target and scaled by how many scenes sit behind them. Zoom in and the same scenes become polygons at true scale again.
+A SAR footprint is thinner than a pixel on a world view, so `plot_coverage` draws scenes either as geometry or as markers, never as a mix of the two in one plot. Markers merge per target and scale by how many scenes sit behind them; zoom in far enough that every scene is visible and the same call draws polygons at true scale.
 
 ### Documentation and notebooks
 
