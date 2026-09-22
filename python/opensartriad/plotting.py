@@ -231,6 +231,93 @@ def draw_basemap(ax, *, facecolor="#2a2f3a", edgecolor="#5a6273",
     return ax
 
 
+#: A SAR footprint is a few kilometres across. Drawn at true scale on a
+#: continental or world view that is a fraction of one pixel, which is why a
+#: search returning ninety scenes could look like an empty map. Anything that
+#: would come out smaller than this many pixels is drawn as a marker instead.
+MIN_FOOTPRINT_PX = 7.0
+
+#: Repeat tasking means many scenes share one target. Merging markers that land
+#: within this many pixels of each other, and scaling the merged marker by how
+#: many scenes it stands for, turns ninety overlapping invisible boxes into one
+#: dot whose size says ninety.
+MARKER_MERGE_PX = 9.0
+
+
+def _deg_per_pixel(ax, view):
+    """Degrees of longitude per pixel at the given view.
+
+    Computed from the axes rectangle rather than a rendered figure so it works
+    before the first draw. ``set_aspect('equal', adjustable='box')`` shrinks the
+    axes to whichever dimension is binding, so the larger of the two ratios is
+    the scale that actually applies.
+    """
+    fig = ax.figure
+    pos = ax.get_position()
+    w_in, h_in = fig.get_size_inches()
+    w_px = max(pos.width * w_in * fig.dpi, 1.0)
+    h_px = max(pos.height * h_in * fig.dpi, 1.0)
+    return max((view[2] - view[0]) / w_px, (view[3] - view[1]) / h_px)
+
+
+def _merge_markers(points, cell):
+    """Group ``(x, y)`` points that fall within ``cell`` degrees of each other.
+
+    Returns ``(xs, ys, counts)``, each group placed at the mean of its members
+    so a merged marker sits on the scenes it represents.
+
+    Grouping is by distance to a group's running centroid, not by which cell of
+    a fixed grid a point lands in. A grid would cut any cluster unlucky enough
+    to straddle a boundary, so the same target would draw as one dot or two
+    depending on where it sits on the globe, and marker size would stop meaning
+    what it claims to mean. The grid survives only as a lookup: a point can join
+    a group seeded in any of the nine cells around it, which keeps this linear
+    rather than comparing every point to every group.
+    """
+    import math
+
+    if cell <= 0:
+        return [x for x, _ in points], [y for _, y in points], [1] * len(points)
+
+    grid: dict = {}
+    groups: list = []
+    limit = cell * cell
+    for x, y in points:
+        cx, cy = math.floor(x / cell), math.floor(y / cell)
+        best, best_d = None, limit
+        for i in (cx - 1, cx, cx + 1):
+            for j in (cy - 1, cy, cy + 1):
+                for g in grid.get((i, j), ()):
+                    dx, dy = x - g[1] / g[0], y - g[2] / g[0]
+                    d = dx * dx + dy * dy
+                    if d < best_d:
+                        best, best_d = g, d
+        if best is None:
+            g = [1, x, y]
+            groups.append(g)
+            grid.setdefault((cx, cy), []).append(g)
+        else:
+            best[0] += 1
+            best[1] += x
+            best[2] += y
+
+    xs = [g[1] / g[0] for g in groups]
+    ys = [g[2] / g[0] for g in groups]
+    counts = [g[0] for g in groups]
+    return xs, ys, counts
+
+
+def _marker_area(count, base):
+    """Marker area in points squared for a bin holding ``count`` scenes.
+
+    Area grows with the logarithm of the count, so a target imaged a hundred
+    times reads as clearly busier than one imaged once without swamping the map,
+    and a single scene still lands on the visibility floor.
+    """
+    import math
+    return base * (1.0 + 1.5 * math.log10(count)) ** 2
+
+
 def _style_map_axes(ax, bbox=None, *, background="#161a21", grid=True):
     if bbox is None:
         ax.set_xlim(-180, 180)
@@ -252,25 +339,48 @@ def _style_map_axes(ax, bbox=None, *, background="#161a21", grid=True):
 # --------------------------------------------------------------------------- #
 def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
                   bbox=None, alpha=0.35, linewidth=0.4, figsize=(13, 6.5),
-                  legend=True, title=None):
+                  legend=True, title=None, markers=True,
+                  min_footprint_px=MIN_FOOTPRINT_PX, marker_size=26):
     """Scene coverage on a world map, coloured by provider.
 
     By default this draws each scene's bounding box, which comes free with the
     search index. Pass ``footprints=True`` for true acquisition polygons, which
     is more accurate but downloads the full per-provider records first.
+
+    Footprints too small to see at the current zoom are drawn as markers, and
+    markers landing on the same spot are merged and scaled by how many scenes
+    they stand for. Without that a wide view of real SAR data renders nothing:
+    the scenes are there, they are just thinner than a pixel. Pass
+    ``markers=False`` for the literal geometry and nothing else.
     """
     plt = _require_matplotlib()
     from matplotlib.collections import PolyCollection
+    from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
+    # Set the limits before drawing: the pixel scale, and so the decision about
+    # what is too small to see, depends on the view being final.
+    _style_map_axes(ax, bbox)
     if basemap:
         draw_basemap(ax)
 
-    by_provider: dict[str, list] = {}
+    view = (bbox[0], bbox[1], bbox[2], bbox[3]) if bbox else (-180, -90, 180, 90)
+    deg_per_px = _deg_per_pixel(ax, view)
+    min_deg = min_footprint_px * deg_per_px
+    merge_deg = MARKER_MERGE_PX * deg_per_px
+
+    polys_by: dict[str, list] = {}
+    dots_by: dict[str, list] = {}
+    totals: dict[str, int] = {}
     for s in scenes:
+        totals[s.provider] = totals.get(s.provider, 0) + 1
+        w, so, e, n = s.bbox
+        if markers and max(e - w, n - so) < min_deg:
+            dots_by.setdefault(s.provider, []).append(((w + e) / 2, (so + n) / 2))
+            continue
         if footprints:
             geom = s.geometry
             if geom.get("type") == "Polygon":
@@ -279,23 +389,37 @@ def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
                 polys = [p[0] for p in geom["coordinates"]]
             else:
                 continue
-            by_provider.setdefault(s.provider, []).extend(
+            polys_by.setdefault(s.provider, []).extend(
                 [[(x, y) for x, y, *_ in ring] for ring in polys])
         else:
-            w, so, e, n = s.bbox
-            by_provider.setdefault(s.provider, []).append(
+            polys_by.setdefault(s.provider, []).append(
                 [(w, so), (e, so), (e, n), (w, n)])
 
+    merged_any = False
     handles = []
-    for provider, polys in sorted(by_provider.items(), key=lambda kv: -len(kv[1])):
+    for provider in sorted(totals, key=lambda p: -totals[p]):
         colour = PROVIDER_COLORS.get(provider, "#cccccc")
-        ax.add_collection(PolyCollection(
-            polys, facecolors=colour, edgecolors=colour, alpha=alpha,
-            linewidths=linewidth, zorder=2))
-        handles.append(Patch(facecolor=colour, edgecolor=colour, alpha=min(1, alpha * 2),
-                             label=f"{provider} ({len(polys):,})"))
+        polys = polys_by.get(provider)
+        if polys:
+            ax.add_collection(PolyCollection(
+                polys, facecolors=colour, edgecolors=colour, alpha=alpha,
+                linewidths=linewidth, zorder=2))
+        dots = dots_by.get(provider)
+        if dots:
+            xs, ys, counts = _merge_markers(dots, merge_deg)
+            merged_any = merged_any or any(c > 1 for c in counts)
+            ax.scatter(xs, ys, s=[_marker_area(c, marker_size) for c in counts],
+                       facecolors=colour, edgecolors="#0d1016", linewidths=.5,
+                       alpha=.85, zorder=3)
+        handles.append(Patch(facecolor=colour, edgecolor=colour,
+                             alpha=min(1, alpha * 2),
+                             label=f"{provider} ({totals[provider]:,})"))
 
-    _style_map_axes(ax, bbox)
+    if merged_any:
+        handles.append(Line2D([], [], linestyle="none", marker="o",
+                              markerfacecolor="#8b93a3", markeredgecolor="#0d1016",
+                              markersize=6, label="larger dot = more scenes"))
+
     ax.set_title(title or f"Scene coverage ({len(scenes):,} scenes)")
     if legend and handles:
         ax.legend(handles=handles, loc="lower left", framealpha=.85, fontsize=9)
@@ -303,8 +427,13 @@ def plot_coverage(scenes, ax=None, *, basemap=True, footprints=False,
 
 
 def plot_footprint(scene, ax=None, *, basemap=True, pad=6.0,
-                   figsize=(7, 6), title=None):
-    """One scene's footprint, with enough surrounding context to place it."""
+                   figsize=(7, 6), title=None, locator=True):
+    """One scene's footprint, with enough surrounding context to place it.
+
+    ``pad`` degrees of context around a footprint a few kilometres wide leaves
+    the footprint smaller than a pixel, so a ring is drawn around it to say
+    where to look. Pass ``locator=False`` for the polygon alone.
+    """
     plt = _require_matplotlib()
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
@@ -319,6 +448,7 @@ def plot_footprint(scene, ax=None, *, basemap=True, pad=6.0,
 
     w, s, e, n = scene.bbox
     view = (w - pad, s - pad, e + pad, n + pad)
+    _style_map_axes(ax, view)
     if basemap:
         draw_basemap(ax)
 
@@ -329,7 +459,12 @@ def plot_footprint(scene, ax=None, *, basemap=True, pad=6.0,
         ax.fill(xs, ys, facecolor=colour, edgecolor=colour, alpha=.4,
                 linewidth=1.6, zorder=3)
 
-    _style_map_axes(ax, view)
+    if locator:
+        deg_per_px = _deg_per_pixel(ax, view)
+        if max(e - w, n - s) < MIN_FOOTPRINT_PX * deg_per_px:
+            ax.scatter([(w + e) / 2], [(s + n) / 2], s=260, facecolors="none",
+                       edgecolors=colour, linewidths=1.2, alpha=.9, zorder=4)
+
     ax.set_title(title or f"{scene.provider} · {scene.date} · {scene.mode or 'n/a'}",
                  fontsize=10)
     return ax

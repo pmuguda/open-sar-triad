@@ -285,6 +285,22 @@ scenes.plot_coverage(
 
 `plot_coverage` draws **bounding boxes by default**, because those come free with the search index. `footprints=True` is more accurate but downloads the full per-provider records first.
 
+### Why the dots
+
+A SAR footprint is a few kilometres across. On a world or continental view that is thinner than one pixel, so drawn at true scale a search returning ninety scenes renders an empty map.
+
+Footprints too small to see at the current zoom are therefore drawn as **markers**. Markers landing on the same target are **merged**, and the merged marker grows with the number of scenes behind it, so repeat tasking over one city reads as one bright dot rather than ninety invisible boxes. Zoom in, and the same scenes go back to being polygons at true scale.
+
+```python
+scenes.plot_coverage(
+    markers=False,        # literal geometry only, nothing added
+    min_footprint_px=12,  # be more willing to substitute a marker
+    marker_size=40,       # base marker area, in points squared
+)
+```
+
+`plot_footprint` does the equivalent for a single scene: if the footprint is smaller than a pixel or two inside the `pad` degrees of context you asked for, it draws a ring around it so you can find it. Pass `locator=False` for the polygon alone.
+
 ### About the basemap
 
 Country outlines come from the same `world-atlas` data the web map uses, decoded in about forty lines rather than pulling in `cartopy` (which needs PROJ and GEOS compiled) or `contextily` (which needs rasterio). It is fetched once and cached under `~/.cache/opensartriad/`.

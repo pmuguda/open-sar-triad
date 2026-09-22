@@ -241,3 +241,156 @@ def test_plots_handle_an_empty_collection(world, api):
 def test_provider_colours_match_the_web_app():
     assert P.PROVIDER_COLORS == {
         "iceye": "#00FF87", "umbra": "#00C9FF", "capella": "#FF6B35"}
+
+
+# --------------------------------------------------------------------------- #
+# Visibility of small footprints
+#
+# A SAR footprint is a few kilometres across. On a world or continental view
+# that is thinner than a pixel, so drawing it at true scale produced a map that
+# looked empty while the title said "92 scenes". These tests pin the fix: small
+# footprints become markers with a size floor, and markers that land on the same
+# target merge and grow.
+# --------------------------------------------------------------------------- #
+from opensartriad import Scene  # noqa: E402
+
+
+class _StubCatalog:
+    """Serves each scene a rectangular geometry from its own bbox.
+
+    plot_footprint asks for true geometry, which normally means a network fetch
+    of the provider record. These tests are about marker sizing, not fetching.
+    """
+
+    def _record_for(self, provider, scene_id):
+        w, s, e, n = self._bboxes[scene_id]
+        return {"geometry": {"type": "Polygon",
+                             "coordinates": [[(w, s), (e, s), (e, n), (w, n), (w, s)]]}}
+
+
+def _make(provider, scene_id, bbox, **kw):
+    cat = _StubCatalog()
+    cat._bboxes = {scene_id: bbox}
+    return Scene(scene_id, provider, "2025-01-01", kw.pop("mode", "spotlight"),
+                 None, None, formats=["GEC"], bbox=list(bbox), _catalog=cat)
+
+
+def _tiny(provider="umbra", lon=10.0, lat=50.0, size=0.02, n=1, jitter=0.04):
+    """Scenes with a realistically small footprint over one target.
+
+    Repeat tasking never lands on exactly the same coordinates, so these are
+    spread by a few hundredths of a degree. Without that, the merge test would
+    pass on identical bin keys alone and say nothing about the cell size.
+    """
+    out = []
+    for i in range(n):
+        x, y = lon + (i % 7) * jitter, lat + (i % 5) * jitter
+        out.append(_make(provider, f"{provider}-{lon}-{lat}-{i}",
+                         (x, y, x + size, y + size)))
+    return out
+
+
+def _scatters(ax):
+    from matplotlib.collections import PathCollection
+    return [c for c in ax.collections if isinstance(c, PathCollection)]
+
+
+def test_merge_markers_groups_by_distance_and_averages_position():
+    xs, ys, counts = P._merge_markers(
+        [(0.0, 0.0), (0.2, 0.0), (10.0, 10.0)], cell=1.0)
+    order = sorted(zip(counts, xs, ys))
+    assert [c for c, _, _ in order] == [1, 2]
+    assert order[1][1] == pytest.approx(0.1)   # mean of the two, not a grid node
+
+
+@pytest.mark.parametrize("shift", [0.0, 0.25, 0.5, 0.75, 0.9])
+def test_merge_markers_does_not_split_a_cluster_on_a_grid_boundary(shift):
+    """A fixed grid cut clusters that straddled a cell edge.
+
+    The same five scenes over one target have to merge into one marker wherever
+    that target happens to sit, otherwise marker size reports position rather
+    than how busy the target is.
+    """
+    pts = [(shift + i * 0.02, shift + i * 0.02) for i in range(5)]
+    _, _, counts = P._merge_markers(pts, cell=1.0)
+    assert counts == [5], f"cluster split at offset {shift}"
+
+
+def test_merge_markers_still_separates_targets_further_than_a_cell():
+    _, _, counts = P._merge_markers([(0.0, 0.0), (0.0, 3.0)], cell=1.0)
+    assert sorted(counts) == [1, 1]
+
+
+def test_merge_markers_keeps_distinct_targets_apart():
+    xs, _, counts = P._merge_markers([(0.0, 0.0), (5.0, 0.0)], cell=1.0)
+    assert sorted(counts) == [1, 1]
+    assert len(xs) == 2
+
+
+def test_marker_area_grows_with_count_but_sublinearly():
+    one, ten, hundred = (P._marker_area(n, 26) for n in (1, 10, 100))
+    assert one == 26
+    assert ten > one and hundred > ten
+    assert hundred < 100 * one, "a busy target must not swamp the map"
+
+
+def test_tiny_footprints_are_drawn_as_markers(world):
+    """The regression: at world scale these polygons are sub-pixel."""
+    ax = P.plot_coverage(_tiny(n=3))
+    offsets = [o for c in _scatters(ax) for o in c.get_offsets()]
+    assert offsets, "sub-pixel footprints drew nothing visible"
+
+
+def test_markers_meet_a_minimum_on_screen_size(world):
+    ax = P.plot_coverage(_tiny(n=1), marker_size=26)
+    sizes = [s for c in _scatters(ax) for s in c.get_sizes()]
+    assert sizes and min(sizes) >= 26
+
+
+def test_repeat_acquisitions_merge_into_one_larger_marker(world):
+    """Ninety scenes over one target is one bright dot, not ninety invisible ones."""
+    busy = _tiny(lon=10.0, lat=50.0, n=90) + _tiny(lon=-60.0, lat=-20.0, n=1)
+    ax = P.plot_coverage(busy)
+    sizes = sorted(s for c in _scatters(ax) for s in c.get_sizes())
+    assert len(sizes) == 2, "repeat visits should collapse to one marker per target"
+    assert sizes[1] > sizes[0]
+
+
+def test_large_footprints_stay_polygons(world):
+    from matplotlib.collections import PolyCollection
+    big = [_make("umbra", "big", (0, 0, 40, 30), mode="stripmap")]
+    ax = P.plot_coverage(big)
+    assert not _scatters(ax), "a footprint this size does not need a marker"
+    assert any(isinstance(c, PolyCollection) for c in ax.collections)
+
+
+def test_zooming_in_turns_markers_back_into_footprints(world):
+    """The same scene is a marker at world scale and a polygon up close."""
+    one = _tiny(size=0.5)
+    assert _scatters(P.plot_coverage(one))
+    plt.close("all")
+    assert not _scatters(P.plot_coverage(one, bbox=(9, 49, 11, 51)))
+
+
+def test_markers_can_be_switched_off(world):
+    ax = P.plot_coverage(_tiny(n=3), markers=False)
+    assert not _scatters(ax)
+
+
+def test_legend_counts_scenes_not_polygons(world):
+    """It used to label from the polygon list, which markers would have emptied."""
+    ax = P.plot_coverage(_tiny(provider="umbra", n=5))
+    labels = [t.get_text() for t in ax.get_legend().get_texts()]
+    assert "umbra (5)" in labels
+
+
+def test_plot_footprint_rings_a_scene_too_small_to_see(world):
+    scene = _tiny(size=0.02)[0]
+    assert _scatters(P.plot_footprint(scene, pad=8))
+    plt.close("all")
+    assert not _scatters(P.plot_footprint(scene, pad=8, locator=False))
+
+
+def test_plot_footprint_leaves_a_large_scene_alone(world):
+    big = _make("umbra", "big", (0, 0, 20, 15), mode="stripmap")
+    assert not _scatters(P.plot_footprint(big, pad=2))

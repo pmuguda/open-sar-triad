@@ -6,6 +6,27 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+- **Coverage plots showed an empty map where there were hundreds of scenes**
+  (client 1.2.0). A SAR footprint is a few kilometres across, which on a world or
+  continental view is thinner than one pixel, so drawing footprints at true scale
+  rendered nothing while the title read "92 scenes". Footprints too small to see
+  at the current zoom are now drawn as markers with an on-screen size floor, and
+  markers landing on the same target are merged and scaled by how many scenes
+  they stand for, so repeat tasking over one city reads as one bright dot rather
+  than ninety invisible boxes. Zooming in returns the same scenes to polygons at
+  true scale. `markers=False` restores the literal geometry. `plot_footprint`
+  does the equivalent for a single scene by ringing a footprint that is smaller
+  than the context around it; `locator=False` turns that off.
+
+  Merging groups markers by distance to a group's running centroid rather than by
+  cells of a fixed grid. A grid cut any cluster that straddled a boundary, so the
+  same target drew as one dot or two depending on where it sat on the globe, and
+  marker size reported position instead of how busy the target was.
+
+- The coverage legend counted polygons rather than scenes, which would have read
+  zero for any provider whose footprints all became markers.
+
 ### Added
 - **Plotting, against a country basemap** (client 1.1.0): `plot_coverage()`,
   `plot_timeline()`, `plot_providers()` and `Scene.plot_footprint()`. Each returns
