@@ -618,12 +618,26 @@ import pystac
 root = pystac.Catalog.from_file("https://www.pmuguda.com/open-sar-triad/api/v1/catalog.json")
 ```
 
+The client also plots, against a country basemap:
+
+```python
+pip install "open-sar-triad[plot]"
+```
+```python
+scenes.plot_coverage()     # footprints on a world map, coloured by provider
+scenes.plot_timeline()     # acquisitions over time
+scenes.plot_providers()    # counts per provider
+scene.plot_footprint()     # one scene, with surrounding geography
+```
+
+Each returns a matplotlib `Axes` and accepts `ax=`, so they compose into your own figures. The basemap reuses the same `world-atlas` geometry the web map draws, decoded in about forty lines instead of depending on cartopy or contextily, and a blocked CDN degrades to a warning rather than breaking the plot.
+
 ### Documentation and notebooks
 
-- [`python/README.md`](python/README.md) — full client documentation: searching, product families, downloading, exports, API reference
+- [`python/README.md`](python/README.md) — full client documentation: searching, product families, downloading, exports, plotting, API reference
 - [`notebooks/01_quickstart.ipynb`](notebooks/01_quickstart.ipynb) — connect, explore the catalog, inspect a scene
 - [`notebooks/02_search_and_download.ipynb`](notebooks/02_search_and_download.ipynb) — narrowing a search, product families, downloading with sidecars
-- [`notebooks/03_stac_and_analysis.ipynb`](notebooks/03_stac_and_analysis.ipynb) — STAC interoperability, coverage analysis, plots
+- [`notebooks/03_stac_and_analysis.ipynb`](notebooks/03_stac_and_analysis.ipynb) — STAC interoperability, coverage analysis, and the built-in plots
 
 ### How it is built
 

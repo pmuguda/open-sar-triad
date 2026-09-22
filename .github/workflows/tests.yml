@@ -48,6 +48,14 @@ jobs:
           assert s.resolve('complex') == 'SICD'
           assert s.resolve('detected') == 'GEC'
           print('client imports and resolves with zero optional deps')
+
+          # Plotting must fail with a useful hint rather than a bare ImportError.
+          try:
+              s.plot_footprint()
+              raise SystemExit('plotting should have required matplotlib')
+          except ImportError as e:
+              assert 'open-sar-triad[plot]' in str(e), e
+              print('plotting raises the documented install hint')
           "
 
   build-api:

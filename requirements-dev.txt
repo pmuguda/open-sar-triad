@@ -1,5 +1,8 @@
 # Development and CI dependencies.
 # Runtime needs are deliberately smaller: the data pipeline uses
 # requirements.txt, and the Python client has no required dependencies at all.
+# matplotlib is here so the plotting tests run; the client itself treats it as
+# optional and the CI job proves the package still works without it.
 pytest>=7.4
 pandas>=2.0
+matplotlib>=3.7

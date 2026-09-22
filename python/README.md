@@ -25,6 +25,7 @@ scenes.download("data/", family="complex", dry_run=True)
 - [Product families](#product-families)
 - [Downloading](#downloading)
 - [Exporting](#exporting)
+- [Plotting](#plotting)
 - [STAC interoperability](#stac-interoperability)
 - [How it works](#how-it-works)
 - [API reference](#api-reference)
@@ -240,6 +241,61 @@ scenes.to_dataframe()           # pandas DataFrame (needs pandas)
 df = scenes.to_dataframe()
 df.groupby("provider").size()
 df.groupby(df["date"].str[:7]).size()   # scenes per month
+```
+
+---
+
+## Plotting
+
+```bash
+pip install "open-sar-triad[plot]"
+```
+
+Four plots, all drawn against a **country basemap**:
+
+```python
+scenes.plot_coverage()     # footprints on a world map, coloured by provider
+scenes.plot_timeline()     # acquisitions over time, stacked by provider
+scenes.plot_providers()    # scene counts per provider
+scene.plot_footprint()     # one scene, with surrounding geography
+```
+
+Every one returns a matplotlib `Axes` and accepts `ax=`, so they compose into your own figures:
+
+```python
+import matplotlib.pyplot as plt
+
+fig, axes = plt.subplots(2, 1, figsize=(13, 10))
+scenes.plot_coverage(ax=axes[0])
+scenes.plot_timeline(ax=axes[1], freq="year")
+fig.savefig("report.png", dpi=150, bbox_inches="tight")
+```
+
+### Coverage options
+
+```python
+scenes.plot_coverage(
+    footprints=True,            # true acquisition polygons instead of bounding boxes
+    bbox=(-10, 35, 30, 60),     # zoom to an area
+    basemap=False,              # skip the country outlines
+    alpha=0.5,
+    title="Scenes over Europe",
+)
+```
+
+`plot_coverage` draws **bounding boxes by default**, because those come free with the search index. `footprints=True` is more accurate but downloads the full per-provider records first.
+
+### About the basemap
+
+Country outlines come from the same `world-atlas` data the web map uses, decoded in about forty lines rather than pulling in `cartopy` (which needs PROJ and GEOS compiled) or `contextily` (which needs rasterio). It is fetched once and cached under `~/.cache/opensartriad/`.
+
+Several mirrors are tried in turn, and **if all of them are blocked the plot still renders**, without the basemap and with a warning. That matters on networks where public CDNs are unreachable.
+
+```python
+from opensartriad.plotting import load_world, draw_basemap
+
+load_world()                      # rings, cached after the first call
+draw_basemap(ax, required=True)   # raise instead of warning if unavailable
 ```
 
 ---

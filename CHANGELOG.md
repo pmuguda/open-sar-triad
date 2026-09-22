@@ -7,6 +7,18 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Plotting, against a country basemap** (client 1.1.0): `plot_coverage()`,
+  `plot_timeline()`, `plot_providers()` and `Scene.plot_footprint()`. Each returns
+  a matplotlib `Axes` and accepts `ax=`, so they compose into larger figures.
+  Coverage draws bounding boxes by default, since those come free with the search
+  index, and `footprints=True` switches to true acquisition polygons. The basemap
+  reuses the same world-atlas geometry the web map draws, decoded from TopoJSON in
+  about forty lines rather than depending on cartopy (PROJ, GEOS) or contextily
+  (rasterio), cached on disk, with several mirrors tried in turn and a warning
+  instead of a crash when all are blocked. Rings crossing the antimeridian are
+  split and rejoined cyclically, which keeps Antarctica on the map instead of
+  dropping it as the web version did. matplotlib stays optional: the package still
+  installs with no dependencies and plotting raises a documented install hint.
 - **PyPI release workflow** using Trusted Publishing, so no API token is created,
   stored or rotated: PyPI verifies over OIDC that the upload came from this
   repository's `publish.yml`. Publishing is a GitHub Release; the workflow runs

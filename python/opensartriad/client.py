@@ -166,6 +166,14 @@ class Scene:
             raise ValueError(f"Unknown family {family!r}; expected one of {list(FAMILIES)}")
         return next((f for f in order if f in self.formats), None)
 
+    def plot_footprint(self, ax=None, **kw):
+        """This scene's footprint on a country basemap, with surrounding context.
+
+        Needs matplotlib: ``pip install 'open-sar-triad[plot]'``.
+        """
+        from .plotting import plot_footprint
+        return plot_footprint(self, ax=ax, **kw)
+
     def __repr__(self) -> str:
         return (f"Scene({self.id!r}, provider={self.provider!r}, date={self.date!r}, "
                 f"mode={self.mode!r}, formats={self.formats})")
@@ -244,6 +252,29 @@ class SceneCollection(_SequenceABC):
         path = Path(path)
         path.write_text(json.dumps(self.to_geojson()))
         return path
+
+    # -- Plotting ---------------------------------------------------------- #
+    # Imported lazily so matplotlib stays an optional dependency: the package
+    # itself installs with nothing.
+    def plot_coverage(self, ax=None, **kw):
+        """Scene coverage on a country basemap, coloured by provider.
+
+        Draws bounding boxes by default, which come free with the search index.
+        ``footprints=True`` uses true acquisition polygons, which is more
+        accurate but fetches the full per-provider records first.
+        """
+        from .plotting import plot_coverage
+        return plot_coverage(self, ax=ax, **kw)
+
+    def plot_timeline(self, ax=None, **kw):
+        """Acquisitions over time, stacked by provider."""
+        from .plotting import plot_timeline
+        return plot_timeline(self, ax=ax, **kw)
+
+    def plot_providers(self, ax=None, **kw):
+        """Scene count per provider."""
+        from .plotting import plot_providers
+        return plot_providers(self, ax=ax, **kw)
 
     # -- Download ---------------------------------------------------------- #
     def download_urls(self, family: str | None = None,
