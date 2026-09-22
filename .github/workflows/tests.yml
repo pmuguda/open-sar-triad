@@ -1,0 +1,84 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'python/**'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e python
+
+      - name: Run tests
+        run: pytest tests/ -q
+
+      # The client must keep working with no optional dependencies installed,
+      # since that is how most people will install it.
+      - name: Verify the client has no hidden dependencies
+        if: matrix.python-version == '3.11'
+        run: |
+          pip uninstall -y pandas matplotlib pyarrow shapely 2>/dev/null || true
+          python -c "
+          from opensartriad import Catalog, Scene, FAMILIES
+          s = Scene('x', 'umbra', '2025-01-01', 'spotlight', None, None,
+                    formats=['GEC', 'SICD'], bbox=[0, 0, 1, 1])
+          assert s.resolve('complex') == 'SICD'
+          assert s.resolve('detected') == 'GEC'
+          print('client imports and resolves with zero optional deps')
+          "
+
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The real catalog is committed, so this checks the builder and the
+      # validator against production data rather than fixtures.
+      - name: Validate the committed catalog
+        run: python scripts/validate_catalog.py
+
+      - name: Build the API from the real catalog
+        run: |
+          python scripts/build_api.py
+          test -f api/v1/catalog.json
+          test -f api/v1/index.json
+          python -c "
+          import json, pathlib
+          files = list(pathlib.Path('api/v1').rglob('*'))
+          files = [f for f in files if f.is_file()]
+          assert len(files) == 12, files
+          for f in files:
+              d = json.loads(f.read_text())
+              assert d['license'] == 'CC-BY-4.0', f
+          idx = json.loads(pathlib.Path('api/v1/index.json').read_text())
+          st  = json.loads(pathlib.Path('api/v1/stats.json').read_text())
+          assert idx['count'] == st['total'] > 0
+          print(f\"api built from real catalog: {st['total']} scenes, {len(files)} files\")
+          "

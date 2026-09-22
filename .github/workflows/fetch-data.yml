@@ -24,6 +24,21 @@ jobs:
       - name: Fetch catalogs
         run: python scripts/fetch_catalog.py
 
+      # Gate the commit. The catalog has just been rewritten but not committed,
+      # so HEAD still holds the previous version and the validator can diff
+      # against it. A failure here means nothing bad is ever committed or
+      # deployed: the site keeps serving the last good catalog.
+      - name: Validate catalog
+        run: python scripts/validate_catalog.py --json /tmp/validation.json
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-validation
+          path: /tmp/validation.json
+          if-no-files-found: ignore
+
       - name: Commit updated data
         run: |
           git config user.name  "github-actions[bot]"

@@ -530,6 +530,44 @@ Steps performed by the workflow:
 5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
 6. The deploy workflow then picks up the push and publishes the updated catalog to GitHub Pages.
 
+### Validation gates the commit
+
+Step 5 above runs `scripts/validate_catalog.py` **before** the commit. The catalog has been rewritten but not yet committed, so `HEAD` still holds the previous version and the validator can diff against it. If validation fails the workflow goes red and nothing is committed, so the site keeps serving the last good catalog rather than a broken one.
+
+**Invariants** (must hold for any healthy catalog):
+
+- scene ids unique and non-empty; provider one of the three
+- dates well-formed, not in the future, not implausibly old, `year` agreeing with `date`
+- geometry of the right type, rings closed, coordinates actually on Earth
+- asset URLs `http(s)` and on the providers' own hosts
+- Capella ids carry no per-format token, proving the collapse step ran
+- every provider present with a non-zero count
+
+**Regression checks** (against the previously committed catalog):
+
+- total scene count must not fall more than 5%
+- no provider may fall more than 15%, or disappear entirely
+- an *identical* scene set raises a warning, because that is what a silent fallback looks like — the failure that once froze the catalog at 14,733 for weeks while every run reported success
+
+Run it by hand any time:
+
+```bash
+python3 scripts/validate_catalog.py                    # against git HEAD
+python3 scripts/validate_catalog.py --strict           # warnings become failures
+python3 scripts/validate_catalog.py --json report.json
+```
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+80 tests covering the validator, the API builder and the Python client. The validator tests are **mutation tests**: each deliberately corrupts a healthy catalog in one specific way (duplicate ids, coordinates off the Earth, a provider vanishing, an uncollapsed Capella id, an asset URL drifting to an unexpected host) and asserts it is rejected. A validator that never fails would be worthless, so the suite proves it fails for the right reasons.
+
+CI (`.github/workflows/tests.yml`) runs the suite on Python 3.9, 3.11 and 3.12, checks the client still imports and resolves product families with **zero optional dependencies**, and separately validates the real committed catalog and builds the API from it.
+
 ---
 
 ## API and Python client

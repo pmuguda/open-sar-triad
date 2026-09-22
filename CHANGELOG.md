@@ -7,6 +7,21 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Catalog validation now gates the weekly commit.** `scripts/validate_catalog.py`
+  runs between the fetch and the commit, so a bad ingestion fails the workflow
+  instead of being committed and deployed. It checks invariants (unique ids,
+  coordinates on Earth, dates not in the future, asset URLs on the providers' own
+  hosts, Capella variants actually collapsed, no provider at zero) and regressions
+  against the previously committed catalog (no >5% total drop, no >15% provider
+  drop, no provider vanishing). An unchanged scene set raises a warning, since
+  that is the signature of the silent fallback that once froze the catalog.
+- **Test suite** (`tests/`, 80 tests): mutation tests that corrupt a healthy
+  catalog one way at a time and assert the validator rejects each, plus coverage
+  of the API builder (STAC validity, sidecar derivation, index/field alignment,
+  licence notice on every file) and the Python client (search filters, family
+  resolution, lazy asset loading, sidecar de-duplication, exports). A new CI
+  workflow runs them on Python 3.9/3.11/3.12 and verifies the client works with
+  zero optional dependencies installed.
 - **Static STAC API and Python client.** The catalog is now queryable from code.
   `scripts/build_api.py` derives `api/v1/` from the scene catalog: a STAC root,
   a Collection and ItemCollection per provider, a compact search index

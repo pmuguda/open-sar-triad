@@ -1,0 +1,5 @@
+# Development and CI dependencies.
+# Runtime needs are deliberately smaller: the data pipeline uses
+# requirements.txt, and the Python client has no required dependencies at all.
+pytest>=7.4
+pandas>=2.0
