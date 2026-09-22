@@ -28,3 +28,6 @@ python/build/
 python/dist/
 python/*.egg-info/
 .ipynb_checkpoints/
+
+# Written by notebooks/02_search_and_download.ipynb when it is run.
+notebooks/selection.geojson
