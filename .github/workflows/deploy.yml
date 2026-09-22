@@ -24,6 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The static API under api/v1/ is derived entirely from data/scenes.geojson,
+      # so it is built here into the Pages artifact rather than committed. That
+      # keeps ~87 MB of generated JSON per weekly refresh out of git history
+      # while still publishing it to the CDN.
+      - name: Build static API
+        run: python scripts/build_api.py
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

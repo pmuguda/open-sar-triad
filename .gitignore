@@ -17,3 +17,14 @@ js/app-record.js
 node_modules/
 package.json
 package-lock.json
+
+# Static API output. Derived from data/scenes.geojson by scripts/build_api.py and
+# built into the Pages artifact at deploy time, so it reaches the CDN without ever
+# entering git history (~87 MB, and it would be rewritten on every weekly refresh).
+/api/
+
+# Python client build artifacts
+python/build/
+python/dist/
+python/*.egg-info/
+.ipynb_checkpoints/

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "open-sar-triad"
+version = "1.0.0"
+description = "Discover and download open SAR scenes from ICEYE, Umbra and Capella through one API"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Pavan Muguda Sanjeevamurthy" }]
+keywords = ["sar", "synthetic aperture radar", "stac", "earth observation",
+            "remote sensing", "iceye", "umbra", "capella", "open data"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+
+# No required dependencies: the client is standard library only.
+dependencies = []
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0"]
+geo    = ["geopandas>=0.14", "shapely>=2.0"]
+stac   = ["pystac>=1.10"]
+notebooks = ["pandas>=2.0", "matplotlib>=3.7", "geopandas>=0.14", "jupyter>=1.0"]
+all    = ["pandas>=2.0", "geopandas>=0.14", "shapely>=2.0", "pystac>=1.10", "matplotlib>=3.7"]
+
+[project.urls]
+Homepage      = "https://www.pmuguda.com/open-sar-triad/"
+Source        = "https://github.com/pmuguda/open-sar-triad"
+Issues        = "https://github.com/pmuguda/open-sar-triad/issues"
+"STAC catalog" = "https://www.pmuguda.com/open-sar-triad/api/v1/catalog.json"
+
+[tool.setuptools.packages.find]
+include = ["opensartriad*"]

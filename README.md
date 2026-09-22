@@ -53,6 +53,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Accessibility](#accessibility)
 - [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
+- [API and Python client](#api-and-python-client)
 - [Visitor Map](#visitor-map)
 - [Dependencies](#dependencies)
 - [Citation](#citation)
@@ -528,6 +529,68 @@ Steps performed by the workflow:
 4. Run `scripts/fetch_catalog.py`.
 5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
 6. The deploy workflow then picks up the push and publishes the updated catalog to GitHub Pages.
+
+---
+
+## API and Python client
+
+The catalog is published as a **static STAC API** and a **Python client**, so the same data the map shows can be queried and downloaded from a script or notebook.
+
+```python
+from opensartriad import Catalog
+
+cat = Catalog()
+scenes = cat.search(bbox=(5.9, 47.2, 10.5, 55.1), start="2025-01-01", family="complex")
+scenes.download("data/", family="complex", dry_run=True)
+```
+
+```bash
+pip install open-sar-triad
+```
+
+No API key, no account, no rate limits: there is no server to authenticate against. Every endpoint is a file rebuilt on each deploy and served from the CDN.
+
+### Endpoints
+
+Base URL: `https://www.pmuguda.com/open-sar-triad/api/v1`
+
+| Endpoint | Contents |
+|----------|----------|
+| `catalog.json` | STAC root catalog |
+| `collections/{provider}.json` | STAC Collection per provider |
+| `items/{provider}.json` | STAC ItemCollection, one Item per acquisition, assets include metadata sidecars |
+| `index.json` | compact search index (~0.6 MB gzipped) for client-side filtering |
+| `stats.json` | counts by provider, mode, year and format, plus temporal extent |
+| `scenes/{provider}.geojson` | raw per-provider FeatureCollection |
+
+Because it is real STAC, standard tooling works without this project's client:
+
+```python
+import pystac
+root = pystac.Catalog.from_file("https://www.pmuguda.com/open-sar-triad/api/v1/catalog.json")
+```
+
+### Documentation and notebooks
+
+- [`python/README.md`](python/README.md) — full client documentation: searching, product families, downloading, exports, API reference
+- [`notebooks/01_quickstart.ipynb`](notebooks/01_quickstart.ipynb) — connect, explore the catalog, inspect a scene
+- [`notebooks/02_search_and_download.ipynb`](notebooks/02_search_and_download.ipynb) — narrowing a search, product families, downloading with sidecars
+- [`notebooks/03_stac_and_analysis.ipynb`](notebooks/03_stac_and_analysis.ipynb) — STAC interoperability, coverage analysis, plots
+
+### How it is built
+
+`scripts/build_api.py` derives `api/v1/` from `data/scenes.geojson`. It runs in the **deploy** workflow rather than the data-refresh workflow, so the generated JSON (~87 MB) reaches the CDN without being committed; `api/` is gitignored for that reason. Rebuild locally with:
+
+```bash
+python3 scripts/build_api.py
+python3 -m http.server 8000       # then Catalog("http://localhost:8000/api/v1")
+```
+
+Product families in the client resolve identically to the web app (`complex` gives `SLC` where published and `SICD` at Umbra), and metadata sidecar URLs use the same derivation, so the API, the download script and the map never disagree.
+
+### Licence
+
+Scene metadata is **CC-BY 4.0**; every generated file carries its own licence, attribution, modification and disclaimer notice, since any of them can be fetched standalone. Imagery is never redistributed here: asset links point at each provider's own storage. Credit the originating provider when publishing derived work.
 
 ---
 

@@ -7,6 +7,27 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Static STAC API and Python client.** The catalog is now queryable from code.
+  `scripts/build_api.py` derives `api/v1/` from the scene catalog: a STAC root,
+  a Collection and ItemCollection per provider, a compact search index
+  (~0.6 MB gzipped), a stats document and raw per-provider FeatureCollections.
+  STAC assets carry each provider's metadata sidecar alongside the data file, so
+  `pystac` and friends work against it with no custom code. It is built in the
+  deploy workflow rather than committed, keeping ~87 MB of generated JSON per
+  refresh out of git history.
+- **`open-sar-triad` Python package** (`python/`), standard library only, no
+  required dependencies. `Catalog.search()` filters the cached index locally and
+  resolves download URLs lazily; `SceneCollection.download()` writes products into
+  per-provider directories with sidecars, supports dry runs and is resume-safe.
+  Product families resolve exactly as the web app does, so `complex` returns `SLC`
+  where published and `SICD` at Umbra.
+- **Documentation and runnable notebooks**: full client reference in
+  `python/README.md`, plus `notebooks/` covering quick start, search and download,
+  and STAC interoperability with coverage analysis. All three notebooks are
+  executed end to end against a local build before release.
+- Every generated API file carries its own CC-BY 4.0 licence, attribution,
+  modification and disclaimer notice, because any of them can be fetched on its
+  own and the licence has to travel with the data.
 - **Visitors world map.** A globe button beside `?` opens a panel with a
   choropleth of where visitors come from: countries painted on a sequential
   colour ramp by visitor count, decoded by a tick-labelled colourbar under the
