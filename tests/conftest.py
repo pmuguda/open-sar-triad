@@ -2,6 +2,7 @@
 real 28 MB file, so the suite runs in under a second."""
 
 import copy
+import datetime
 import json
 from pathlib import Path
 
@@ -9,9 +10,15 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 
+#: Default ingestion stamp, relative to today. A fixed date would drift past the
+#: staleness thresholds as the calendar moved, so the "healthy catalog" fixture
+#: would start emitting stale-ingestion warnings for no reason connected to the
+#: test. Tests that care about staleness pass first_seen explicitly.
+RECENTLY = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+
 
 def make_scene(sid, provider="umbra", date="2025-06-01", mode="spotlight",
-               lon=10.0, lat=50.0, products=None, first_seen="2025-06-02"):
+               lon=10.0, lat=50.0, products=None, first_seen=RECENTLY):
     """One well-formed feature, shaped exactly like fetch_catalog.py emits."""
     host = {
         "umbra": "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com",

@@ -15,6 +15,13 @@ Two kinds of check:
                  catch the failure mode that actually bit us: a run that
                  "succeeds" while quietly serving stale or shrunken data.
 
+  freshness   -- per-provider ingestion age, from first_seen. A stalled feed
+                 does not show up in either of the above: the totals keep
+                 rising on the other providers, and a provider that stops
+                 growing never falls far enough to trip a drop threshold.
+                 Warns, never fails, since nothing here can tell a quiet
+                 upstream from a broken one.
+
 Usage:
     python3 scripts/validate_catalog.py
     python3 scripts/validate_catalog.py --baseline previous.geojson
@@ -25,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -58,6 +66,19 @@ MAX_PROVIDER_DROP_PCT = 15.0
 FUTURE_TOLERANCE_DAYS = 3
 EARLIEST_PLAUSIBLE = "2010-01-01"
 STALE_INGEST_WARN_DAYS = 35
+
+#: Per-provider staleness. The catalog as a whole can look healthy while one
+#: provider has quietly stopped arriving, because the other two keep the totals
+#: and the global first_seen moving. Capella sat at 2,464 scenes across four
+#: consecutive ingests with nothing noticing: the drop thresholds above only
+#: fire on a fall, never on a provider that simply stops growing.
+#:
+#: Ingests are weekly, so three missed weeks is the first point at which
+#: "upstream published nothing" and "this provider's feed is broken" start to
+#: look different. It stays a warning either way. Nothing here can tell those
+#: two apart, and failing the run would withhold the other providers' new
+#: scenes over a provider that is merely quiet.
+STALE_PROVIDER_WARN_DAYS = 21
 
 
 class Report:
@@ -249,6 +270,47 @@ def check_ingestion_freshness(feats: list[dict], rep: Report) -> None:
                  "Upstream may be quiet, or the pipeline may be stuck.")
 
 
+def check_provider_freshness(feats: list[dict], rep: Report) -> None:
+    """Each provider separately, because the total hides a single stalled feed.
+
+    Two healthy providers keep the scene count and the global first_seen moving
+    while a third contributes nothing, and every other check here passes: the
+    drop thresholds compare against the previous catalog and a provider that
+    stops growing never falls.
+    """
+    today = date.today()
+    newest_by: dict[str, str] = {}
+    for f in feats:
+        p = f.get("properties") or {}
+        prov, fs = p.get("provider"), p.get("first_seen")
+        if prov in PROVIDERS and isinstance(fs, str) and DATE_RE.match(fs):
+            if fs > newest_by.get(prov, ""):
+                newest_by[prov] = fs
+
+    freshness: dict[str, dict] = {}
+    for prov in sorted(PROVIDERS):
+        newest = newest_by.get(prov)
+        if newest is None:
+            # Only reachable if the provider has scenes but none are stamped;
+            # a provider with no scenes at all is already an error elsewhere.
+            rep.warn(f"provider {prov!r} has no scene carrying first_seen, "
+                     "so its ingestion cannot be dated")
+            continue
+        try:
+            age = (today - datetime.strptime(newest, "%Y-%m-%d").date()).days
+        except ValueError:
+            rep.error(f"provider {prov!r}: first_seen {newest!r} is not a valid date")
+            continue
+        freshness[prov] = {"newest_first_seen": newest, "age_days": age}
+        if age > STALE_PROVIDER_WARN_DAYS:
+            rep.warn(f"provider {prov!r} has ingested nothing for {age} days "
+                     f"(newest first_seen {newest}), while the catalog as a whole "
+                     "kept moving. Upstream may be quiet, or this provider's feed "
+                     "may have broken without anything else noticing.")
+
+    rep.info["provider_freshness"] = freshness
+
+
 # --------------------------------------------------------------------------- #
 # Regression against the previous catalog
 # --------------------------------------------------------------------------- #
@@ -298,6 +360,46 @@ def check_regression(feats: list[dict], baseline: dict | None, rep: Report) -> N
 
 
 # --------------------------------------------------------------------------- #
+def _write_step_summary(rep: Report) -> None:
+    """Put the result on the workflow run page, when running in Actions.
+
+    The JSON report is uploaded as an artifact, which means a warning is only
+    seen by someone who already suspected something and went looking. A run
+    that passes with a stale provider needs to say so where it will be read.
+    """
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+
+    lines = ["## Catalog validation", ""]
+    lines.append(f"**{rep.info.get('total', 0):,} scenes** "
+                 f"({', '.join(f'{k} {v:,}' for k, v in sorted(rep.info.get('by_provider', {}).items()))})")
+    if "delta_total" in rep.info:
+        lines.append(f"Change since the last catalog: {rep.info['delta_total']:+,} "
+                     f"(+{rep.info.get('added', 0):,} new, "
+                     f"-{rep.info.get('removed', 0):,} gone)")
+
+    freshness = rep.info.get("provider_freshness") or {}
+    if freshness:
+        lines += ["", "| provider | last ingest | age |", "|---|---|---|"]
+        for prov, fr in sorted(freshness.items()):
+            stale = fr["age_days"] > STALE_PROVIDER_WARN_DAYS
+            lines.append(f"| {'**' + prov + '**' if stale else prov} "
+                         f"| {fr['newest_first_seen']} "
+                         f"| {fr['age_days']}d{' :warning: stale' if stale else ''} |")
+
+    for e in rep.errors:
+        lines += ["", f":x: {e}"]
+    for w in rep.warnings:
+        lines += ["", f":warning: {w}"]
+
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+    except OSError:
+        pass  # a summary that cannot be written must not fail the validation
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate the SAR scene catalog.")
     ap.add_argument("--catalog", type=Path, default=CATALOG)
@@ -317,6 +419,7 @@ def main() -> int:
     if feats:
         check_features(feats, rep)
         check_ingestion_freshness(feats, rep)
+        check_provider_freshness(feats, rep)
         baseline = _load(args.baseline) if args.baseline else _git_baseline(args.catalog)
         check_regression(feats, baseline, rep)
 
@@ -330,6 +433,10 @@ def main() -> int:
               f"-{rep.info.get('removed', 0)} gone)")
     if "newest_first_seen" in rep.info:
         print(f"  last ingest  : {rep.info['newest_first_seen']}")
+    for prov, fr in sorted(rep.info.get("provider_freshness", {}).items()):
+        flag = "  STALE" if fr["age_days"] > STALE_PROVIDER_WARN_DAYS else ""
+        print(f"    {prov:8} last ingest {fr['newest_first_seen']} "
+              f"({fr['age_days']}d ago){flag}")
 
     for w in rep.warnings:
         print(f"  WARNING: {w}")
@@ -341,6 +448,8 @@ def main() -> int:
             "ok": rep.ok, "errors": rep.errors, "warnings": rep.warnings,
             "checked_at": datetime.now(timezone.utc).isoformat(), **rep.info,
         }, indent=2))
+
+    _write_step_summary(rep)
 
     if rep.errors:
         print(f"\nFAILED: {len(rep.errors)} error(s). Catalog not fit to commit.",

@@ -6,6 +6,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **Per-provider staleness check in the catalog validator.** Neither the
+  invariants nor the regression checks could see a single stalled feed: the
+  other providers keep the totals and the global ingestion date moving, and a
+  provider that merely stops growing never falls far enough to trip a drop
+  threshold. Capella sat at 2,464 scenes across four consecutive ingests with
+  nothing noticing. `check_provider_freshness` now dates each provider's newest
+  `first_seen` and warns when one has taken nothing for more than 21 days, which
+  is three missed weekly runs. It warns and never fails: nothing available here
+  distinguishes a quiet upstream from a broken one, and failing would withhold
+  the other providers' new scenes over a provider having a slow month. Running
+  it against the live catalog flags Capella at 23 days.
+- **Validation result written to the GitHub Actions run summary**, with a
+  per-provider ingestion-age table. The JSON report was uploaded as an artifact,
+  so a warning on a passing run was only seen by someone who already suspected
+  something and went looking.
+
 ### Fixed
 - **Coverage plots showed an empty map where there were hundreds of scenes**
   (client 1.2.0). A SAR footprint is a few kilometres across, which on a world or

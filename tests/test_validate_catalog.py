@@ -8,6 +8,7 @@ case here corresponds to a real way the pipeline could break.
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -32,6 +33,7 @@ def run(doc, baseline=None):
     if feats:
         vc.check_features(feats, rep)
         vc.check_ingestion_freshness(feats, rep)
+        vc.check_provider_freshness(feats, rep)
         vc.check_regression(feats, baseline, rep)
     return rep
 
@@ -275,3 +277,124 @@ def test_cli_fails_on_missing_catalog(tmp_path):
     r = subprocess.run([sys.executable, str(SCRIPT), "--catalog",
                         str(tmp_path / "nope.geojson")], capture_output=True, text=True)
     assert r.returncode == 1
+
+
+# --------------------------------------------------------------------------- #
+# Per-provider staleness
+#
+# Capella sat at 2,464 scenes across four consecutive ingests while ICEYE and
+# Umbra kept growing, and nothing here noticed: the drop thresholds only fire on
+# a fall, and the global first_seen kept moving because the other two providers
+# were healthy. These tests pin the check that would have surfaced it.
+# --------------------------------------------------------------------------- #
+from datetime import date, timedelta  # noqa: E402
+
+
+def _ago(days):
+    return (date.today() - timedelta(days=days)).isoformat()
+
+
+def _catalog_with(ages):
+    """One scene per provider, each stamped first_seen this many days ago."""
+    return {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene(f"{p}-1", provider=p, first_seen=_ago(d)) for p, d in ages.items()
+    ]}
+
+
+def test_warns_when_a_single_provider_has_stalled():
+    rep = run(_catalog_with({"iceye": 2, "umbra": 2, "capella": 40}))
+    stale = [w for w in rep.warnings if "capella" in w and "ingested nothing" in w]
+    assert stale, f"stalled provider not flagged: {rep.warnings}"
+    assert not any("iceye" in w or "umbra" in w for w in rep.warnings)
+
+
+def test_a_stalled_provider_does_not_fail_the_run():
+    """A quiet provider is indistinguishable from a broken one, and failing
+    would withhold the other providers' new scenes over it."""
+    rep = run(_catalog_with({"iceye": 2, "umbra": 2, "capella": 400}))
+    assert rep.ok, rep.errors
+
+
+def test_no_warning_when_every_provider_is_fresh():
+    rep = run(_catalog_with({"iceye": 1, "umbra": 3, "capella": 5}))
+    assert not any("ingested nothing" in w for w in rep.warnings)
+
+
+def test_staleness_is_reported_per_provider():
+    rep = run(_catalog_with({"iceye": 2, "umbra": 9, "capella": 40}))
+    fr = rep.info["provider_freshness"]
+    assert set(fr) == {"iceye", "umbra", "capella"}
+    assert fr["capella"]["age_days"] == 40
+    assert fr["iceye"]["newest_first_seen"] == _ago(2)
+
+
+def test_freshness_uses_the_newest_stamp_not_the_oldest():
+    """A provider's bulk backfill must not mask a recent arrival, or the reverse."""
+    doc = {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene("umbra-old", provider="umbra", first_seen=_ago(300)),
+        make_scene("umbra-new", provider="umbra", first_seen=_ago(1)),
+        make_scene("iceye-1", provider="iceye", first_seen=_ago(1)),
+        make_scene("capella-1", provider="capella", first_seen=_ago(1)),
+    ]}
+    rep = run(doc)
+    assert rep.info["provider_freshness"]["umbra"]["age_days"] == 1
+    assert not any("ingested nothing" in w for w in rep.warnings)
+
+
+def test_the_stall_is_invisible_to_every_other_check():
+    """The regression that motivated this check.
+
+    Two providers grow, the third contributes nothing. Totals rise, no provider
+    falls, the global first_seen advances. Without the per-provider check the
+    catalog validates completely clean.
+    """
+    def cat(n_iceye, capella_seen):
+        feats = [make_scene(f"iceye-{i}", provider="iceye", first_seen=_ago(2))
+                 for i in range(n_iceye)]
+        feats += [make_scene("umbra-1", provider="umbra", first_seen=_ago(2))]
+        feats += [make_scene("capella-1", provider="capella", first_seen=capella_seen)]
+        return {"type": "FeatureCollection", "generated_at": "x", "features": feats}
+
+    baseline = cat(3, _ago(40))
+    current = cat(9, _ago(40))          # capella identical, iceye grew
+
+    rep = run(current, baseline=baseline)
+    assert rep.ok, rep.errors
+    assert rep.info["delta_total"] > 0
+    assert not any("fell" in w for w in rep.warnings)
+    assert not any("identical" in w for w in rep.warnings)
+    assert any("capella" in w and "ingested nothing" in w for w in rep.warnings), \
+        "the stall was invisible to every check"
+
+
+def test_provider_without_any_first_seen_is_flagged():
+    doc = {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene("iceye-1", provider="iceye", first_seen=_ago(1)),
+        make_scene("umbra-1", provider="umbra", first_seen=_ago(1)),
+        make_scene("capella-1", provider="capella", first_seen=None),
+    ]}
+    rep = run(doc)
+    assert any("capella" in w and "cannot be dated" in w for w in rep.warnings)
+
+
+def test_step_summary_surfaces_the_stall_on_the_run_page(catalog, write_catalog, tmp_path):
+    """The JSON report is an artifact nobody opens unless already suspicious."""
+    doc = _catalog_with({"iceye": 2, "umbra": 2, "capella": 40})
+    p = write_catalog(doc)
+    summary = tmp_path / "summary.md"
+    env = {**os.environ, "GITHUB_STEP_SUMMARY": str(summary)}
+    r = subprocess.run([sys.executable, str(SCRIPT), "--catalog", str(p),
+                        "--baseline", str(p)], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    text = summary.read_text()
+    assert "Catalog validation" in text
+    assert "stale" in text
+    assert "capella" in text
+
+
+def test_step_summary_is_skipped_outside_actions(catalog, write_catalog):
+    p = write_catalog(catalog)
+    env = {k: v for k, v in os.environ.items() if k != "GITHUB_STEP_SUMMARY"}
+    r = subprocess.run([sys.executable, str(SCRIPT), "--catalog", str(p)],
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr

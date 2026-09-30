@@ -549,6 +549,14 @@ Step 5 above runs `scripts/validate_catalog.py` **before** the commit. The catal
 - no provider may fall more than 15%, or disappear entirely
 - an *identical* scene set raises a warning, because that is what a silent fallback looks like — the failure that once froze the catalog at 14,733 for weeks while every run reported success
 
+**Freshness checks** (per provider, from `first_seen`):
+
+- each provider's newest ingestion is dated, and a provider that has taken nothing for more than 21 days (three missed weekly runs) raises a warning
+- this exists because neither set above can see a single stalled feed: the other providers keep the totals and the global ingestion date moving, and a provider that merely stops growing never falls far enough to trip a drop threshold. Capella sat at 2,464 scenes across four consecutive ingests with nothing noticing
+- it warns and never fails. Nothing here can tell a quiet upstream from a broken one, and failing would withhold the other providers' new scenes over a provider that is simply having a slow month
+
+When running under GitHub Actions the result is also written to the run summary, so a pass with a stale provider is visible on the run page rather than only inside the uploaded JSON artifact.
+
 Run it by hand any time:
 
 ```bash
