@@ -557,6 +557,23 @@ Step 5 above runs `scripts/validate_catalog.py` **before** the commit. The catal
 
 When running under GitHub Actions the result is also written to the run summary, so a pass with a stale provider is visible on the run page rather than only inside the uploaded JSON artifact.
 
+### The pipeline tells you, you do not check it
+
+Every detector above writes its finding somewhere that has to be opened: stdout, a JSON artifact, a run summary. That is how the catalog stayed frozen at 14,733 for six weeks and at 14,631 for three weeks before that. `fetch_catalog.py` wrote `new_this_run: 0` into the catalog header every one of those weeks, the workflow went green every time, and the only thing that actually noticed was a human wondering why the scene count had not moved. All 19 runs of the weekly job have reported success, including all nine frozen ones.
+
+`scripts/report_health.py` closes that loop. It runs at the end of every ingest, on success and on failure:
+
+- **unhealthy** (any validation error or warning) — opens a `catalog-health` issue, which GitHub notifies on. Later runs with the same problems refresh the issue body in place without commenting, so a provider that stays quiet for a year does not produce a year of comments. A change in the problems adds a comment.
+- **healthy** — closes the issue with a recovery note, or does nothing at all if none is open.
+
+If `fetch_catalog.py` or the validator crashes outright there is no report to read, so the workflow synthesises one naming the step that died. Reporting is best-effort in the other direction too: a missing token, a fork, or a GitHub outage logs a warning and exits zero, because health reporting must never be the thing that breaks the ingest.
+
+The property this buys is that **silence means working**, which the green tick never meant.
+
+```bash
+python3 scripts/report_health.py --report validation.json --dry-run
+```
+
 Run it by hand any time:
 
 ```bash

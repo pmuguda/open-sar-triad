@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write        # the health reporter opens and closes one issue
 
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +23,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch catalogs
+        id: fetch
         run: python scripts/fetch_catalog.py
 
       # Gate the commit. The catalog has just been rewritten but not committed,
@@ -29,6 +31,7 @@ jobs:
       # against it. A failure here means nothing bad is ever committed or
       # deployed: the site keeps serving the last good catalog.
       - name: Validate catalog
+        id: validate
         run: python scripts/validate_catalog.py --json /tmp/validation.json
 
       - name: Upload validation report
@@ -50,3 +53,26 @@ jobs:
             git commit -m "chore: update SAR scene data [$(date -u '+%Y-%m-%d')]"
             git push
           fi
+
+      # The point of this job is that you never have to come and look at it.
+      # It runs on success and on failure: a crash in fetch or validate leaves
+      # no report behind, so one is synthesised naming the step that died.
+      - name: Report ingest health
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f /tmp/validation.json ]; then
+            if [ "${{ steps.fetch.outcome }}" != "success" ]; then
+              reason="scripts/fetch_catalog.py failed, so no catalog was produced. Upstream may have changed shape again."
+            else
+              reason="scripts/validate_catalog.py did not produce a report; it likely crashed before finishing."
+            fi
+            python - "$reason" <<'PY'
+          import json, sys, pathlib
+          pathlib.Path("/tmp/validation.json").write_text(json.dumps({
+              "ok": False, "errors": [sys.argv[1]], "warnings": [],
+          }))
+          PY
+          fi
+          python scripts/report_health.py --report /tmp/validation.json

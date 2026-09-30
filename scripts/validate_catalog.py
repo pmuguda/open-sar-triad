@@ -136,6 +136,11 @@ def check_structure(doc: dict, rep: Report) -> list[dict]:
         return []
     if not doc.get("generated_at"):
         rep.warn("generated_at is missing")
+    # fetch_catalog.py's own count of what it brought in. It sat in this header
+    # reading 0 for nine consecutive weeks of a frozen catalog while every run
+    # reported success, because nothing ever read it.
+    if "new_this_run" in doc:
+        rep.info["new_this_run"] = doc["new_this_run"]
     return feats
 
 
@@ -349,6 +354,18 @@ def check_regression(feats: list[dict], baseline: dict | None, rep: Report) -> N
     new_ids = {(f.get("properties") or {}).get("id") for f in feats}
     rep.info["added"] = len(new_ids - old_ids)
     rep.info["removed"] = len(old_ids - new_ids)
+
+    # The fetcher's own count of new scenes should equal what actually landed.
+    # A disagreement means the file on disk is not the file the fetch produced.
+    #
+    # Only meaningful when the catalog has actually moved. Run against an
+    # already-committed catalog — which is how the test workflow invokes this —
+    # the baseline is that same file, so new_this_run describes the run that
+    # produced it rather than this comparison, and would always disagree.
+    ntr = rep.info.get("new_this_run")
+    if isinstance(ntr, int) and new_ids != old_ids and ntr != rep.info["added"]:
+        rep.warn(f"the fetch reported new_this_run={ntr} but {rep.info['added']} "
+                 "scene(s) are actually new against the previous catalog")
 
     # The failure that started all this: every run "succeeded" while the scene
     # set never changed, because the parser silently fell back to cached data.

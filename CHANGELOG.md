@@ -7,6 +7,25 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **The ingest now reports its own health, instead of waiting to be checked.**
+  Every detector before this one wrote its finding somewhere that had to be
+  opened: stdout, a JSON artifact, a run summary. The catalog was frozen at
+  14,631 for three weeks and at 14,733 for six more, `fetch_catalog.py` wrote
+  `new_this_run: 0` into the catalog header every one of those weeks, and all 19
+  runs of the weekly workflow reported success. The only working detector was a
+  human noticing the scene count had not moved.
+
+  `scripts/report_health.py` opens a `catalog-health` issue when a run is
+  unhealthy and closes it when it recovers, so silence means working. Repeated
+  runs with the same problems refresh the issue in place rather than commenting,
+  so a provider quiet for a year does not make a year of comments; a change in
+  the problem set is announced. A crash in fetch or validation leaves no report,
+  so the workflow synthesises one naming the step that died. A missing token, a
+  fork or a GitHub outage logs and exits zero: reporting health must never be
+  what breaks the ingest.
+- `new_this_run` from the catalog header is now carried into the validation
+  report, and cross-checked against the scenes that actually landed. A
+  disagreement means the file on disk is not the file the fetch produced.
 - **Per-provider staleness check in the catalog validator.** Neither the
   invariants nor the regression checks could see a single stalled feed: the
   other providers keep the totals and the global ingestion date moving, and a
