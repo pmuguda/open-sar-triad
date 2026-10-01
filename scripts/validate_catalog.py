@@ -463,6 +463,11 @@ def main() -> int:
     if args.json:
         args.json.write_text(json.dumps({
             "ok": rep.ok, "errors": rep.errors, "warnings": rep.warnings,
+            # Read by report_health.py, so one reporter can serve both the
+            # ingest and the deploy without either assuming the other's wording.
+            "subject": "Catalog ingest",
+            "on_error_note": ("The catalog **was not committed**. The site is "
+                              "still serving the last good data."),
             "checked_at": datetime.now(timezone.utc).isoformat(), **rep.info,
         }, indent=2))
 

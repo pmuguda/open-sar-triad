@@ -570,8 +570,13 @@ If `fetch_catalog.py` or the validator crashes outright there is no report to re
 
 The property this buys is that **silence means working**, which the green tick never meant.
 
+The same reporter runs at the end of `deploy.yml` under a separate `site-health` label, because the two concerns are independent: a healthy deploy must not close an open ingest issue, and a broken ingest must not be overwritten by a deploy failure.
+
+A green deploy only means the artifact uploaded. If Pages succeeds and the CDN keeps serving the old files, the site and the repository disagree and nothing else notices: the ingest is happy because the commit landed, the deploy is happy because it finished. `scripts/verify_deploy.py` closes that by fetching the published `api/v1/stats.json` and comparing its scene count against the committed catalog. Propagation is not instant, so a mismatch is retried for about three minutes before it is believed — reporting a site that was merely slow would be worse than not checking, because an alert that cries wolf gets muted and then the real one is missed too.
+
 ```bash
 python3 scripts/report_health.py --report validation.json --dry-run
+python3 scripts/verify_deploy.py --url https://example.com/open-sar-triad
 ```
 
 Run it by hand any time:

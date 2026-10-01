@@ -49,9 +49,15 @@ import urllib.request
 from pathlib import Path
 
 API = "https://api.github.com"
-LABEL = "catalog-health"
-LABEL_COLOR = "d93f0b"
-LABEL_DESC = "Automated: the weekly catalog ingest needs attention"
+
+#: One label per concern, because each gets its own issue. Sharing a label would
+#: let a healthy deploy close an open ingest issue, and a broken ingest would be
+#: overwritten by a deploy failure. The two are independent and must stay so.
+TOPICS = {
+    "catalog-health": ("d93f0b", "Automated: the weekly catalog ingest needs attention"),
+    "site-health": ("b60205", "Automated: the deployed site does not match the repository"),
+}
+DEFAULT_LABEL = "catalog-health"
 
 #: Embedded in the issue body so a later run can tell whether the problems are
 #: the same ones, without re-parsing prose.
@@ -59,8 +65,8 @@ FINGERPRINT = "<!-- catalog-health-fingerprint: {} -->"
 
 
 class GitHub:
-    def __init__(self, repo: str, token: str) -> None:
-        self.repo, self.token = repo, token
+    def __init__(self, repo: str, token: str, label: str = DEFAULT_LABEL) -> None:
+        self.repo, self.token, self.label = repo, token, label
 
     def _call(self, method: str, path: str, payload: dict | None = None):
         req = urllib.request.Request(
@@ -79,20 +85,22 @@ class GitHub:
 
     def ensure_label(self) -> None:
         try:
+            colour, desc = TOPICS.get(self.label, ("ededed", "Automated"))
             self._call("POST", f"/repos/{self.repo}/labels",
-                       {"name": LABEL, "color": LABEL_COLOR, "description": LABEL_DESC})
+                       {"name": self.label, "color": colour, "description": desc})
         except urllib.error.HTTPError as e:
             if e.code != 422:        # 422 is "already exists", which is the goal
                 raise
 
     def open_issue(self) -> dict | None:
         found = self._call(
-            "GET", f"/repos/{self.repo}/issues?state=open&labels={LABEL}&per_page=1")
+            "GET",
+            f"/repos/{self.repo}/issues?state=open&labels={self.label}&per_page=1")
         return found[0] if found else None
 
     def create(self, title: str, body: str) -> dict:
         return self._call("POST", f"/repos/{self.repo}/issues",
-                          {"title": title, "body": body, "labels": [LABEL]})
+                          {"title": title, "body": body, "labels": [self.label]})
 
     def update(self, number: int, **fields) -> dict:
         return self._call("PATCH", f"/repos/{self.repo}/issues/{number}", fields)
@@ -119,14 +127,17 @@ def _run_link() -> str:
 
 
 def build_title(report: dict, items: list[str]) -> str:
+    # Reports name themselves, so one reporter serves the ingest and the deploy
+    # without either borrowing the other's vocabulary.
+    subject = report.get("subject") or "Catalog ingest"
     n_err = len(report.get("errors") or [])
     if n_err:
-        return f"Catalog ingest failing: {n_err} error(s)"
+        return f"{subject} failing: {n_err} error(s)"
     stale = [p for p, fr in (report.get("provider_freshness") or {}).items()
              if fr.get("age_days", 0) > 21]
     if stale:
-        return f"Catalog ingest: {', '.join(sorted(stale))} has stopped arriving"
-    return f"Catalog ingest needs attention: {len(items)} warning(s)"
+        return f"{subject}: {', '.join(sorted(stale))} has stopped arriving"
+    return f"{subject} needs attention: {len(items)} warning(s)"
 
 
 def build_body(report: dict, items: list[str]) -> str:
@@ -134,9 +145,8 @@ def build_body(report: dict, items: list[str]) -> str:
     errs = report.get("errors") or []
     warns = report.get("warnings") or []
 
-    if errs:
-        lines.append("The catalog **was not committed**. The site is still "
-                     "serving the last good data.")
+    if errs and report.get("on_error_note"):
+        lines.append(report["on_error_note"])
         lines.append("")
         lines.append("### Errors")
         lines += [f"- {e}" for e in errs]
@@ -230,6 +240,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--report", type=Path, required=True)
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
+    ap.add_argument("--label", default=DEFAULT_LABEL, choices=sorted(TOPICS),
+                    help="which concern this report is about; each gets its own issue")
     ap.add_argument("--dry-run", action="store_true",
                     help="print what would be posted; touches nothing")
     args = ap.parse_args()
@@ -241,7 +253,7 @@ def main() -> int:
 
     token = os.environ.get("GITHUB_TOKEN", "")
     if args.dry_run:
-        return run(report, GitHub(args.repo, token), dry_run=True)
+        return run(report, GitHub(args.repo, token, args.label), dry_run=True)
     if not token or not args.repo:
         # Local runs and forks without a token: say so and succeed. Reporting
         # health must never be the thing that fails the pipeline.
@@ -249,7 +261,7 @@ def main() -> int:
         return 0
 
     try:
-        return run(report, GitHub(args.repo, token))
+        return run(report, GitHub(args.repo, token, args.label))
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
         print(f"WARNING: could not report health: {e}", file=sys.stderr)
         return 0

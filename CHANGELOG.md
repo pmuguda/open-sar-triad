@@ -26,6 +26,17 @@ All notable changes to open-sar-triad are documented here. The format is based o
 - `new_this_run` from the catalog header is now carried into the validation
   report, and cross-checked against the scenes that actually landed. A
   disagreement means the file on disk is not the file the fetch produced.
+- **The deploy reports its health too, and verifies the site end to end.** A
+  green deploy means the artifact uploaded, not that anyone can read it: if
+  Pages succeeds while the CDN keeps serving the old files, the site and the
+  repository disagree and nothing in the pipeline notices.
+  `scripts/verify_deploy.py` fetches the published `api/v1/stats.json` and
+  compares its scene count against the committed catalog, retrying for about
+  three minutes so propagation delay is never reported as a stale site. The
+  result goes through the same reporter under a separate `site-health` label,
+  since a healthy deploy must not close an open ingest issue and a broken
+  ingest must not be overwritten by a deploy failure. A failed deployment, or a
+  verifier that crashes, synthesises a report naming what went wrong.
 - **Per-provider staleness check in the catalog validator.** Neither the
   invariants nor the regression checks could see a single stalled feed: the
   other providers keep the totals and the global ingestion date moving, and a

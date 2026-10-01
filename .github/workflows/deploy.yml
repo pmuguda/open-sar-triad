@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write        # the health reporter opens and closes one issue
 
 concurrency:
   group: pages
@@ -43,3 +44,40 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # A green deploy means the artifact uploaded, not that anyone can read it.
+      # If Pages succeeds and the CDN keeps serving the old files, the site and
+      # the repository disagree and nothing else in the pipeline notices: the
+      # ingest is happy because the commit landed, the deploy is happy because
+      # it finished. Retries absorb propagation delay so a slow deploy is not
+      # reported as a broken one.
+      - name: Verify the site serves the committed catalog
+        id: verify
+        if: ${{ !cancelled() && steps.deployment.outcome == 'success' }}
+        run: |
+          python scripts/verify_deploy.py \
+            --url "${{ steps.deployment.outputs.page_url }}" \
+            --cache-bust "${{ github.run_id }}" \
+            --json /tmp/deploy-health.json
+
+      - name: Report deploy health
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f /tmp/deploy-health.json ]; then
+            python - "${{ steps.deployment.outcome }}" <<'PY'
+          import json, sys, pathlib
+          outcome = sys.argv[1]
+          reason = ("the Pages deployment itself failed, so the site was not updated"
+                    if outcome != "success" else
+                    "scripts/verify_deploy.py did not produce a report; it likely crashed")
+          pathlib.Path("/tmp/deploy-health.json").write_text(json.dumps({
+              "ok": False, "errors": [reason], "warnings": [],
+              "subject": "Site deploy",
+              "on_error_note": "The site may still be serving the previous build.",
+          }))
+          PY
+          fi
+          python scripts/report_health.py \
+            --report /tmp/deploy-health.json --label site-health

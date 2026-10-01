@@ -68,7 +68,10 @@ STALE = report(warnings=["provider 'capella' has ingested nothing for 23 days"],
                total=14889, by_provider={"capella": 2464},
                provider_freshness={"capella": {"newest_first_seen": "2026-09-07",
                                                "age_days": 23}})
-BROKEN = report(errors=["scripts/fetch_catalog.py failed"], total=0)
+BROKEN = report(errors=["scripts/fetch_catalog.py failed"], total=0,
+                subject="Catalog ingest",
+                on_error_note="The catalog **was not committed**. The site is "
+                              "still serving the last good data.")
 
 
 # --------------------------------------------------------------------------- #
@@ -94,7 +97,8 @@ def test_errors_outrank_warnings_in_the_title():
     assert "error" in gh.created[0]["title"]
 
 
-def test_body_says_the_catalog_was_not_committed_when_there_are_errors():
+def test_body_carries_the_reports_own_error_note():
+    """validate_catalog.py supplies this; the deploy supplies a different one."""
     gh = FakeGitHub()
     rh.run(BROKEN, gh)
     assert "was not committed" in gh.created[0]["body"]
@@ -231,3 +235,53 @@ def test_a_normal_run_keeps_the_catalog_section():
     gh = FakeGitHub()
     rh.run(STALE, gh)
     assert "### Catalog" in gh.created[0]["body"]
+
+
+# --------------------------------------------------------------------------- #
+# Two concerns, two issues
+#
+# Sharing a label would let a healthy deploy close an open ingest issue, and a
+# broken ingest would be overwritten by a deploy failure. They are independent.
+# --------------------------------------------------------------------------- #
+def test_each_topic_has_its_own_label():
+    assert "catalog-health" in rh.TOPICS and "site-health" in rh.TOPICS
+    assert rh.TOPICS["catalog-health"] != rh.TOPICS["site-health"]
+
+
+def test_the_label_scopes_the_issue_lookup(monkeypatch):
+    seen = []
+    gh = rh.GitHub("a/b", "t", label="site-health")
+    monkeypatch.setattr(gh, "_call", lambda m, p, payload=None: seen.append(p) or [])
+    gh.open_issue()
+    assert "labels=site-health" in seen[0]
+
+
+def test_a_created_issue_carries_its_own_label(monkeypatch):
+    sent = {}
+    gh = rh.GitHub("a/b", "t", label="site-health")
+    monkeypatch.setattr(gh, "_call",
+                        lambda m, p, payload=None: sent.update(payload or {}) or {"number": 1})
+    gh.create("t", "b")
+    assert sent["labels"] == ["site-health"]
+
+
+def test_the_subject_comes_from_the_report():
+    gh = FakeGitHub()
+    rh.run(report(errors=["boom"], subject="Site deploy"), gh)
+    assert gh.created[0]["title"].startswith("Site deploy")
+
+
+def test_the_subject_defaults_to_the_ingest():
+    gh = FakeGitHub()
+    rh.run(report(errors=["boom"]), gh)
+    assert gh.created[0]["title"].startswith("Catalog ingest")
+
+
+def test_the_error_note_comes_from_the_report():
+    """So the deploy does not tell you the catalog was not committed."""
+    gh = FakeGitHub()
+    rh.run(report(errors=["boom"], subject="Site deploy",
+                  on_error_note="The site may still be serving the previous build."), gh)
+    body = gh.created[0]["body"]
+    assert "previous build" in body
+    assert "was not committed" not in body
