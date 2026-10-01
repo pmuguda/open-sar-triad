@@ -21,6 +21,7 @@ and pystac reads them just as happily.
 """
 
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -200,6 +201,11 @@ def main():
         return 1
 
     generated = datetime.now(timezone.utc).isoformat()
+    # The commit this build came from. Scene counts only move on ingest weeks,
+    # so they cannot tell a live code-only deploy from a stale one still being
+    # served; the commit changes every time. scripts/verify_deploy.py compares
+    # it against the running workflow to prove the deploy actually propagated.
+    commit = os.environ.get("GITHUB_SHA", "")
     by_provider = defaultdict(list)
     for f in feats:
         by_provider[f["properties"]["provider"]].append(f)
@@ -230,7 +236,8 @@ def main():
     fmts  = Counter(k for f in feats for k in products_of(f["properties"]))
     dates = sorted(f["properties"]["date"] for f in feats if f["properties"].get("date"))
     n_stats = write(OUT / "stats.json", {
-        "api_version": "1", "generated": generated, "total": len(feats),
+        "api_version": "1", "generated": generated, "commit": commit,
+        "total": len(feats),
         "by_provider": {k: len(v) for k, v in sorted(by_provider.items(), key=lambda kv: -len(kv[1]))},
         "by_mode": dict(modes.most_common()),
         "by_year": dict(sorted(years.items())),

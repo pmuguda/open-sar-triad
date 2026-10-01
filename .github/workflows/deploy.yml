@@ -58,6 +58,7 @@ jobs:
           python scripts/verify_deploy.py \
             --url "${{ steps.deployment.outputs.page_url }}" \
             --cache-bust "${{ github.run_id }}" \
+            --commit "${{ github.sha }}" \
             --json /tmp/deploy-health.json
 
       - name: Report deploy health

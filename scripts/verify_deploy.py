@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -58,8 +59,36 @@ def fetch_stats(base: str, cache_bust: str, timeout: int = 30) -> dict:
         return json.loads(resp.read())
 
 
-def check(base: str, expected: int, attempts: int, wait: int,
-          cache_bust: str, sleep=time.sleep) -> dict:
+def compare(stats: dict, expected: int, commit: str) -> tuple[bool, str | None]:
+    """Does this published stats.json match what we just deployed?
+
+    Prefers the build commit, which changes on every deploy. The scene count
+    only moves on ingest weeks, so on a code-only deploy it is identical before
+    and after and cannot tell a live build from a stale one still being served.
+
+    Falls back to the count when no commit is available on either side: a build
+    published before commit stamping existed, or a local run outside Actions.
+    That is weaker, not wrong, and is better than refusing to check at all.
+    """
+    published_commit = stats.get("commit")
+    if commit and published_commit:
+        if published_commit == commit:
+            return True, None
+        return False, (f"the site was built from commit {published_commit[:7]} "
+                       f"but {commit[:7]} was just deployed")
+
+    published = stats.get("total")
+    if not isinstance(published, int):
+        return False, (f"the site's stats.json has no usable total: "
+                       f"{stats.get('total')!r}")
+    if published == expected:
+        return True, None
+    return False, (f"the site serves {published:,} scenes but "
+                   f"{expected:,} are committed")
+
+
+def check(base: str, expected: int, attempts: int, wait: int, cache_bust: str,
+          commit: str = "", sleep=time.sleep) -> dict:
     """Poll until the site agrees, or until patience runs out.
 
     Returns a report dict. The last attempt's outcome is the one reported: a
@@ -67,22 +96,20 @@ def check(base: str, expected: int, attempts: int, wait: int,
     and must not raise an alarm.
     """
     last_error = None
-    published = None
+    stats: dict = {}
     for i in range(1, attempts + 1):
         try:
             stats = fetch_stats(base, cache_bust)
-            published = stats.get("total")
-            if published == expected:
+            ok, last_error = compare(stats, expected, commit)
+            if ok:
                 return {
                     "ok": True, "errors": [], "warnings": [],
                     "subject": "Site deploy",
-                    "published_total": published, "expected_total": expected,
+                    "published_total": stats.get("total"),
+                    "published_commit": stats.get("commit"),
+                    "expected_total": expected, "expected_commit": commit,
                     "attempts_used": i, "url": base,
                 }
-            last_error = (f"the site serves {published:,} scenes but "
-                          f"{expected:,} are committed"
-                          if isinstance(published, int) else
-                          f"the site's stats.json has no usable total: {stats.get('total')!r}")
         except (urllib.error.HTTPError, urllib.error.URLError,
                 json.JSONDecodeError, OSError) as e:
             last_error = f"could not read the published stats.json: {e}"
@@ -97,8 +124,10 @@ def check(base: str, expected: int, attempts: int, wait: int,
         "subject": "Site deploy",
         "on_error_note": ("The deploy reported success, but the published site "
                           "and the repository disagree. Visitors are seeing "
-                          "different data from what is committed."),
-        "published_total": published, "expected_total": expected,
+                          "something other than what is committed."),
+        "published_total": stats.get("total"),
+        "published_commit": stats.get("commit"),
+        "expected_total": expected, "expected_commit": commit,
         "attempts_used": attempts, "url": base,
     }
 
@@ -111,6 +140,9 @@ def main() -> int:
     ap.add_argument("--attempts", type=int, default=DEFAULT_ATTEMPTS)
     ap.add_argument("--wait", type=int, default=DEFAULT_WAIT)
     ap.add_argument("--cache-bust", default="")
+    ap.add_argument("--commit", default=os.environ.get("GITHUB_SHA", ""),
+                    help="the commit just deployed; preferred over the scene "
+                         "count because it changes on every deploy")
     args = ap.parse_args()
 
     if not args.catalog.exists():
@@ -119,7 +151,8 @@ def main() -> int:
 
     expected = local_total(args.catalog)
     bust = args.cache_bust or datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    report = check(args.url, expected, args.attempts, args.wait, bust)
+    report = check(args.url, expected, args.attempts, args.wait, bust,
+                   commit=args.commit)
     report["checked_at"] = datetime.now(timezone.utc).isoformat()
 
     if args.json:
@@ -128,6 +161,9 @@ def main() -> int:
     print(f"Site: {args.url}")
     print(f"  committed : {expected:,} scenes")
     print(f"  published : {report['published_total']!r}")
+    if args.commit:
+        print(f"  deployed  : {args.commit[:7]} | published build: "
+              f"{(report['published_commit'] or '(none)')[:7]}")
     print(f"  attempts  : {report['attempts_used']}")
     for e in report["errors"]:
         print(f"  ERROR:   {e}", file=sys.stderr)

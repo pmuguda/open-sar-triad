@@ -152,3 +152,58 @@ def test_report_is_shaped_for_the_health_reporter(monkeypatch, no_sleep):
     rep = vd.check("https://x", 2, attempts=1, wait=0, cache_bust="1", sleep=sleep)
     assert set(rep) >= {"ok", "errors", "warnings", "subject", "on_error_note"}
     assert rep["subject"] == "Site deploy"
+
+
+# --------------------------------------------------------------------------- #
+# Commit matching
+#
+# The first live run passed in under a second against a site that had not been
+# redeployed: the scene count only moves on ingest weeks, so on a code-only
+# deploy it is identical before and after and proves nothing. The build commit
+# changes every time.
+# --------------------------------------------------------------------------- #
+def test_matching_commit_passes():
+    ok, err = vd.compare({"commit": "abc123", "total": 1}, expected=99, commit="abc123")
+    assert ok and err is None, "count must not override a matching commit"
+
+
+def test_a_stale_build_is_caught_even_when_the_count_is_unchanged():
+    """The hole the first live run fell through."""
+    ok, err = vd.compare({"commit": "old1111", "total": 14889},
+                         expected=14889, commit="new2222")
+    assert not ok
+    assert "old1111"[:7] in err and "new2222"[:7] in err
+
+
+def test_falls_back_to_the_count_when_the_site_predates_commit_stamping():
+    """A build published before this existed has no commit field."""
+    ok, _ = vd.compare({"total": 14889}, expected=14889, commit="new2222")
+    assert ok
+    ok, err = vd.compare({"total": 14859}, expected=14889, commit="new2222")
+    assert not ok and "14,859" in err
+
+
+def test_falls_back_to_the_count_outside_actions():
+    """A local run has no GITHUB_SHA to compare against."""
+    ok, _ = vd.compare({"commit": "abc123", "total": 5}, expected=5, commit="")
+    assert ok
+
+
+def test_a_slow_deploy_is_still_not_reported_with_commits(monkeypatch, no_sleep):
+    _, sleep = no_sleep
+    seq = [{"commit": "old", "total": 1}, {"commit": "old", "total": 1},
+           {"commit": "new", "total": 1}]
+    monkeypatch.setattr(vd, "fetch_stats",
+                        lambda b, c, timeout=30: seq.pop(0) if len(seq) > 1 else seq[0])
+    rep = vd.check("https://x", 1, attempts=5, wait=5, cache_bust="1",
+                   commit="new", sleep=sleep)
+    assert rep["ok"] and rep["attempts_used"] == 3
+
+
+def test_the_report_records_both_commits(monkeypatch, no_sleep):
+    _, sleep = no_sleep
+    monkeypatch.setattr(vd, "fetch_stats",
+                        lambda b, c, timeout=30: {"commit": "old", "total": 1})
+    rep = vd.check("https://x", 1, attempts=1, wait=0, cache_bust="1",
+                   commit="new", sleep=sleep)
+    assert rep["published_commit"] == "old" and rep["expected_commit"] == "new"

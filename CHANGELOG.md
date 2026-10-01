@@ -31,8 +31,14 @@ All notable changes to open-sar-triad are documented here. The format is based o
   Pages succeeds while the CDN keeps serving the old files, the site and the
   repository disagree and nothing in the pipeline notices.
   `scripts/verify_deploy.py` fetches the published `api/v1/stats.json` and
-  compares its scene count against the committed catalog, retrying for about
-  three minutes so propagation delay is never reported as a stale site. The
+  compares it against what was just deployed, retrying for about three minutes
+  so propagation delay is never reported as a stale site. It compares the build
+  commit, which `build_api.py` now stamps into `stats.json` from `GITHUB_SHA`,
+  and falls back to the scene count when either side has no commit. The commit
+  is what makes the check meaningful: the scene count only moves on ingest
+  weeks, so on a code-only deploy it is identical before and after and proves
+  nothing. The first live run passed in under a second against a site that had
+  not been redeployed. The
   result goes through the same reporter under a separate `site-health` label,
   since a healthy deploy must not close an open ingest issue and a broken
   ingest must not be overwritten by a deploy failure. A failed deployment, or a
