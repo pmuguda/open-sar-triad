@@ -664,6 +664,10 @@ Each returns a matplotlib `Axes` and accepts `ax=`, so they compose into your ow
 
 A SAR footprint is thinner than a pixel on a world view, so `plot_coverage` draws scenes either as geometry or as markers, never as a mix of the two in one plot. Markers merge per target and scale by how many scenes sit behind them; zoom in far enough that every scene is visible and the same call draws polygons at true scale.
 
+### API reference in the browser
+
+The web tool carries its own API reference at [`api.html`](https://www.pmuguda.com/open-sar-triad/api.html), reachable from the **API** button on the map. It documents every endpoint, the search index format, STAC, the Python client, downloads and plotting, and opens with a live strip fetched from `stats.json` so the figures on the page are the figures the API is serving right now.
+
 ### Documentation and notebooks
 
 - [`python/README.md`](python/README.md) — full client documentation: searching, product families, downloading, exports, plotting, API reference

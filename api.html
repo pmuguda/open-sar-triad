@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API reference — open-sar-triad</title>
+  <meta name="description" content="Static JSON and STAC API for 14,000+ open SAR scenes from ICEYE, Umbra and Capella. No key, no account, no rate limit. Python client, STAC endpoints and download URLs." />
+  <link rel="canonical" href="https://www.pmuguda.com/open-sar-triad/api.html" />
+  <meta name="author" content="Pavan Muguda Sanjeevamurthy" />
+  <meta name="theme-color" content="#0d1117" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <link rel="icon" href="assets/pwa-icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="assets/pwa-icon-192.png" sizes="192x192" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css?v=usage-5" />
+  <link rel="stylesheet" href="css/api.css?v=api-1" />
+</head>
+<body>
+
+<header class="doc-head">
+  <div class="doc-head-in">
+    <a class="doc-brand" href="./">
+      <img src="assets/logo.svg" alt="" />
+      open-sar-triad<span class="sub">API reference</span>
+    </a>
+    <span class="spacer"></span>
+    <div class="seg" data-group="theme" style="margin:0">
+      <button data-theme-btn="dark" aria-pressed="true">DARK</button>
+      <button data-theme-btn="paper" aria-pressed="false">PAPER</button>
+    </div>
+    <a class="doc-back" href="./">&larr; Map</a>
+  </div>
+</header>
+
+<div class="doc">
+  <nav class="doc-nav" aria-label="On this page">
+    <ol>
+      <li><a href="#start">Start here</a></li>
+      <li><a href="#endpoints">Endpoints</a></li>
+      <li><a href="#search">Search index</a></li>
+      <li><a href="#stac">STAC</a></li>
+      <li><a href="#python">Python client</a></li>
+      <li><a href="#downloads">Downloads</a></li>
+      <li><a href="#plots">Plotting</a></li>
+      <li><a href="#license">Licence</a></li>
+    </ol>
+  </nav>
+
+  <main class="doc-main">
+
+    <section id="start">
+      <h1>API reference</h1>
+      <p class="lede">
+        Every scene in the console is also a plain JSON file on a CDN. There is no server,
+        no key, no account and no rate limit, because there is nothing to authenticate
+        against. Fetch the files, or use the Python client.
+      </p>
+
+      <div class="live-box">
+        <div class="live-hd"><span class="blip"></span><span>Live, fetched from this API</span></div>
+        <div class="live-grid" id="live" hidden></div>
+        <div class="live-err" id="live-err">Loading current catalog figures&hellip;</div>
+      </div>
+
+      <h3>Base URL</h3>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>https://www.pmuguda.com/open-sar-triad/api/v1</pre>
+      </div>
+
+      <p>
+        The catalog is rebuilt weekly from the providers' own open-data STAC records.
+        Responses are static files, so they cache well and work offline once fetched.
+        Every file carries its own <code>license</code>, <code>attribution</code> and
+        <code>disclaimer</code> fields, so the terms travel with the data.
+      </p>
+
+      <div class="note">
+        <p>
+          <strong>CORS is open.</strong> You can call these endpoints directly from a browser,
+          a notebook or a static site, with no proxy.
+        </p>
+      </div>
+    </section>
+
+    <section id="endpoints">
+      <h2><span class="n">01</span> Endpoints</h2>
+      <p>
+        <code>{provider}</code> is one of <code>iceye</code>, <code>umbra</code> or
+        <code>capella</code>.
+      </p>
+      <div class="eps">
+        <div class="ep">
+          <code>GET /stats.json</code>
+          <span class="d">Counts by provider, mode, year and format, plus the temporal extent.
+            <em>~2 KB. Start here to see what exists before pulling anything larger.</em></span>
+        </div>
+        <div class="ep">
+          <code>GET /index.json</code>
+          <span class="d">Compact search index over every scene.
+            <em>~2.5 MB. One array per scene rather than one object, to keep it small.</em></span>
+        </div>
+        <div class="ep">
+          <code>GET /catalog.json</code>
+          <span class="d">STAC root catalog, linking to the three collections.
+            <em>The entry point for pystac and other STAC clients.</em></span>
+        </div>
+        <div class="ep">
+          <code>GET /collections/{provider}.json</code>
+          <span class="d">STAC Collection: spatial and temporal extent, licence, provider metadata.</span>
+        </div>
+        <div class="ep">
+          <code>GET /items/{provider}.json</code>
+          <span class="d">STAC ItemCollection with every scene for that provider.
+            <em>One file rather than 14,000 Items, which would churn the repository every week.</em></span>
+        </div>
+        <div class="ep">
+          <code>GET /scenes/{provider}.geojson</code>
+          <span class="d">Raw GeoJSON FeatureCollection, for dropping straight into QGIS or geopandas.</span>
+        </div>
+      </div>
+
+      <h3>Try it</h3>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>curl -s https://www.pmuguda.com/open-sar-triad/api/v1/stats.json | jq '.total, .by_provider'</pre>
+      </div>
+    </section>
+
+    <section id="search">
+      <h2><span class="n">02</span> The search index</h2>
+      <p>
+        <code>index.json</code> stores each scene as a positional array rather than an object,
+        which roughly halves the file. Zip the <code>fields</code> list against each row:
+      </p>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>{
+  "api_version": "1",
+  "generated": "2026-10-04T09:01:12+00:00",
+  "count": 14889,
+  "fields": ["id", "provider", "date", "mode", "orbit", "look", "formats", "bbox"],
+  "scenes": [
+    ["ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF", "iceye", "2025-11-10",
+     "spotlight", "descending", "right", ["GRD", "SLC", "CSI", "VID"],
+     [-60.662, -71.0467, -60.4715, -70.9847]]
+  ]
+}</pre>
+      </div>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>const r = await fetch('https://www.pmuguda.com/open-sar-triad/api/v1/index.json');
+const { fields, scenes } = await r.json();
+const rows = scenes.map(s =&gt; Object.fromEntries(fields.map((f, i) =&gt; [f, s[i]])));
+
+// Everything Umbra imaged over Los Angeles in 2026
+const hits = rows.filter(s =&gt;
+  s.provider === 'umbra' &amp;&amp;
+  s.date &gt;= '2026-01-01' &amp;&amp;
+  s.bbox[0] &gt; -118.7 &amp;&amp; s.bbox[2] &lt; -117.6 &amp;&amp;
+  s.bbox[1] &gt; 33.7   &amp;&amp; s.bbox[3] &lt; 34.3);</pre>
+      </div>
+      <p>
+        <code>bbox</code> is <code>[west, south, east, north]</code> in EPSG:4326.
+        <code>mode</code> is lower-cased here even though providers disagree on capitalisation.
+      </p>
+    </section>
+
+    <section id="stac">
+      <h2><span class="n">03</span> STAC</h2>
+      <p>
+        The catalog is STAC 1.0.0. Point any STAC client at <code>catalog.json</code>:
+      </p>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>import pystac
+
+cat = pystac.Catalog.from_file(
+    "https://www.pmuguda.com/open-sar-triad/api/v1/catalog.json")
+
+for collection in cat.get_children():
+    print(collection.id, collection.extent.temporal.intervals)</pre>
+      </div>
+      <p>
+        Items carry the <code>sar</code>, <code>sat</code> and <code>view</code> extensions:
+        <code>sar:instrument_mode</code>, <code>sar:polarizations</code>,
+        <code>sar:resolution_range</code>, <code>sat:orbit_state</code>,
+        <code>sar:observation_direction</code> and <code>view:incidence_angle</code>.
+        Two fields are ours: <code>ost:formats</code> lists the formats a scene ships in,
+        and <code>ost:first_seen</code> records when this catalog first saw it.
+      </p>
+      <p>
+        Each asset key is a product format, and every one is paired with a
+        <code>_metadata</code> sibling, so <code>SICD</code> has <code>SICD_metadata</code>
+        next to it.
+      </p>
+    </section>
+
+    <section id="python">
+      <h2><span class="n">04</span> Python client</h2>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>pip install open-sar-triad          # core: no dependencies at all
+pip install "open-sar-triad[plot]"  # adds matplotlib for the maps</pre>
+      </div>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>from opensartriad import Catalog
+
+cat = Catalog()                      # no key, no config
+print(cat.stats()["total"])
+
+scenes = cat.search(
+    bbox=(-118.7, 33.7, -117.6, 34.3),   # Los Angeles
+    start="2024-01-01",
+    mode="spotlight",
+    orbit="ascending",
+)
+print(len(scenes))
+
+s = scenes[0]
+print(s.id, s.provider, s.date, s.formats)
+print(s.url("SICD"), s.metadata_url("SICD"))</pre>
+      </div>
+      <p>
+        The first search downloads the index once and caches it, so reuse a single
+        <code>Catalog</code> and every later search is local and instant. Filters combine
+        with AND, and <code>mode</code> is case-insensitive.
+      </p>
+
+      <h3>Product families</h3>
+      <p>
+        The three providers name the same product differently, so you can ask for a family
+        and let the client resolve it per scene. Umbra's complex product is
+        <code>SICD</code>; ICEYE's is <code>SLC</code>.
+      </p>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>s.resolve("detected")   # GRD | GEC | GEO | SIDD
+s.resolve("complex")    # SLC | SICD
+s.resolve("phase")      # CPHD, or None if the scene has none
+s.resolve("visual")     # CSI | VID</pre>
+      </div>
+    </section>
+
+    <section id="downloads">
+      <h2><span class="n">05</span> Downloads</h2>
+      <p>
+        Asset URLs point at the providers' own S3 buckets. This catalog never proxies or
+        re-hosts imagery, so a download is between you and the provider.
+      </p>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>picks = cat.search(bbox=(-118.7, 33.7, -117.6, 34.3), limit=3)
+
+picks.download("data/", family="complex", dry_run=True)   # print, fetch nothing
+paths = picks.download("data/", family="complex")         # actually fetch
+
+picks.save_geojson("selection.geojson")
+ic = picks.to_stac()                                      # STAC ItemCollection
+df = picks.to_dataframe()                                 # needs pandas</pre>
+      </div>
+      <p>
+        Every download brings the scene's metadata sidecar alongside the data file, because
+        a SAR product without its metadata is not much use.
+      </p>
+    </section>
+
+    <section id="plots">
+      <h2><span class="n">06</span> Plotting</h2>
+      <p>
+        With the <code>[plot]</code> extra installed, result sets draw themselves against a
+        country basemap.
+      </p>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>scenes.plot_coverage()     # footprints on a world map, coloured by provider
+scenes.plot_timeline()     # acquisitions over time, stacked by provider
+scenes.plot_providers()    # scene counts per provider
+scene.plot_footprint()     # one scene, with surrounding geography</pre>
+      </div>
+      <p>
+        Each returns a matplotlib <code>Axes</code> and accepts <code>ax=</code>, so they
+        compose into your own figures. A SAR footprint is thinner than a pixel on a world
+        view, so <code>plot_coverage</code> draws scenes either as geometry or as markers,
+        never as a mix of the two: markers merge per target and scale by how many scenes
+        sit behind them, and zooming in far enough that every scene is visible brings the
+        polygons back at true scale.
+      </p>
+    </section>
+
+    <section id="license">
+      <h2><span class="n">07</span> Licence and attribution</h2>
+      <p>
+        Scene metadata is &copy; ICEYE, Umbra and Capella, published under their open data
+        programmes and licensed <strong>CC-BY 4.0</strong>. This catalog is assembled from
+        their published STAC records and is an independent third-party index, not endorsed
+        by any of them.
+      </p>
+      <p>
+        If you redistribute this data or publish derived work, credit the originating
+        provider. Every endpoint repeats these terms in its own body, so the notice travels
+        with whatever you fetch.
+      </p>
+      <div>
+        <span class="pill">CC-BY 4.0</span>
+        <span class="pill">STAC 1.0.0</span>
+        <span class="pill">No API key</span>
+        <span class="pill">Weekly refresh</span>
+      </div>
+
+      <div class="doc-foot">
+        <p>
+          <a href="https://github.com/pmuguda/open-sar-triad">Source on GitHub</a> &middot;
+          <a href="https://pypi.org/project/open-sar-triad/">Package on PyPI</a> &middot;
+          <a href="https://github.com/pmuguda/open-sar-triad/tree/main/notebooks">Example notebooks</a> &middot;
+          <a href="https://github.com/pmuguda/open-sar-triad/blob/main/python/README.md">Full client documentation</a>
+        </p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/api.js?v=api-1"></script>
+</body>
+</html>

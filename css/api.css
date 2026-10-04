@@ -1,0 +1,197 @@
+/* API reference page.
+ *
+ * Loads style.css first for the design tokens, fonts and theme switch, so the
+ * docs cannot drift from the console's palette. That stylesheet is built for a
+ * full-viewport map, which is why the first rule here hands the page back its
+ * scrolling. Everything map-specific in it is inert without the map's DOM.
+ */
+
+html, body { height: auto; }
+body {
+  overflow: auto;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+/* ── Shell ─────────────────────────────────────────────────── */
+.doc {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.doc-head {
+  position: sticky; top: 0; z-index: 10;
+  background: oklch(from var(--bg) l c h / .92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 40px;
+}
+.doc-head-in {
+  max-width: 1180px; margin: 0 auto; padding: 14px 24px;
+  display: flex; align-items: center; gap: 16px;
+}
+.doc-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-cond); font-weight: 700; font-size: 15px;
+  letter-spacing: .04em; color: var(--ink); text-decoration: none;
+}
+.doc-brand img { width: 22px; height: 22px; }
+.doc-brand .sub {
+  font-family: var(--font-mono); font-weight: 400; font-size: 11px;
+  color: var(--ink-3); letter-spacing: .1em; text-transform: uppercase;
+  padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--line);
+}
+.doc-head .spacer { flex: 1; }
+
+.doc-back {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-2); text-decoration: none;
+  border: 1px solid var(--line); padding: 7px 12px;
+  transition: color .12s, border-color .12s;
+}
+.doc-back:hover { color: var(--accent); border-color: var(--accent-3); }
+
+/* ── Side navigation ───────────────────────────────────────── */
+.doc-nav { position: sticky; top: 92px; }
+.doc-nav ol { list-style: none; margin: 0; padding: 0; }
+.doc-nav a {
+  display: block; padding: 5px 0 5px 12px;
+  border-left: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--ink-3); text-decoration: none;
+  transition: color .12s, border-color .12s;
+}
+.doc-nav a:hover { color: var(--ink); border-left-color: var(--ink-3); }
+.doc-nav a.on { color: var(--accent); border-left-color: var(--accent); }
+
+/* ── Typography ────────────────────────────────────────────── */
+.doc-main > section { scroll-margin-top: 92px; margin-bottom: 56px; }
+.doc h1 {
+  font-family: var(--font-cond); font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.12; margin: 0 0 12px; letter-spacing: -.01em;
+}
+.doc h2 {
+  font-family: var(--font-cond); font-size: 21px; margin: 0 0 14px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 10px;
+}
+.doc h2 .n {
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+  letter-spacing: .1em;
+}
+.doc h3 {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  margin: 26px 0 8px; color: var(--ink); letter-spacing: .01em;
+}
+.doc p  { margin: 0 0 14px; color: var(--ink-2); max-width: 72ch; }
+.doc li { color: var(--ink-2); margin-bottom: 6px; max-width: 72ch; }
+.doc strong { color: var(--ink); font-weight: 600; }
+.doc a:not(.doc-back):not(.doc-brand):not(.doc-nav a) { color: var(--accent); }
+.lede { font-size: 16px; max-width: 68ch; }
+
+code, .mono { font-family: var(--font-mono); }
+:not(pre) > code {
+  font-size: .9em; background: var(--bg-3); color: var(--ink);
+  padding: 1px 5px; border: 1px solid var(--line);
+}
+
+/* ── Code blocks ───────────────────────────────────────────── */
+.code {
+  position: relative; margin: 0 0 18px;
+  border: 1px solid var(--line); background: var(--bg-2);
+}
+.code pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65;
+  color: var(--ink);
+}
+.code .copy {
+  position: absolute; top: 8px; right: 8px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; cursor: pointer;
+  background: var(--bg-3); color: var(--ink-3);
+  border: 1px solid var(--line); padding: 4px 8px;
+  opacity: 0; transition: opacity .12s, color .12s, border-color .12s;
+}
+.code:hover .copy, .code .copy:focus-visible { opacity: 1; }
+.code .copy:hover { color: var(--accent); border-color: var(--accent-3); }
+.code .copy[data-done="1"] { color: var(--iceye); border-color: var(--iceye); opacity: 1; }
+
+/* ── Endpoint table ────────────────────────────────────────── */
+.eps { border: 1px solid var(--line); border-bottom: 0; }
+.ep {
+  display: grid; grid-template-columns: minmax(230px, 0.9fr) 1fr;
+  gap: 18px; padding: 13px 16px; border-bottom: 1px solid var(--line);
+  align-items: baseline;
+}
+.ep code { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12.5px; }
+.ep .d { color: var(--ink-2); font-size: 13.5px; }
+.ep .d em { color: var(--ink-3); font-style: normal; font-size: 12px; display: block; margin-top: 3px; }
+
+/* ── Live status strip ─────────────────────────────────────── */
+.live-box { border: 1px solid var(--line); background: var(--bg-2); padding: 0; margin: 0 0 18px; }
+.live-hd {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.live-hd .blip {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--iceye);
+  box-shadow: 0 0 8px -1px var(--iceye);
+}
+.live-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+.live-grid div {
+  padding: 12px 14px; border-right: 1px solid var(--line);
+}
+.live-grid div:last-child { border-right: 0; }
+.live-grid .k {
+  display: block; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.live-grid .v { font-family: var(--font-mono); font-size: 17px; color: var(--ink); }
+.live-err { padding: 12px 14px; color: var(--ink-3); font-size: 13px; }
+
+/* ── Callout ───────────────────────────────────────────────── */
+.note {
+  border: 1px solid var(--line); border-left: 2px solid var(--accent);
+  background: var(--accent-2); padding: 12px 16px; margin: 0 0 18px;
+}
+.note p:last-child { margin-bottom: 0; }
+
+.pill {
+  display: inline-block; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  border: 1px solid var(--line); padding: 3px 7px; margin: 0 6px 6px 0;
+}
+
+.doc-foot {
+  border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px;
+  font-size: 13px; color: var(--ink-3);
+}
+
+/* ── Narrow screens ────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .doc { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px 64px; }
+  .doc-nav { display: none; }
+  .doc-head-in { padding: 12px 16px; }
+  .doc-brand .sub { display: none; }
+  .ep { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  /* There is no hover to reveal it on, and floated over the code it covers the
+     first line — which on the base-URL block is the one thing you came to copy.
+     Give it its own strip instead. */
+  .code .copy {
+    position: static; opacity: 1; display: block; width: 100%;
+    text-align: right; background: none;
+    border: 0; border-bottom: 1px solid var(--line);
+    padding: 7px 12px;
+  }
+}

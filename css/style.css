@@ -442,7 +442,18 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
   transition: color .12s, border-color .12s;
 }
 .helpbtn:hover { color: var(--ink); border-color: var(--ink-3); }
-.usagebtn { right: 52px; }
+.helpbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The cluster lays out from the right edge. Offsets are expressed against
+   --hb-edge so the narrow-screen override changes one number rather than
+   restating each button: that restating is what previously dropped the
+   visitors button underneath the help button below 860px. */
+.helpbtn { --hb-edge: 14px; --hb-step: 38px; right: var(--hb-edge); }
+.usagebtn { right: calc(var(--hb-edge) + var(--hb-step)); }
+.apibtn {
+  right: calc(var(--hb-edge) + var(--hb-step) * 2);
+  width: auto; padding: 0 9px; text-decoration: none;
+  font-size: 11px; letter-spacing: .08em;
+}
 .usagebtn svg { width: 15px; height: 15px; }
 .usagebtn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
 
@@ -1202,7 +1213,9 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
     padding: 0 6px; gap: 5px; font-size: 9px; letter-spacing: .05em;
   }
   .maplegend .lg .d { width: 6px; height: 6px; }
-  .helpbtn { top: 12px; right: 12px; }
+  /* Shifts the whole cluster, keeping the buttons apart. Setting `right`
+     directly here would collapse all three onto the same spot. */
+  .helpbtn { top: 12px; --hb-edge: 12px; --hb-step: 34px; }
   #aoi-toolbar {
     left: 62px;
     bottom: calc(min(58svh, 470px) + 144px);

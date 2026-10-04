@@ -7,6 +7,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **API reference page in the web tool**, reachable from an `API` button beside
+  the help and visitors buttons on the map. `api.html` documents every endpoint,
+  the compact search index format, the STAC entry point, the Python client,
+  downloads, plotting and the licence. It reuses `css/style.css` for the design
+  tokens so the docs cannot drift from the console's palette, and carries a live
+  strip that fetches `stats.json` on load — the page proving the API works by
+  using it. `tests/test_api_docs.py` checks the page against a real build in
+  both directions, so an endpoint cannot be documented without existing or exist
+  without being documented.
+
+### Fixed
+- **The map's overlay buttons stacked on top of each other below 860px.** The
+  narrow-screen block set `right` on `.helpbtn`, which at equal specificity and
+  later source order overrode `.usagebtn`, putting the visitors button directly
+  underneath the help button on every phone. Offsets now derive from one edge
+  variable that the narrow-screen block shifts, and a test fails if `right` is
+  set there again.
 - **The ingest now reports its own health, instead of waiting to be checked.**
   Every detector before this one wrote its finding somewhere that had to be
   opened: stdout, a JSON artifact, a run summary. The catalog was frozen at
