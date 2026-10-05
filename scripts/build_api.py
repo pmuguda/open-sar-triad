@@ -58,6 +58,13 @@ MEDIA = {
 }
 
 
+def split_pol(value):
+    """The catalog's display string back to a list, e.g. "HH, HV" -> ["HH","HV"]."""
+    if not value:
+        return []
+    return [t.strip().upper() for t in str(value).split(",") if t.strip()]
+
+
 def bbox_of(geom):
     if geom["type"] == "Polygon":
         pts = [p for ring in geom["coordinates"] for p in ring]
@@ -162,12 +169,18 @@ def to_stac_item(feat, provider):
 
     date = props.get("date")
     stac_props = {"datetime": f"{date}T00:00:00Z" if date else None}
-    for src, dst in (("sensor_mode", "sar:instrument_mode"), ("polarization", "sar:polarizations"),
+    for src, dst in (("sensor_mode", "sar:instrument_mode"),
                      ("resolution", "sar:resolution_range"), ("orbit_state", "sat:orbit_state"),
                      ("look_dir", "sar:observation_direction"), ("incidence_angle", "view:incidence_angle"),
                      ("off_nadir", "view:off_nadir"), ("first_seen", "ost:first_seen")):
         if props.get(src) not in (None, "", "n/a"):
             stac_props[dst] = props[src]
+    # The STAC spec types sar:polarizations as an array of strings. The catalog
+    # stores a display string ("VV", or "HH, HV"), so split it back here rather
+    # than emitting a string and quietly producing invalid STAC.
+    pols = split_pol(props.get("polarization"))
+    if pols:
+        stac_props["sar:polarizations"] = pols
     stac_props["ost:formats"] = sorted(products_of(props), key=lambda f: FORMAT_ORDER.index(f) if f in FORMAT_ORDER else 99)
 
     return {
@@ -214,7 +227,7 @@ def main():
     # Rows are arrays, not objects, and `fields` names the positions. Repeating
     # every key 14,798 times would more than double the size; the client zips
     # them back into objects so callers still get named attributes.
-    fields = ["id", "provider", "date", "mode", "orbit", "look", "formats", "bbox"]
+    fields = ["id", "provider", "date", "mode", "orbit", "look", "pol", "formats", "bbox"]
     rows = []
     for f in feats:
         p = f["properties"]
@@ -222,6 +235,7 @@ def main():
             p.get("id"), p.get("provider"), p.get("date"),
             (p.get("sensor_mode") or "").lower() or None,
             p.get("orbit_state"), p.get("look_dir"),
+            split_pol(p.get("polarization")),
             sorted(products_of(p), key=lambda x: FORMAT_ORDER.index(x) if x in FORMAT_ORDER else 99),
             bbox_of(f["geometry"]),
         ])
@@ -234,6 +248,7 @@ def main():
     modes = Counter((f["properties"].get("sensor_mode") or "n/a").lower() for f in feats)
     years = Counter(f["properties"]["date"][:4] for f in feats if f["properties"].get("date"))
     fmts  = Counter(k for f in feats for k in products_of(f["properties"]))
+    pols  = Counter(p for f in feats for p in split_pol(f["properties"].get("polarization")))
     dates = sorted(f["properties"]["date"] for f in feats if f["properties"].get("date"))
     n_stats = write(OUT / "stats.json", {
         "api_version": "1", "generated": generated, "commit": commit,
@@ -242,6 +257,7 @@ def main():
         "by_mode": dict(modes.most_common()),
         "by_year": dict(sorted(years.items())),
         "by_format": dict(fmts.most_common()),
+        "by_polarization": dict(pols.most_common()),
         "families": FAMILIES,
         "temporal_extent": [dates[0], dates[-1]] if dates else [None, None],
     })

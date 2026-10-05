@@ -106,9 +106,9 @@ def _bbox_intersects(a: Sequence[float], b: Sequence[float]) -> bool:
 class Scene:
     """One SAR acquisition.
 
-    The cheap fields (id, provider, date, mode, orbit, look, formats, bbox) come
-    straight from the search index. Asset URLs are resolved lazily from the
-    provider's full record the first time you ask for one.
+    The cheap fields (id, provider, date, mode, orbit, look, pol, formats,
+    bbox) come straight from the search index. Asset URLs are resolved lazily
+    from the provider's full record the first time you ask for one.
     """
 
     id: str
@@ -117,9 +117,15 @@ class Scene:
     mode: str | None
     orbit: str | None
     look: str | None
+    pol: list[str] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
     bbox: list[float] = field(default_factory=list)
     _catalog: "Catalog | None" = field(default=None, repr=False, compare=False)
+
+    @property
+    def polarizations(self) -> list[str]:
+        """Readable alias for :attr:`pol`, which is short to keep the index small."""
+        return self.pol
 
     @property
     def year(self) -> int | None:
@@ -176,7 +182,7 @@ class Scene:
 
     def __repr__(self) -> str:
         return (f"Scene({self.id!r}, provider={self.provider!r}, date={self.date!r}, "
-                f"mode={self.mode!r}, formats={self.formats})")
+                f"mode={self.mode!r}, pol={self.pol}, formats={self.formats})")
 
 
 # --------------------------------------------------------------------------- #
@@ -222,6 +228,7 @@ class SceneCollection(_SequenceABC):
                 {"type": "Feature", "id": s.id, "geometry": s.geometry,
                  "properties": {"id": s.id, "provider": s.provider, "date": s.date,
                                 "mode": s.mode, "orbit": s.orbit, "look": s.look,
+                                "polarization": ",".join(s.pol or []),
                                 **s.properties}}
                 for s in self._scenes
             ],
@@ -243,7 +250,8 @@ class SceneCollection(_SequenceABC):
             raise OpenSarTriadError("to_dataframe() needs pandas: pip install pandas") from e
         return pd.DataFrame([
             {"id": s.id, "provider": s.provider, "date": s.date, "mode": s.mode,
-             "orbit": s.orbit, "look": s.look, "formats": ",".join(s.formats),
+             "orbit": s.orbit, "look": s.look,
+             "polarization": ",".join(s.pol or []), "formats": ",".join(s.formats),
              "west": s.bbox[0], "south": s.bbox[1], "east": s.bbox[2], "north": s.bbox[3]}
             for s in self._scenes
         ])
@@ -416,6 +424,7 @@ class Catalog:
                mode: str | None = None,
                orbit: str | None = None,
                look: str | None = None,
+               polarization: str | Sequence[str] | None = None,
                formats: str | Sequence[str] | None = None,
                family: str | None = None,
                limit: int | None = None) -> SceneCollection:
@@ -430,6 +439,9 @@ class Catalog:
         mode : sensor mode, e.g. 'spotlight' (case-insensitive).
         orbit : 'ascending' or 'descending'.
         look : 'left' or 'right'.
+        polarization : 'VV', or ['VV', 'HH']. Matches a scene publishing any of
+            them, so a dual-pol scene is found by either of its channels.
+            Case-insensitive.
         formats : keep scenes publishing any of these exact formats.
         family : keep scenes that can satisfy this product family.
         limit : stop after this many matches.
@@ -447,8 +459,11 @@ class Catalog:
             providers = [providers]
         if isinstance(formats, str):
             formats = [formats]
+        if isinstance(polarization, str):
+            polarization = [polarization]
         prov = {p.lower() for p in providers} if providers else None
         fmts = {f.upper() for f in formats} if formats else None
+        pols = {p.upper() for p in polarization} if polarization else None
         fam_order = FAMILIES.get(family.lower()) if family else None
         if family and fam_order is None:
             raise ValueError(f"Unknown family {family!r}; expected one of {list(FAMILIES)}")
@@ -468,6 +483,8 @@ class Catalog:
             if orbit and s.orbit != orbit:
                 continue
             if look and s.look != look:
+                continue
+            if pols and not pols.intersection(s.pol or []):
                 continue
             if fmts and not fmts.intersection(s.formats):
                 continue

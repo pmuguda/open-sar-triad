@@ -7,6 +7,28 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Polarization filter**, in the map console, the Python client and the API.
+  The console gains a Polarization select beside Mode, populated from the data,
+  carried in the shareable URL as `pol=` and cleared by Reset. The client gains
+  `search(polarization=...)`, accepting one channel or several and matching a
+  scene that publishes any of them, plus `Scene.pol` and the readable alias
+  `Scene.polarizations`. The search index carries a new `pol` field and
+  `stats.json` a new `by_polarization` block.
+
+### Fixed
+- **Every scene's polarization was the literal string `"['VV']"`.** Upstream
+  hands the value over as a Python repr, which is not JSON, so `json.loads`
+  raised, a bare `except: pass` swallowed it and the raw six characters shipped
+  as the value — to the detail panel, to STAC and to anything trying to filter
+  on it. `parse_polarizations` now reads channels rather than guessing a
+  serialisation format: split on any plausible separator and keep the letters,
+  which handles JSON, Python reprs, bare strings and real lists alike. The
+  committed catalog was migrated with the same function, so all 14,920 scenes
+  now read `VV` or `HH`.
+- **`sar:polarizations` was emitted as a string.** The STAC spec types it as an
+  array, so the published Items were invalid. `build_api.py` splits the
+  catalog's display string back into a list, and omits the field entirely for a
+  scene with no polarization rather than claiming an empty set of channels.
 - **API reference page in the web tool**, reachable from an `API` button beside
   the help and visitors buttons on the map. `api.html` documents every endpoint,
   the compact search index format, the STAC entry point, the Python client,

@@ -18,6 +18,44 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")  # suppress numpy version warnings in some envs
 
+
+#: Polarizations arrive in whatever shape the upstream parquet cell happened to
+#: hold. Most often that is a *Python* repr of a list, "['VV']", which is not
+#: JSON: json.loads rejects the single quotes, and the original code swallowed
+#: that in a bare except, so every scene in the catalog carried the literal
+#: characters "['VV']" as its polarization for display, for STAC and for
+#: anything trying to filter on it.
+#:
+#: Rather than guess which serialisation format produced the cell, this ignores
+#: the punctuation entirely: split on any plausible separator and keep the
+#: letters. A channel name is only ever letters, so there is nothing to lose,
+#: and it handles JSON, Python reprs, bare strings and real lists alike. An
+#: earlier version tried json.loads then ast.literal_eval first; those branches
+#: turned out to agree with this on every shape the catalog contains, and to be
+#: worse on "['VV+VH']", which literal_eval reads as the single token "VVVH".
+_NON_CHANNEL = {"NAN", "NONE", "NULL", "NA"}
+
+
+def parse_polarizations(value):
+    """Normalize a polarization cell to a list like ``["VV"]``.
+
+    Accepts a list, a JSON array string, a Python-repr string, a delimited
+    string, or None. Returns [] for anything with no channels in it, so a
+    caller can tell "no polarization" from "some polarization" without
+    inspecting types.
+    """
+    if value is None:
+        return []
+    items = (value if isinstance(value, (list, tuple))
+             else re.split(r"[,;/+]", str(value)))
+    out = []
+    for it in items:
+        tok = re.sub(r"[^A-Za-z]", "", str(it)).upper()
+        if tok and tok not in _NON_CHANNEL and tok not in out:
+            out.append(tok)
+    return out
+
+
 try:
     import pyarrow.parquet as pq
 except ImportError:
@@ -211,14 +249,7 @@ def normalize_row(row, provider_id):
     # Sensor metadata
     sensor_mode  = row.get("sar:instrument_mode") or row.get("instrument_mode") or "N/A"
     resolution   = row.get("sar:resolution_range") or row.get("sar:pixel_spacing_range") or row.get("gsd")
-    polarization = row.get("sar:polarizations")
-    if isinstance(polarization, str):
-        try:
-            polarization = ", ".join(json.loads(polarization))
-        except Exception:
-            pass
-    elif isinstance(polarization, list):
-        polarization = ", ".join(polarization)
+    polarization = ", ".join(parse_polarizations(row.get("sar:polarizations")))
 
     if resolution is not None:
         try:

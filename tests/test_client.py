@@ -194,7 +194,9 @@ def test_urls_resolve_lazily(cat):
     assert s.url("GEC").startswith("https://umbra-open-data-catalog")
     assert s.metadata_url("GEC").endswith(".stac.v2.json")
     assert s.url("NOPE") is None
-    assert s.properties["sar:polarizations"] == "VV"
+    # An array, as the STAC spec types it. This asserted the string "VV" while
+    # the catalog was shipping an unparsed Python repr through to STAC.
+    assert s.properties["sar:polarizations"] == ["VV"]
     assert s.geometry["type"] == "Polygon"
 
 

@@ -267,6 +267,7 @@ function getFilters() {
     iceye: providerActive.iceye, umbra: providerActive.umbra, capella: providerActive.capella,
     dateFrom, dateTo,
     mode:  document.getElementById('modeSel') ? document.getElementById('modeSel').value : '',
+    pol:   document.getElementById('polSel')  ? document.getElementById('polSel').value  : '',
     bbox, countryGeometry,
     orbit: orbitFilter,
     look:  lookFilter,
@@ -287,6 +288,16 @@ function isRecentFeature(p, cutoff, trackingActive) {
     : !!p.date && p.date >= cutoff;
 }
 
+// Polarization is stored as a display string, "VV" or "HH, HV". Split it so a
+// dual-pol scene is found by either of its channels rather than only by the
+// exact combined string.
+function scenePols(p) {
+  return String(p.polarization || '')
+    .split(',')
+    .map(x => x.trim().toUpperCase())
+    .filter(Boolean);
+}
+
 // ── Visible features ───────────────────────────────────────
 function getVisibleFeatures() {
   const f = getFilters();
@@ -299,6 +310,7 @@ function getVisibleFeatures() {
     if (f.dateFrom && p.date && p.date < f.dateFrom) return false;
     if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
     if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
+    if (f.pol   && !scenePols(p).includes(f.pol)) return false;
     if (f.orbit && p.orbit_state !== f.orbit) return false;
     if (f.look  && p.look_dir   !== f.look)  return false;
     if (f.bbox) {
@@ -1797,6 +1809,24 @@ document.getElementById('modeSel').addEventListener('change', e => {
   render();
 });
 
+document.getElementById('polSel').addEventListener('change', e => {
+  const polVal = document.getElementById('polVal');
+  if (polVal) polVal.textContent = e.target.value || 'ALL';
+  render();
+});
+
+function populatePolarizations(features) {
+  const pols = new Set();
+  features.forEach(f => scenePols(f.properties).forEach(x => pols.add(x)));
+  const sel = document.getElementById('polSel');
+  if (!sel) return;
+  [...pols].sort().forEach(v => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  });
+}
+
 function populateModes(features) {
   const modes = new Set();
   features.forEach(f => {
@@ -1856,6 +1886,11 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   if (modeSel) modeSel.value = '';
   const modeVal = document.getElementById('modeVal');
   if (modeVal) modeVal.textContent = 'ALL';
+
+  const polSel = document.getElementById('polSel');
+  if (polSel) polSel.value = '';
+  const polVal = document.getElementById('polVal');
+  if (polVal) polVal.textContent = 'ALL';
 
   orbitFilter = ''; lookFilter = '';
   document.querySelectorAll('.seg[data-group] button').forEach(btn => {
@@ -2523,7 +2558,10 @@ function encodeState() {
   }
   const modeSel = document.getElementById('modeSel');
   const mode = modeSel ? modeSel.value : '';
+  const polSel = document.getElementById('polSel');
+  const pol = polSel ? polSel.value : '';
   if (mode)        p.set('mode',  mode);
+  if (pol)         p.set('pol',   pol);
   if (orbitFilter) p.set('orbit', orbitFilter);
   if (lookFilter)  p.set('look',  lookFilter);
   if (recentOnly)  p.set('recent', '1');
@@ -2570,6 +2608,17 @@ function restoreState() {
   const mode = p.get('mode');
   const modeSel = document.getElementById('modeSel');
   if (mode && modeSel) modeSel.value = mode;
+
+  const pol = p.get('pol');
+  const polSel = document.getElementById('polSel');
+  if (pol && polSel) {
+    polSel.value = pol.toUpperCase();
+    const polVal = document.getElementById('polVal');
+    // Only echo it into the label if the option actually exists; a stale link
+    // naming a polarization no longer in the catalog should read ALL, matching
+    // what the empty select is really filtering by.
+    if (polVal) polVal.textContent = polSel.value || 'ALL';
+  }
 
   const bbox = p.get('bbox');
   if (bbox) {
@@ -2927,6 +2976,7 @@ fetch('data/scenes.geojson')
     buildGeomCache(allFeatures);
     buildFormatCache(allFeatures);
     populateModes(allFeatures);
+    populatePolarizations(allFeatures);
     restoreState();
     initTimeline(allFeatures);
     renderRecent();

@@ -142,10 +142,10 @@
   "api_version": "1",
   "generated": "2026-10-04T09:01:12+00:00",
   "count": 14889,
-  "fields": ["id", "provider", "date", "mode", "orbit", "look", "formats", "bbox"],
+  "fields": ["id", "provider", "date", "mode", "orbit", "look", "pol", "formats", "bbox"],
   "scenes": [
     ["ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF", "iceye", "2025-11-10",
-     "spotlight", "descending", "right", ["GRD", "SLC", "CSI", "VID"],
+     "spotlight", "descending", "right", ["VV"], ["GRD", "SLC", "CSI", "VID"],
      [-60.662, -71.0467, -60.4715, -70.9847]]
   ]
 }</pre>
@@ -166,6 +166,7 @@ const hits = rows.filter(s =&gt;
       <p>
         <code>bbox</code> is <code>[west, south, east, north]</code> in EPSG:4326.
         <code>mode</code> is lower-cased here even though providers disagree on capitalisation.
+        <code>pol</code> is a list, so a dual-pol scene can be matched on either channel.
       </p>
     </section>
 
@@ -189,6 +190,7 @@ for collection in cat.get_children():
         <code>sar:instrument_mode</code>, <code>sar:polarizations</code>,
         <code>sar:resolution_range</code>, <code>sat:orbit_state</code>,
         <code>sar:observation_direction</code> and <code>view:incidence_angle</code>.
+        <code>sar:polarizations</code> is an array, as the spec types it.
         Two fields are ours: <code>ost:formats</code> lists the formats a scene ships in,
         and <code>ost:first_seen</code> records when this catalog first saw it.
       </p>
@@ -218,6 +220,7 @@ scenes = cat.search(
     start="2024-01-01",
     mode="spotlight",
     orbit="ascending",
+    polarization="VV",                   # or ["VV", "HH"]
 )
 print(len(scenes))
 
