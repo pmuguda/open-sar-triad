@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=usage-5" />
+  <link rel="stylesheet" href="css/style.css?v=landuse-1" />
   <link rel="stylesheet" href="css/api.css?v=api-1" />
 </head>
 <body>
@@ -43,6 +43,7 @@
       <li><a href="#search">Search index</a></li>
       <li><a href="#stac">STAC</a></li>
       <li><a href="#python">Python client</a></li>
+      <li><a href="#landuse">Land use</a></li>
       <li><a href="#downloads">Downloads</a></li>
       <li><a href="#plots">Plotting</a></li>
       <li><a href="#license">Licence</a></li>
@@ -142,11 +143,11 @@
   "api_version": "1",
   "generated": "2026-10-04T09:01:12+00:00",
   "count": 14889,
-  "fields": ["id", "provider", "date", "mode", "orbit", "look", "pol", "formats", "bbox"],
+  "fields": ["id", "provider", "date", "mode", "orbit", "look", "pol", "landuse", "formats", "bbox"],
   "scenes": [
     ["ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF", "iceye", "2025-11-10",
-     "spotlight", "descending", "right", ["VV"], ["GRD", "SLC", "CSI", "VID"],
-     [-60.662, -71.0467, -60.4715, -70.9847]]
+     "spotlight", "descending", "right", ["VV"], ["ice"],
+     ["GRD", "SLC", "CSI", "VID"], [-60.662, -71.0467, -60.4715, -70.9847]]
   ]
 }</pre>
       </div>
@@ -167,6 +168,7 @@ const hits = rows.filter(s =&gt;
         <code>bbox</code> is <code>[west, south, east, north]</code> in EPSG:4326.
         <code>mode</code> is lower-cased here even though providers disagree on capitalisation.
         <code>pol</code> is a list, so a dual-pol scene can be matched on either channel.
+        <code>landuse</code> is a list too, and is explained below.
       </p>
     </section>
 
@@ -221,6 +223,7 @@ scenes = cat.search(
     mode="spotlight",
     orbit="ascending",
     polarization="VV",                   # or ["VV", "HH"]
+    landuse="airport",                   # or ["port", "urban"]
 )
 print(len(scenes))
 
@@ -249,8 +252,56 @@ s.resolve("visual")     # CSI | VID</pre>
       </div>
     </section>
 
+    <section id="landuse">
+      <h2><span class="n">05</span> Land use</h2>
+      <p>
+        Every scene carries a <code>landuse</code> list describing
+        <strong>what a map says is at its location</strong>. Nothing here looks at
+        a pixel: the tags come from intersecting each footprint against published
+        geographic vectors. A scene tagged <code>airport</code> covers an airport;
+        whether anything is visible in the data is a separate question this
+        catalog has no opinion on.
+      </p>
+      <p>
+        Tags are a list because a footprint is several kilometres across and
+        routinely spans more than one thing. A scene over Rotterdam is a port and
+        urban and partly water, all at once.
+      </p>
+      <div class="eps">
+        <div class="ep"><code>airport port urban industrial military</code>
+          <span class="d">Built infrastructure.</span></div>
+        <div class="ep"><code>agriculture forest</code>
+          <span class="d">Vegetated land use.
+            <em>From OpenStreetMap, so present only where that enrichment has run.</em></span></div>
+        <div class="ep"><code>mountain plateau plain desert wetland ice</code>
+          <span class="d">Terrain.</span></div>
+        <div class="ep"><code>water offshore</code>
+          <span class="d">Inland water covering a third of the footprint, or sea covering
+            most of it.</span></div>
+      </div>
+      <div class="code">
+        <button class="copy" type="button">Copy</button>
+<pre>cat.search(landuse="port")              # any scene over a port
+cat.search(landuse=["airport", "urban"])  # either one
+cat.search(landuse="port", providers="umbra", start="2026-01-01")</pre>
+      </div>
+      <p>
+        <code>stats.json</code> carries a <code>by_landuse</code> block with the
+        catalog-wide counts, and STAC Items carry the same list as
+        <code>ost:landuse</code>.
+      </p>
+      <div class="note">
+        <p>
+          Terrain and infrastructure tags come from <strong>Natural Earth</strong>
+          (public domain). <code>agriculture</code>, <code>forest</code>,
+          <code>industrial</code> and <code>military</code> come from
+          <strong>OpenStreetMap</strong>, which is ODbL.
+        </p>
+      </div>
+    </section>
+
     <section id="downloads">
-      <h2><span class="n">05</span> Downloads</h2>
+      <h2><span class="n">06</span> Downloads</h2>
       <p>
         Asset URLs point at the providers' own S3 buckets. This catalog never proxies or
         re-hosts imagery, so a download is between you and the provider.
@@ -273,7 +324,7 @@ df = picks.to_dataframe()                                 # needs pandas</pre>
     </section>
 
     <section id="plots">
-      <h2><span class="n">06</span> Plotting</h2>
+      <h2><span class="n">07</span> Plotting</h2>
       <p>
         With the <code>[plot]</code> extra installed, result sets draw themselves against a
         country basemap.
@@ -296,7 +347,7 @@ scene.plot_footprint()     # one scene, with surrounding geography</pre>
     </section>
 
     <section id="license">
-      <h2><span class="n">07</span> Licence and attribution</h2>
+      <h2><span class="n">08</span> Licence and attribution</h2>
       <p>
         Scene metadata is &copy; ICEYE, Umbra and Capella, published under their open data
         programmes and licensed <strong>CC-BY 4.0</strong>. This catalog is assembled from

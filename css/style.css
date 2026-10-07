@@ -1325,3 +1325,31 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   .brand-sub { grid-column: 2 / 4; font-size: 8px; }
   .seg-line { grid-template-columns: 1fr; gap: 6px; }
 }
+
+/* ── Land use chips ──
+   Doubles as the legend: every bucket is listed whether or not it currently
+   has scenes, with its live count, so the grid answers "what is in this
+   catalog" as well as "what am I filtering to". */
+.lu-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.lu-chip {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em;
+  padding: 4px 7px; min-height: 22px; cursor: pointer; color: var(--ink-2);
+  background: var(--bg); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: color .12s, background-color .12s, border-color .12s;
+}
+.lu-chip:hover { border-color: var(--ink-3); color: var(--ink); background: var(--bg-3); }
+.lu-chip .n { color: var(--ink-3); font-size: 9px; }
+.lu-chip[aria-pressed="true"] {
+  background: var(--accent); color: var(--on-accent);
+  border-color: var(--accent); font-weight: 600;
+}
+.lu-chip[aria-pressed="true"] .n { color: var(--on-accent); opacity: .7; }
+/* A bucket with nothing in it under the current filters stays visible, because
+   its absence is information, but reads as unavailable. */
+.lu-chip.is-empty { opacity: .3; }
+.lu-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lu-note {
+  margin: 7px 0 0; font-family: var(--font-mono); font-size: 9px;
+  line-height: 1.45; color: var(--ink-3);
+}

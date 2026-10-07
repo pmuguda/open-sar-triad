@@ -1,13 +1,13 @@
-const CACHE_NAME = 'open-sar-triad-v57';
+const CACHE_NAME = 'open-sar-triad-v58';
 const APP_SHELL = [
   './',
   './index.html',
   './api.html',
   './manifest.json',
-  './css/style.css?v=usage-5',
+  './css/style.css?v=landuse-1',
   './css/tour.css?v=tour-logo-1',
   './css/api.css?v=api-1',
-  './js/app.js?v=pol-1',
+  './js/app.js?v=landuse-1',
   './js/tour.js?v=tour-v12',
   './js/api.js?v=api-1',
   './data/scenes.geojson',

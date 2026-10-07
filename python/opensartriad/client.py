@@ -106,8 +106,8 @@ def _bbox_intersects(a: Sequence[float], b: Sequence[float]) -> bool:
 class Scene:
     """One SAR acquisition.
 
-    The cheap fields (id, provider, date, mode, orbit, look, pol, formats,
-    bbox) come straight from the search index. Asset URLs are resolved lazily
+    The cheap fields (id, provider, date, mode, orbit, look, pol, landuse,
+    formats, bbox) come straight from the search index. Asset URLs are resolved lazily
     from the provider's full record the first time you ask for one.
     """
 
@@ -118,6 +118,7 @@ class Scene:
     orbit: str | None
     look: str | None
     pol: list[str] = field(default_factory=list)
+    landuse: list[str] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
     bbox: list[float] = field(default_factory=list)
     _catalog: "Catalog | None" = field(default=None, repr=False, compare=False)
@@ -229,6 +230,7 @@ class SceneCollection(_SequenceABC):
                  "properties": {"id": s.id, "provider": s.provider, "date": s.date,
                                 "mode": s.mode, "orbit": s.orbit, "look": s.look,
                                 "polarization": ",".join(s.pol or []),
+                                "landuse": ",".join(s.landuse or []),
                                 **s.properties}}
                 for s in self._scenes
             ],
@@ -251,7 +253,8 @@ class SceneCollection(_SequenceABC):
         return pd.DataFrame([
             {"id": s.id, "provider": s.provider, "date": s.date, "mode": s.mode,
              "orbit": s.orbit, "look": s.look,
-             "polarization": ",".join(s.pol or []), "formats": ",".join(s.formats),
+             "polarization": ",".join(s.pol or []),
+             "landuse": ",".join(s.landuse or []), "formats": ",".join(s.formats),
              "west": s.bbox[0], "south": s.bbox[1], "east": s.bbox[2], "north": s.bbox[3]}
             for s in self._scenes
         ])
@@ -425,6 +428,7 @@ class Catalog:
                orbit: str | None = None,
                look: str | None = None,
                polarization: str | Sequence[str] | None = None,
+               landuse: str | Sequence[str] | None = None,
                formats: str | Sequence[str] | None = None,
                family: str | None = None,
                limit: int | None = None) -> SceneCollection:
@@ -439,6 +443,9 @@ class Catalog:
         mode : sensor mode, e.g. 'spotlight' (case-insensitive).
         orbit : 'ascending' or 'descending'.
         look : 'left' or 'right'.
+        landuse : 'airport', or ['port', 'urban']. Matches a scene carrying any
+            of them. These describe what a map says is at the location, not
+            what the imagery shows.
         polarization : 'VV', or ['VV', 'HH']. Matches a scene publishing any of
             them, so a dual-pol scene is found by either of its channels.
             Case-insensitive.
@@ -461,9 +468,12 @@ class Catalog:
             formats = [formats]
         if isinstance(polarization, str):
             polarization = [polarization]
+        if isinstance(landuse, str):
+            landuse = [landuse]
         prov = {p.lower() for p in providers} if providers else None
         fmts = {f.upper() for f in formats} if formats else None
         pols = {p.upper() for p in polarization} if polarization else None
+        lus = {x.lower() for x in landuse} if landuse else None
         fam_order = FAMILIES.get(family.lower()) if family else None
         if family and fam_order is None:
             raise ValueError(f"Unknown family {family!r}; expected one of {list(FAMILIES)}")
@@ -485,6 +495,8 @@ class Catalog:
             if look and s.look != look:
                 continue
             if pols and not pols.intersection(s.pol or []):
+                continue
+            if lus and not lus.intersection(s.landuse or []):
                 continue
             if fmts and not fmts.intersection(s.formats):
                 continue

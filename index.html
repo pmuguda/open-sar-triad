@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         integrity="sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv"
         crossorigin="anonymous" />
-  <link rel="stylesheet" href="css/style.css?v=usage-5" />
+  <link rel="stylesheet" href="css/style.css?v=landuse-1" />
   <link rel="stylesheet" href="css/tour.css?v=tour-logo-1" />
 </head>
 <body>
@@ -92,6 +92,12 @@
                 <option value="">All modes</option>
               </select>
             </div>
+          </div>
+
+          <div class="field acq-card">
+            <div class="flabel compact"><span>Land use</span><span class="v" id="luVal">ALL</span></div>
+            <div class="lu-chips" id="luChips" role="group" aria-label="Filter by land use"></div>
+            <p class="lu-note">What the map says is at each location, not what the radar shows.</p>
           </div>
 
           <div class="field acq-card">
@@ -456,7 +462,7 @@
     <img id="lb-img" alt="SAR scene preview" /><!-- impeccable-disable broken-image -->
   </div>
 </div>
-<script src="js/app.js?v=pol-1"></script>
+<script src="js/app.js?v=landuse-1"></script>
 <script src="js/tour.js?v=tour-v12"></script>
 </body>
 </html>

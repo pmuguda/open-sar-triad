@@ -31,3 +31,6 @@ python/*.egg-info/
 
 # Written by notebooks/02_search_and_download.ipynb when it is run.
 notebooks/selection.geojson
+
+# Natural Earth layers, downloaded on demand by scripts/classify_scenes.py.
+data/.ne-cache/

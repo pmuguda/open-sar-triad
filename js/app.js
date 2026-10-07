@@ -268,6 +268,7 @@ function getFilters() {
     dateFrom, dateTo,
     mode:  document.getElementById('modeSel') ? document.getElementById('modeSel').value : '',
     pol:   document.getElementById('polSel')  ? document.getElementById('polSel').value  : '',
+    landuse: landuseFilter,
     bbox, countryGeometry,
     orbit: orbitFilter,
     look:  lookFilter,
@@ -286,6 +287,17 @@ function isRecentFeature(p, cutoff, trackingActive) {
   return trackingActive
     ? !!p.first_seen && p.first_seen >= cutoff
     : !!p.date && p.date >= cutoff;
+}
+
+// Land use is a list of tags describing what a map says is at the scene's
+// location. Selecting none means "no land-use filter"; selecting several is an
+// OR, because the tags are not exclusive — a harbour scene is port and urban
+// and water at once, and requiring all of them would match almost nothing.
+let landuseFilter = new Set();
+let LANDUSE_TAGS = [];
+
+function sceneLanduse(p) {
+  return Array.isArray(p.landuse) ? p.landuse : [];
 }
 
 // Polarization is stored as a display string, "VV" or "HH, HV". Split it so a
@@ -311,6 +323,8 @@ function getVisibleFeatures() {
     if (f.dateTo   && p.date && p.date > f.dateTo)   return false;
     if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return false;
     if (f.pol   && !scenePols(p).includes(f.pol)) return false;
+    if (f.landuse && f.landuse.size &&
+        !sceneLanduse(p).some(t => f.landuse.has(t))) return false;
     if (f.orbit && p.orbit_state !== f.orbit) return false;
     if (f.look  && p.look_dir   !== f.look)  return false;
     if (f.bbox) {
@@ -456,6 +470,7 @@ function render(options = {}) {
     updateModes(visible);
     renderSelection();
     updateTimelineHistogram();
+    updateLanduseCounts();
   }
   if (dataLoaded) history.replaceState(null, '', '#' + encodeState());
 }
@@ -1815,6 +1830,77 @@ document.getElementById('polSel').addEventListener('change', e => {
   render();
 });
 
+function populateLanduse(features, declared) {
+  const host = document.getElementById('luChips');
+  if (!host) return;
+  // Prefer the catalog's declared tag order so the legend reads the same way
+  // every week; fall back to whatever the data actually contains.
+  const present = new Set();
+  features.forEach(f => sceneLanduse(f.properties).forEach(t => present.add(t)));
+  LANDUSE_TAGS = (declared && declared.length)
+    ? declared.filter(t => present.has(t))
+    : [...present].sort();
+
+  host.innerHTML = '';
+  LANDUSE_TAGS.forEach(tag => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lu-chip';
+    b.dataset.lu = tag;
+    b.setAttribute('aria-pressed', 'false');
+    const label = document.createElement('span');
+    label.textContent = tag;
+    const n = document.createElement('span');
+    n.className = 'n';
+    b.append(label, n);
+    b.addEventListener('click', () => {
+      if (landuseFilter.has(tag)) landuseFilter.delete(tag);
+      else landuseFilter.add(tag);
+      syncLanduseChips();
+      render();
+    });
+    host.appendChild(b);
+  });
+  syncLanduseChips();
+}
+
+function syncLanduseChips() {
+  const val = document.getElementById('luVal');
+  if (val) {
+    val.textContent = landuseFilter.size === 0 ? 'ALL'
+      : landuseFilter.size === 1 ? [...landuseFilter][0].toUpperCase()
+      : landuseFilter.size + ' SELECTED';
+  }
+  document.querySelectorAll('.lu-chip').forEach(b => {
+    b.setAttribute('aria-pressed', String(landuseFilter.has(b.dataset.lu)));
+  });
+}
+
+// Counts are of what every *other* filter leaves behind, so a chip tells you
+// what selecting it would give you rather than what is already selected.
+function updateLanduseCounts() {
+  const chips = document.querySelectorAll('.lu-chip');
+  if (!chips.length) return;
+  const f = getFilters();
+  const counts = Object.create(null);
+  allFeatures.forEach(feat => {
+    const p = feat.properties;
+    if (!f[p.provider]) return;
+    if (f.dateFrom && p.date && p.date < f.dateFrom) return;
+    if (f.dateTo   && p.date && p.date > f.dateTo)   return;
+    if (f.mode  && p.sensor_mode && p.sensor_mode.toLowerCase() !== f.mode) return;
+    if (f.pol   && !scenePols(p).includes(f.pol)) return;
+    if (f.orbit && p.orbit_state !== f.orbit) return;
+    if (f.look  && p.look_dir   !== f.look)  return;
+    sceneLanduse(p).forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+  });
+  chips.forEach(b => {
+    const n = counts[b.dataset.lu] || 0;
+    b.querySelector('.n').textContent = n ? n.toLocaleString() : '0';
+    b.classList.toggle('is-empty', n === 0);
+  });
+}
+
 function populatePolarizations(features) {
   const pols = new Set();
   features.forEach(f => scenePols(f.properties).forEach(x => pols.add(x)));
@@ -1891,6 +1977,9 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   if (polSel) polSel.value = '';
   const polVal = document.getElementById('polVal');
   if (polVal) polVal.textContent = 'ALL';
+
+  landuseFilter.clear();
+  syncLanduseChips();
 
   orbitFilter = ''; lookFilter = '';
   document.querySelectorAll('.seg[data-group] button').forEach(btn => {
@@ -2562,6 +2651,7 @@ function encodeState() {
   const pol = polSel ? polSel.value : '';
   if (mode)        p.set('mode',  mode);
   if (pol)         p.set('pol',   pol);
+  if (landuseFilter.size) p.set('lu', [...landuseFilter].join(','));
   if (orbitFilter) p.set('orbit', orbitFilter);
   if (lookFilter)  p.set('look',  lookFilter);
   if (recentOnly)  p.set('recent', '1');
@@ -2608,6 +2698,17 @@ function restoreState() {
   const mode = p.get('mode');
   const modeSel = document.getElementById('modeSel');
   if (mode && modeSel) modeSel.value = mode;
+
+  const lu = p.get('lu');
+  if (lu) {
+    // Only restore tags the catalog still publishes, so a stale link naming a
+    // retired bucket does not silently filter everything away.
+    const known = new Set(LANDUSE_TAGS);
+    lu.split(',').map(t => t.trim().toLowerCase())
+      .filter(t => known.has(t))
+      .forEach(t => landuseFilter.add(t));
+    syncLanduseChips();
+  }
 
   const pol = p.get('pol');
   const polSel = document.getElementById('polSel');
@@ -2977,6 +3078,7 @@ fetch('data/scenes.geojson')
     buildFormatCache(allFeatures);
     populateModes(allFeatures);
     populatePolarizations(allFeatures);
+    populateLanduse(allFeatures, geojson.landuse_tags);
     restoreState();
     initTimeline(allFeatures);
     renderRecent();

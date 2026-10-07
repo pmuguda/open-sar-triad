@@ -131,7 +131,7 @@ def test_index_rows_align_with_declared_fields(built, catalog):
     idx = load(built / "index.json")
     assert idx["count"] == len(catalog["features"]) == len(idx["scenes"])
     assert idx["fields"] == ["id", "provider", "date", "mode", "orbit", "look",
-                             "pol", "formats", "bbox"]
+                             "pol", "landuse", "formats", "bbox"]
     for row in idx["scenes"]:
         assert len(row) == len(idx["fields"])
         rec = dict(zip(idx["fields"], row))

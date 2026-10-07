@@ -7,6 +7,33 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Added
+- **Land-use classification and filter.** Every scene now carries a `landuse`
+  list describing what a map says is at its location, and the console gains a
+  Land use card: a grid of toggle chips that doubles as the legend, each showing
+  its live count under the other active filters. Selecting several is an OR,
+  because the tags are not exclusive — a harbour scene is port and urban and
+  water at once. Carried in the shareable URL as `lu=`, cleared by Reset.
+
+  `scripts/classify_scenes.py` does the tagging by intersecting each footprint
+  against published vectors. Nothing looks at a pixel: a scene tagged `airport`
+  covers an airport, and whether anything is visible in the data is a separate
+  question this catalog has no opinion on. The UI says so too.
+
+  Natural Earth (public domain) gives airport, port, urban, mountain, plateau,
+  plain, desert, wetland, ice, water and offshore. OpenStreetMap enrichment,
+  off by default and ODbL, adds agriculture, forest, industrial and military —
+  the land use Natural Earth has no layer for at all. Overpass is rate-limited
+  and shared, so enrichment groups 14,920 scenes onto roughly 3,300 locations
+  before querying, and fails soft: an unreachable Overpass leaves the Natural
+  Earth tags untouched rather than failing the ingest.
+
+  Classification is incremental. Tags carry forward from the committed catalog
+  by scene id, so a weekly run classifies only genuinely new scenes: 9m16s for
+  the first full pass, 1.6s thereafter.
+
+  Exposed as a `landuse` field in the search index, `by_landuse` in
+  `stats.json`, `ost:landuse` on STAC Items, and `search(landuse=...)` plus
+  `Scene.landuse` in the Python client.
 - **Polarization filter**, in the map console, the Python client and the API.
   The console gains a Polarization select beside Mode, populated from the data,
   carried in the shareable URL as `pol=` and cleared by Reset. The client gains

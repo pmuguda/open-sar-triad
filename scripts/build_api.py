@@ -181,6 +181,8 @@ def to_stac_item(feat, provider):
     pols = split_pol(props.get("polarization"))
     if pols:
         stac_props["sar:polarizations"] = pols
+    if props.get("landuse"):
+        stac_props["ost:landuse"] = props["landuse"]
     stac_props["ost:formats"] = sorted(products_of(props), key=lambda f: FORMAT_ORDER.index(f) if f in FORMAT_ORDER else 99)
 
     return {
@@ -227,7 +229,7 @@ def main():
     # Rows are arrays, not objects, and `fields` names the positions. Repeating
     # every key 14,798 times would more than double the size; the client zips
     # them back into objects so callers still get named attributes.
-    fields = ["id", "provider", "date", "mode", "orbit", "look", "pol", "formats", "bbox"]
+    fields = ["id", "provider", "date", "mode", "orbit", "look", "pol", "landuse", "formats", "bbox"]
     rows = []
     for f in feats:
         p = f["properties"]
@@ -236,6 +238,7 @@ def main():
             (p.get("sensor_mode") or "").lower() or None,
             p.get("orbit_state"), p.get("look_dir"),
             split_pol(p.get("polarization")),
+            p.get("landuse") or [],
             sorted(products_of(p), key=lambda x: FORMAT_ORDER.index(x) if x in FORMAT_ORDER else 99),
             bbox_of(f["geometry"]),
         ])
@@ -249,6 +252,7 @@ def main():
     years = Counter(f["properties"]["date"][:4] for f in feats if f["properties"].get("date"))
     fmts  = Counter(k for f in feats for k in products_of(f["properties"]))
     pols  = Counter(p for f in feats for p in split_pol(f["properties"].get("polarization")))
+    lus   = Counter(t for f in feats for t in (f["properties"].get("landuse") or []))
     dates = sorted(f["properties"]["date"] for f in feats if f["properties"].get("date"))
     n_stats = write(OUT / "stats.json", {
         "api_version": "1", "generated": generated, "commit": commit,
@@ -258,6 +262,7 @@ def main():
         "by_year": dict(sorted(years.items())),
         "by_format": dict(fmts.most_common()),
         "by_polarization": dict(pols.most_common()),
+        "by_landuse": dict(lus.most_common()),
         "families": FAMILIES,
         "temporal_extent": [dates[0], dates[-1]] if dates else [None, None],
     })

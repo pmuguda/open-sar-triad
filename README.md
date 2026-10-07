@@ -664,6 +664,12 @@ Each returns a matplotlib `Axes` and accepts `ax=`, so they compose into your ow
 
 A SAR footprint is thinner than a pixel on a world view, so `plot_coverage` draws scenes either as geometry or as markers, never as a mix of the two in one plot. Markers merge per target and scale by how many scenes sit behind them; zoom in far enough that every scene is visible and the same call draws polygons at true scale.
 
+### Filtering by land use
+
+Every scene is tagged with what a map says is at its location — `airport`, `port`, `urban`, `mountain`, `desert`, `offshore` and more — and the console's **Land use** chips filter on them while showing live counts, so the control is also the legend. Tags are a list, since a footprint several kilometres across routinely spans a port, a city and water at once. In Python: `cat.search(landuse="port")`.
+
+These describe the **place, not the imagery**. Nothing in the pipeline looks at a pixel; the tags come from intersecting footprints against Natural Earth (public domain) and, where enrichment has run, OpenStreetMap (ODbL).
+
 ### Filtering by polarization
 
 Every scene carries its polarization, and all three surfaces filter on it: the **Polarization** select in the console, `cat.search(polarization="VV")` in the Python client, and the `pol` field in the search index. A dual-pol scene is matched by either of its channels rather than by an exact string, so `polarization="HH"` finds an `HH, HV` acquisition.

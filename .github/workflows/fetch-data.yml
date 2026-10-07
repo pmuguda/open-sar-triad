@@ -26,6 +26,14 @@ jobs:
         id: fetch
         run: python scripts/fetch_catalog.py
 
+      # Tags each scene with what a map says is at its location. Incremental:
+      # tags carry forward from the committed catalog, so only genuinely new
+      # scenes are classified and a weekly run is seconds rather than minutes.
+      # OSM enrichment is off here; see scripts/classify_scenes.py --osm.
+      - name: Classify scene locations
+        id: classify
+        run: python scripts/classify_scenes.py
+
       # Gate the commit. The catalog has just been rewritten but not committed,
       # so HEAD still holds the previous version and the validator can diff
       # against it. A failure here means nothing bad is ever committed or
