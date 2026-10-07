@@ -81,11 +81,21 @@ TERRAIN = {
     "Wetlands": "wetland", "Delta": "wetland",
 }
 
-#: Point layers have no extent, so a scene counts as covering one when the
-#: point falls within this many degrees of the footprint. Roughly 5 km, which
-#: is about the radius within which an airport's apron, runways and approach
-#: still read as "this scene is of the airport".
-POINT_REACH = 0.045
+#: Point layers have no extent, so a scene counts as covering one when the point
+#: falls within this far of the footprint. The figure is the feature's own
+#: half-extent, not a guess: a Natural Earth point sits at roughly the centre of
+#: the thing it marks, so a point this far outside a footprint means the feature
+#: itself still reaches it.
+#:
+#: Both were 5 km, which was too generous and made about a third of these tags
+#: near-misses rather than overlaps — a scene over central Venice came out
+#: `airport` because Marco Polo is 8 km away.
+#:
+#: A large airport is 3-5 km across, so 2 km from its centre is still apron or
+#: runway. A port is more compact, and its point marks the harbour rather than
+#: the whole estate, so 1 km.
+AIRPORT_REACH = 0.018   # ~2 km
+PORT_REACH = 0.009      # ~1 km
 
 #: Fractions of a footprint's area that must fall inside a polygon layer. A
 #: footprint clipping the edge of a lake is not a water scene; one that is
@@ -183,10 +193,9 @@ def classify_natural_earth(feats: list[dict], layers: dict) -> None:
         tags = set()
         # Point layers: reach out from the footprint rather than requiring the
         # point to land inside it, since an airport's extent is not a point.
-        near = g.buffer(POINT_REACH)
-        if any_hit(air_t, air_g, near):
+        if any_hit(air_t, air_g, g.buffer(AIRPORT_REACH)):
             tags.add("airport")
-        if any_hit(por_t, por_g, near):
+        if any_hit(por_t, por_g, g.buffer(PORT_REACH)):
             tags.add("port")
 
         if any_hit(urb_t, urb_g, g):

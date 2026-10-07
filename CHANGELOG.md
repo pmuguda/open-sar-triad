@@ -7,6 +7,15 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Fixed
+- **`airport` and `port` reached 5 km beyond the footprint**, which made about a
+  third of those tags near-misses rather than overlaps: a scene over central
+  Venice came out `airport` because Marco Polo is 8 km away, and Munich and
+  Paris centres the same. The reach is now per feature and derived from its own
+  half-extent, since a Natural Earth point sits at roughly the centre of what it
+  marks: 2 km for an airport, which is 3-5 km across, and 1 km for a port, whose
+  point marks the harbour. `airport` 1,815 -> 1,416 and `port` 2,331 -> 1,652.
+  Heathrow, Schiphol, Rotterdam, Hamburg and Singapore still resolve.
+
 - **Most land-use terrain tags were meaningless, and are rebuilt.** They came
   from Natural Earth's *named region* polygons, which are continental: 94% of
   `plain` tags came from polygons over 100,000 km2, including the 2-million-km2

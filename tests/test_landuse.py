@@ -71,6 +71,40 @@ def test_known_places_get_the_right_tag(layers, place, lon, lat, expect):
 
 
 @needs_layers
+@pytest.mark.parametrize("place, lon, lat, absent", [
+    # Marco Polo is 8 km from the centre of Venice; at the old 5 km reach this
+    # footprint came out `airport`.
+    ("Venice centre", 12.335, 45.435, "airport"),
+    ("Munich centre", 11.575, 48.137, "airport"),
+    ("Paris centre", 2.35, 48.86, "airport"),
+])
+def test_a_city_near_an_airport_is_not_an_airport(layers, place, lon, lat, absent):
+    """The reach is the feature's half-extent, not a catchment area."""
+    assert absent not in tags_at(layers, lon, lat), place
+
+
+@needs_layers
+@pytest.mark.parametrize("place, lon, lat", [
+    ("Heathrow", -0.454, 51.470),
+    ("Schiphol", 4.764, 52.309),
+])
+def test_an_airport_is_still_found_after_tightening(layers, place, lon, lat):
+    assert "airport" in tags_at(layers, lon, lat), place
+
+
+def test_the_reaches_are_per_feature_and_physically_justified():
+    """One shared 5 km reach made about a third of these tags near-misses.
+
+    A large airport is 3-5 km across so 2 km from its point is still the field;
+    a port's point marks the harbour, which is more compact.
+    """
+    assert cs.AIRPORT_REACH > cs.PORT_REACH
+    assert cs.AIRPORT_REACH * 111 < 3.0, "an airport is not 3 km of slack"
+    assert cs.PORT_REACH * 111 < 2.0
+    assert not hasattr(cs, "POINT_REACH"), "the shared reach should be gone"
+
+
+@needs_layers
 def test_the_open_ocean_is_not_an_airport(layers):
     t = tags_at(layers, -150.0, 10.0)
     assert t == {"offshore"}, t
