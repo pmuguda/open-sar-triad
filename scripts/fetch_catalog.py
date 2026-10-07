@@ -56,11 +56,22 @@ def parse_polarizations(value):
     return out
 
 
-try:
-    import pyarrow.parquet as pq
-except ImportError:
-    print("ERROR: pyarrow is required. Install with: pip install pyarrow", file=sys.stderr)
-    sys.exit(1)
+# Deliberately not imported at module scope. This used to be a bare
+# `import pyarrow ... except ImportError: sys.exit(1)` out here, which made the
+# module impossible to import without the full pipeline dependencies installed:
+# anything that just wanted a helper from this file — a test, another script —
+# killed the interpreter instead. Under pytest that surfaced as a collection
+# INTERNALERROR that took the entire suite down with it, not just the one file.
+# The check belongs where the dependency is actually used.
+def _parquet():
+    """pyarrow.parquet, or a clear error at the point it is needed."""
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        print("ERROR: pyarrow is required. Install with: pip install pyarrow",
+              file=sys.stderr)
+        raise SystemExit(1)
+    return pq
 
 try:
     from shapely import wkb as shapely_wkb
@@ -130,7 +141,7 @@ def read_parquet(url):
     """Download a parquet file and return a pandas DataFrame."""
     try:
         data = fetch_bytes(url)
-        tbl  = pq.read_table(io.BytesIO(data))
+        tbl  = _parquet().read_table(io.BytesIO(data))
         return tbl.to_pandas()
     except Exception as e:
         print(f"  [WARN] Could not read {url.split('/')[-1]}: {e}", file=sys.stderr)

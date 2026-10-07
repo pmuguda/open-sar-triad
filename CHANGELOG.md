@@ -6,6 +6,25 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+- **The Tests workflow had been failing on every push for two commits, with
+  every test reported as failing when only one import was at fault.**
+  `scripts/fetch_catalog.py` ran `sys.exit(1)` at module scope when pyarrow was
+  missing. The CI test job installs only the dev requirements, so when
+  `tests/test_polarization.py` imported that module for a helper, collection
+  raised SystemExit — which pytest turns into an INTERNALERROR that aborts the
+  whole run rather than failing one file. The check now lives where pyarrow is
+  actually used, so the module is importable without the pipeline installed.
+
+  `tests/test_scripts_importable.py` pins the property rather than the symptom:
+  every script in `scripts/` is imported in a subprocess with pyarrow, shapely
+  and matplotlib blocked, and must not exit.
+
+  Two further gaps this exposed: `shapely` was absent from the dev requirements,
+  so the land-use tests that check real places skipped in CI and the coverage
+  was imaginary; and the Natural Earth layers those tests need are now cached
+  and warmed in the workflow, best-effort, so they run instead of skipping.
+
 ### Added
 - **Land-use classification and filter.** Every scene now carries a `landuse`
   list describing what a map says is at its location, and the console gains a

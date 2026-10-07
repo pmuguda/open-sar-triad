@@ -32,6 +32,28 @@ jobs:
           pip install -r requirements-dev.txt
           pip install -e python
 
+      # The land-use tests that check real places — Heathrow is an airport,
+      # Tokyo is not offshore — skip themselves when these layers are absent.
+      # Without this they would skip in CI and the coverage would be imaginary.
+      # The download is best-effort: if it fails the tests skip as before
+      # rather than turning a Natural Earth outage into a red build.
+      - name: Cache Natural Earth layers
+        uses: actions/cache@v4
+        with:
+          path: data/.ne-cache
+          key: ne-layers-${{ hashFiles('scripts/classify_scenes.py') }}
+
+      - name: Warm the Natural Earth cache
+        continue-on-error: true
+        run: |
+          python -c "
+          import importlib.util, pathlib
+          spec = importlib.util.spec_from_file_location('cs', 'scripts/classify_scenes.py')
+          cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
+          cs.fetch_layers(pathlib.Path('data/.ne-cache'))
+          print('layers ready')
+          "
+
       - name: Run tests
         run: pytest tests/ -q
 

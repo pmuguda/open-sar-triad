@@ -6,3 +6,7 @@
 pytest>=7.4
 pandas>=2.0
 matplotlib>=3.7
+# The classifier and the catalog fetch both parse geometry, and their tests are
+# the ones that check real places rather than fixtures. Without shapely here
+# those tests skip in CI and the coverage is imaginary.
+shapely>=2.0
