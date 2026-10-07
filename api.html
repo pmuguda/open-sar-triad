@@ -273,8 +273,12 @@ s.resolve("visual")     # CSI | VID</pre>
         <div class="ep"><code>agriculture forest</code>
           <span class="d">Vegetated land use.
             <em>From OpenStreetMap, so present only where that enrichment has run.</em></span></div>
-        <div class="ep"><code>mountain plateau plain desert wetland ice</code>
-          <span class="d">Terrain.</span></div>
+        <div class="ep"><code>mountain hilly</code>
+          <span class="d">Measured terrain relief in a ~10 km window: 500 m and 200 m.
+            <em>From AWS Terrain Tiles, public domain. Not from being inside a named
+            mountain range — the Andes polygon covers Santiago, which is flat ground.</em></span></div>
+        <div class="ep"><code>desert wetland ice</code>
+          <span class="d">Land cover.</span></div>
         <div class="ep"><code>water offshore</code>
           <span class="d">Inland water covering a third of the footprint, or sea covering
             most of it.</span></div>
@@ -292,8 +296,8 @@ cat.search(landuse="port", providers="umbra", start="2026-01-01")</pre>
       </p>
       <div class="note">
         <p>
-          Terrain and infrastructure tags come from <strong>Natural Earth</strong>
-          (public domain). <code>agriculture</code>, <code>forest</code>,
+          Infrastructure and land-cover tags come from <strong>Natural Earth</strong>
+          and terrain from <strong>AWS Terrain Tiles</strong>, both public domain. <code>agriculture</code>, <code>forest</code>,
           <code>industrial</code> and <code>military</code> come from
           <strong>OpenStreetMap</strong>, which is ODbL.
         </p>

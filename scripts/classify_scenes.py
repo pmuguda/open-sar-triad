@@ -57,22 +57,28 @@ NE_BASE = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector"
 #: infrastructure first, because that is what people search for, then terrain,
 #: then water.
 TAGS = ["airport", "port", "industrial", "military", "urban", "agriculture",
-        "forest", "mountain", "plateau", "plain", "desert", "wetland", "ice",
+        "forest", "mountain", "hilly", "desert", "wetland", "ice",
         "water", "offshore"]
 
 #: Natural Earth's region polygons are *named* features — "the Alps", "the
-#: Sahara" — so some of its classes describe where you are rather than what is
-#: there. Being inside the Continent polygon for Africa says nothing, and
-#: Island/Coast/Peninsula are shape, not land use. Only the classes that answer
-#: "what is this ground" are mapped; the rest are deliberately dropped.
+#: Sahara" — and most of them are continental. The first version of this mapped
+#: nine of their classes to land-use tags, which produced nonsense at scale: 94%
+#: of `plain` tags came from polygons over 100,000 km2 such as the 2-million-km2
+#: Northern European Plain, so every scene over Berlin, Warsaw and Amsterdam was
+#: labelled "plain". `plateau` was 99% Brazilian Highlands and Tibet. A 100 km2
+#: footprint inside a polygon that size learns nothing from it.
+#:
+#: What survives is the classes whose polygon is uniform in the thing it names.
+#: The Sahara really is desert throughout, so being inside it is informative;
+#: the Amazon Basin is not uniformly anything a SAR user would filter on.
+#: Range/mtn is gone too, replaced by measured relief: the Andes polygon covers
+#: Santiago and the coastal valleys, which are not mountainous ground.
+#:
+#: `Tundra` used to map to `wetland`, which put that tag on the Canadian Shield.
+#: That was simply wrong and is removed rather than remapped.
 TERRAIN = {
-    "Range/mtn": "mountain", "Foothills": "mountain", "Gorge": "mountain",
-    "Plateau": "plateau",
-    "Plain": "plain", "Lowland": "plain", "Basin": "plain",
-    "Valley": "plain", "Depression": "plain",
     "Desert": "desert",
     "Wetlands": "wetland", "Delta": "wetland",
-    "Tundra": "wetland",
 }
 
 #: Point layers have no extent, so a scene counts as covering one when the
@@ -200,6 +206,139 @@ def classify_natural_earth(feats: list[dict], layers: dict) -> None:
             tags.add("offshore")
 
         f.setdefault("properties", {})["landuse"] = [t for t in TAGS if t in tags]
+
+
+# --------------------------------------------------------------------------- #
+# Terrain, from measured elevation
+# --------------------------------------------------------------------------- #
+#: AWS Terrain Tiles, a public-domain global elevation mosaic. Terrarium
+#: encoding packs metres into RGB: (R * 256 + G + B / 256) - 32768.
+TERRAIN_TILES = "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png"
+DEM_ZOOM = 9          # ~300 m per pixel at the equator; a footprint spans ~36 px
+DEM_CACHE = ROOT / "data" / ".dem-cache"
+DEM_STEP = 4          # subsample the 256 px tile to a 64 x 64 grid
+
+#: Half-width of the window the relief is measured over, in grid cells, which at
+#: this zoom and step is roughly 10 km either side of the footprint. Measuring
+#: across the whole tile instead spans ~78 km and picks up regional variation
+#: that has nothing to do with the scene: it called the Amazon Basin and the
+#: flat Sahara "hilly" purely from distant terrain inside the same tile.
+RELIEF_WINDOW = 8
+
+#: Local relief — the elevation range in a window around the footprint — rather
+#: than absolute height, because a high plateau is not mountainous ground and a
+#: sea-level fjord wall is. Thresholds are deliberately conservative: 500 m of
+#: relief within ~10 km is unambiguous mountain terrain, and 200 m is hilly.
+#: Being inside a named mountain range is not evidence of either, which is what
+#: the previous version got wrong.
+RELIEF_MOUNTAIN_M = 500.0
+RELIEF_HILLY_M = 200.0
+
+
+def _tile_xy(lon: float, lat: float, z: int) -> tuple:
+    import math
+    n = 2 ** z
+    lat = max(min(lat, 85.05), -85.05)
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1.0 - math.log(math.tan(math.radians(lat))
+                            + 1.0 / math.cos(math.radians(lat))) / math.pi) / 2.0 * n)
+    return max(0, min(n - 1, x)), max(0, min(n - 1, y))
+
+
+def _tile_elevations(z: int, x: int, y: int, cache: Path, timeout: int = 60):
+    """Decoded elevation grid for one tile, or None if it cannot be fetched."""
+    from PIL import Image
+    cache.mkdir(parents=True, exist_ok=True)
+    path = cache / f"{z}_{x}_{y}.png"
+    if not path.exists():
+        url = TERRAIN_TILES.format(z=z, x=x, y=y)
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "open-sar-triad-classifier"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                path.write_bytes(resp.read())
+        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+            return None
+    try:
+        im = Image.open(path).convert("RGB")
+    except Exception:
+        return None
+    px = im.load()
+    w, h = im.size
+    return [[px[i, j][0] * 256 + px[i, j][1] + px[i, j][2] / 256.0 - 32768.0
+             for i in range(0, w, DEM_STEP)] for j in range(0, h, DEM_STEP)]
+
+
+def _pixel_in_tile(lon: float, lat: float, z: int) -> tuple:
+    """Grid coordinates of a point inside its own tile."""
+    import math
+    n = 2 ** z
+    lat = max(min(lat, 85.05), -85.05)
+    fx = (lon + 180.0) / 360.0 * n
+    fy = (1.0 - math.log(math.tan(math.radians(lat))
+                         + 1.0 / math.cos(math.radians(lat))) / math.pi) / 2.0 * n
+    size = 256 // DEM_STEP
+    return (int((fx - int(fx)) * size), int((fy - int(fy)) * size))
+
+
+def window_relief(grid, gx: int, gy: int, half: int = RELIEF_WINDOW):
+    """Elevation range in a window around one point, or None if it has no data."""
+    rows = grid[max(0, gy - half):gy + half + 1]
+    vals = [v for r in rows for v in r[max(0, gx - half):gx + half + 1]
+            if v > -10000]
+    return (max(vals) - min(vals)) if vals else None
+
+
+def classify_relief(feats: list[dict], cache: Path = DEM_CACHE, log=print) -> dict:
+    """Add `mountain` or `hilly` from measured local relief.
+
+    Scenes are grouped by elevation tile first: 14,920 footprints fall in about
+    1,700 tiles, so fetching per scene would be nine times the traffic for the
+    same answer.
+
+    Fails soft. A tile that will not download leaves the scene's other tags
+    alone rather than failing the run, and the return value says how many.
+    """
+    from shapely.geometry import shape
+
+    groups: dict = {}
+    for f in feats:
+        try:
+            c = shape(f["geometry"]).centroid
+        except Exception:
+            continue
+        groups.setdefault(_tile_xy(c.x, c.y, DEM_ZOOM), []).append(f)
+
+    stats = {"tiles": len(groups), "fetched": 0, "missing": 0,
+             "mountain": 0, "hilly": 0}
+    log(f"  {len(feats):,} scenes in {len(groups):,} elevation tiles")
+
+    for n, ((tx, ty), members) in enumerate(sorted(groups.items()), 1):
+        grid = _tile_elevations(DEM_ZOOM, tx, ty, cache)
+        if grid is None:
+            stats["missing"] += 1
+            continue
+        stats["fetched"] += 1
+        for f in members:
+            try:
+                c = shape(f["geometry"]).centroid
+            except Exception:
+                continue
+            gx, gy = _pixel_in_tile(c.x, c.y, DEM_ZOOM)
+            relief = window_relief(grid, gx, gy)
+            if relief is None:
+                continue
+            tag = ("mountain" if relief >= RELIEF_MOUNTAIN_M
+                   else "hilly" if relief >= RELIEF_HILLY_M else None)
+            if not tag:
+                continue
+            p = f.setdefault("properties", {})
+            merged = set(p.get("landuse") or []) | {tag}
+            p["landuse"] = [t for t in TAGS if t in merged]
+            stats[tag] += 1
+        if n % 300 == 0:
+            log(f"  {n:,}/{len(groups):,} tiles")
+    return stats
 
 
 # --------------------------------------------------------------------------- #
@@ -351,7 +490,10 @@ def summarise(feats: list[dict]) -> Counter:
         if not tags:
             c["(untagged)"] += 1
         for t in tags:
-            c[t] += 1
+            # Count anything outside the declared vocabulary under its own key
+            # rather than dropping it. Reporting only known tags hid a run that
+            # had rewritten the file with retired ones still in it.
+            c[t if t in TAGS else f"(undeclared: {t})"] += 1
     return c
 
 
@@ -382,7 +524,14 @@ def main() -> int:
     feats = doc.get("features") or []
     print(f"Classifying {len(feats):,} scenes")
 
-    if not args.all:
+    if args.all:
+        # Skipping carry-forward is not enough: the tags are already in the file
+        # the fetch wrote, so without clearing them nothing is reclassified and
+        # the run silently rewrites the old answers. That is how a vocabulary
+        # change could ship as stale data under a new declared tag list.
+        for f in feats:
+            (f.get("properties") or {}).pop("landuse", None)
+    else:
         carry_forward(feats, args.catalog)
     todo = sum(1 for f in feats if "landuse" not in (f.get("properties") or {}))
     print(f"  {todo:,} scene(s) need classifying")
@@ -390,6 +539,11 @@ def main() -> int:
     if todo:
         layers = fetch_layers(args.cache)
         classify_natural_earth(feats, layers)
+    if todo:
+        print("Terrain from measured elevation:")
+        rstats = classify_relief(feats)
+        print(f"  tiles {rstats['fetched']:,} fetched, {rstats['missing']:,} missing; "
+              f"mountain {rstats['mountain']:,}, hilly {rstats['hilly']:,}")
     ne_counts = summarise(feats)
 
     if args.osm:
@@ -400,9 +554,15 @@ def main() -> int:
 
     counts = summarise(feats)
     print("\nTags:")
-    for tag in TAGS + ["(untagged)"]:
+    # Undeclared keys last, and never filtered out: printing only the known
+    # vocabulary is what let a file full of retired tags look clean.
+    extra = sorted(k for k in counts if k.startswith("(undeclared:"))
+    for tag in TAGS + ["(untagged)"] + extra:
         if counts.get(tag):
-            print(f"  {tag:12} {counts[tag]:6,}  ({counts[tag]/len(feats):5.1%})")
+            print(f"  {tag:22} {counts[tag]:6,}  ({counts[tag]/len(feats):5.1%})")
+    if extra:
+        print("  ^ tags in the data that this script no longer declares; "
+              "re-run with --all")
     if args.osm:
         gained = sum(counts[t] - ne_counts.get(t, 0)
                      for t in ("agriculture", "forest", "industrial", "military"))

@@ -62,7 +62,6 @@ def tags_at(layers, lon, lat, half=0.05):
     ("Heathrow",            -0.454, 51.470, "airport"),
     ("Rotterdam",            4.10,  51.95,  "port"),
     ("central London",      -0.12,  51.51,  "urban"),
-    ("Swiss Alps",           7.95,  46.55,  "mountain"),
     ("Sahara",              15.0,   25.0,   "desert"),
     ("Greenland ice sheet", -42.0,  72.0,   "ice"),
     ("mid-Pacific",       -150.0,   10.0,   "offshore"),
@@ -132,6 +131,32 @@ def test_geographic_descriptors_are_not_land_use():
     for junk in ("Continent", "Island", "Island group", "Coast",
                  "Pen/cape", "Geoarea", "Isthmus"):
         assert junk not in cs.TERRAIN, junk
+
+
+def test_continental_region_classes_are_not_mapped():
+    """These shipped once and were the bulk of the misclassification.
+
+    94% of `plain` came from polygons over 100,000 km2 — the 2-million-km2
+    Northern European Plain put that tag on Berlin, Warsaw and Amsterdam.
+    `plateau` was 99% Brazilian Highlands and Tibet. `Range/mtn` covered
+    Santiago via the Andes, and is replaced by measured relief.
+    """
+    for cls in ("Plain", "Lowland", "Basin", "Valley", "Depression",
+                "Plateau", "Range/mtn", "Foothills", "Gorge"):
+        assert cls not in cs.TERRAIN, f"{cls} is a region name, not land use"
+    for tag in ("plain", "plateau"):
+        assert tag not in cs.TAGS, f"{tag} should be retired"
+
+
+def test_tundra_is_not_wetland():
+    """That mapping put `wetland` on the Canadian Shield."""
+    assert cs.TERRAIN.get("Tundra") != "wetland"
+
+
+def test_the_sahara_class_is_kept_because_it_is_uniform():
+    """Unlike the others, a Desert polygon really is desert throughout, so
+    being inside it is informative even though it is large."""
+    assert cs.TERRAIN.get("Desert") == "desert"
 
 
 def test_every_mapped_terrain_class_is_a_declared_tag():
@@ -220,9 +245,9 @@ def test_osm_merges_rather_than_replaces(monkeypatch):
     monkeypatch.setattr(cs.urllib.request, "urlopen", lambda *a, **k: Resp())
     monkeypatch.setattr(cs.time, "sleep", lambda s: None)
     f = box(10.0, 50.0)
-    f["properties"]["landuse"] = ["plain"]
+    f["properties"]["landuse"] = ["urban"]
     cs.osm_enrich([f], log=lambda *a: None)
-    assert set(f["properties"]["landuse"]) == {"plain", "agriculture"}
+    assert set(f["properties"]["landuse"]) == {"urban", "agriculture"}
 
 
 def test_osm_groups_scenes_by_location(monkeypatch):
@@ -297,3 +322,96 @@ def test_reset_clears_the_land_use_filter():
 def test_the_ui_says_these_describe_the_place_not_the_imagery():
     """The distinction matters: nothing here looks at a pixel."""
     assert "not what the radar shows" in INDEX
+
+
+# --------------------------------------------------------------------------- #
+# Terrain from measured elevation
+#
+# The region polygons were replaced by relief because "inside the Andes" was
+# tagging Santiago, which sits on a flat basin floor. These check the measurement
+# rather than the membership.
+# --------------------------------------------------------------------------- #
+DEM = ROOT / "data" / ".dem-cache"
+have_dem = DEM.exists() and any(DEM.glob("*.png"))
+needs_dem = pytest.mark.skipif(not have_dem, reason="elevation tiles not cached")
+
+
+def relief_at(lon, lat):
+    tx, ty = cs._tile_xy(lon, lat, cs.DEM_ZOOM)
+    grid = cs._tile_elevations(cs.DEM_ZOOM, tx, ty, DEM)
+    if grid is None:
+        pytest.skip("elevation tile unavailable")
+    gx, gy = cs._pixel_in_tile(lon, lat, cs.DEM_ZOOM)
+    return cs.window_relief(grid, gx, gy)
+
+
+@needs_dem
+@pytest.mark.parametrize("place, lon, lat", [
+    ("Swiss Alps", 7.95, 46.55),
+    ("Nepal Himalaya", 86.9, 27.9),
+    ("Norway fjords", 7.0, 61.0),
+])
+def test_real_mountains_clear_the_threshold(place, lon, lat):
+    assert relief_at(lon, lat) >= cs.RELIEF_MOUNTAIN_M, place
+
+
+@needs_dem
+@pytest.mark.parametrize("place, lon, lat", [
+    ("Netherlands", 5.0, 52.2),
+    ("Berlin", 13.4, 52.5),
+    ("Rotterdam", 4.10, 51.95),
+    ("Amazon Basin", -60.0, -3.0),
+    ("flat Sahara", 15.0, 25.0),
+])
+def test_flat_ground_is_neither_mountain_nor_hilly(place, lon, lat):
+    assert relief_at(lon, lat) < cs.RELIEF_HILLY_M, place
+
+
+@needs_dem
+def test_relief_is_measured_locally_not_across_the_tile():
+    """The Po Valley reads 1011 m across its tile, because the Alps are in
+    frame, and 12 m around the footprint. Measuring the tile is what called the
+    Amazon Basin hilly."""
+    lon, lat = 10.5, 45.1
+    tx, ty = cs._tile_xy(lon, lat, cs.DEM_ZOOM)
+    grid = cs._tile_elevations(cs.DEM_ZOOM, tx, ty, DEM)
+    if grid is None:
+        pytest.skip("elevation tile unavailable")
+    whole = [v for row in grid for v in row if v > -10000]
+    assert (max(whole) - min(whole)) > 500, "the tile really does span mountains"
+    assert relief_at(lon, lat) < cs.RELIEF_HILLY_M, "the valley floor is flat"
+
+
+def test_an_unreachable_tile_leaves_other_tags_alone(tmp_path, monkeypatch):
+    """Terrain is an enrichment; it must not cost a scene its other tags.
+
+    An empty cache directory does not simulate this — the fetcher just
+    downloads into it — so the network itself has to fail.
+    """
+    import urllib.error
+
+    def refuse(*a, **k):
+        raise urllib.error.URLError("blocked")
+
+    monkeypatch.setattr(cs.urllib.request, "urlopen", refuse)
+    f = box(7.95, 46.55)
+    f["properties"]["landuse"] = ["urban"]
+    stats = cs.classify_relief([f], cache=tmp_path / "dem", log=lambda *a: None)
+    assert stats["missing"] == 1 and stats["mountain"] == 0
+    assert f["properties"]["landuse"] == ["urban"]
+
+
+def test_reclassifying_everything_clears_the_old_tags_first():
+    """`--all` skipping carry-forward was not enough: the tags are already in
+    the file the fetch wrote, so the run silently rewrote the old answers."""
+    src = (ROOT / "scripts" / "classify_scenes.py").read_text()
+    main = src[src.index("if args.all:"):src.index("todo = sum(")]
+    assert 'pop("landuse"' in main, "--all must clear existing tags"
+
+
+def test_the_summary_reports_tags_it_no_longer_declares():
+    """Printing only the known vocabulary hid a file holding 4,513 retired
+    `plain` values."""
+    feats = [{"properties": {"landuse": ["urban", "plain"]}}]
+    c = cs.summarise(feats)
+    assert any(k.startswith("(undeclared:") and "plain" in k for k in c), dict(c)

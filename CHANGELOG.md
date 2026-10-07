@@ -6,6 +6,37 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+- **Most land-use terrain tags were meaningless, and are rebuilt.** They came
+  from Natural Earth's *named region* polygons, which are continental: 94% of
+  `plain` tags came from polygons over 100,000 km2, including the 2-million-km2
+  Northern European Plain, so every scene over Berlin, Warsaw and Amsterdam was
+  labelled "plain". `plateau` was 99% Brazilian Highlands and Tibet, and 89% of
+  `wetland` came from a `Tundra` mapping that put it on the Canadian Shield.
+  About 9,800 tag applications, the large majority of them junk.
+
+  `plain` and `plateau` are retired: they name regions, not land use. The
+  `Tundra` mapping is removed rather than remapped. `desert` is kept, because
+  unlike the others a Desert polygon is uniform in the thing it names.
+
+  `mountain` is now **measured**, from AWS Terrain Tiles (public domain): local
+  relief in a roughly 10 km window around each footprint, at 500 m, with a new
+  `hilly` bucket at 200 m. Measuring across the whole tile instead spans ~78 km
+  and picked up terrain with nothing to do with the scene — it called the Amazon
+  Basin and the flat Sahara hilly. The Po Valley reads 1011 m across its tile
+  and 12 m around the footprint.
+
+  Verified against ground rather than fixtures: 1,723 tiles fetched with none
+  missing, no scene over Rotterdam, Berlin, Houston, Buenos Aires or Dhaka is
+  tagged mountain or hilly, and sampled mountain scenes are Hong Kong, Yosemite,
+  the Swiss Alps, Cali, Hawaii and Jamaica's Blue Mountains at 610-1944 m relief.
+
+- Two bugs in the classifier found while fixing the above. `--all` skipped
+  carry-forward but never cleared existing tags, so it silently rewrote the old
+  answers; and the summary printed only tags it still declared, hiding a file
+  that held 4,513 retired `plain` values. It now names undeclared tags and says
+  to re-run.
+
 ### Added
 - **The test workflow reports its own health**, under a third `tests-health`
   label, closing the last gap: the ingest and the deploy both told you when they

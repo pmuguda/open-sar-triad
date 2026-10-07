@@ -34,3 +34,6 @@ notebooks/selection.geojson
 
 # Natural Earth layers, downloaded on demand by scripts/classify_scenes.py.
 data/.ne-cache/
+
+# Elevation tiles, downloaded on demand by scripts/classify_scenes.py.
+data/.dem-cache/
