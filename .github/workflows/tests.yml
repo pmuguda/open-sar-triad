@@ -112,3 +112,53 @@ jobs:
           assert idx['count'] == st['total'] > 0
           print(f\"api built from real catalog: {st['total']} scenes, {len(files)} files\")
           "
+
+  # One report for the whole workflow, not one per matrix leg: three jobs each
+  # opening and updating the same issue would fight each other.
+  #
+  # Pull requests are excluded deliberately. A contributor's failing PR is not a
+  # problem with main, and a fork's token has no issues:write anyway, so firing
+  # here would be noise at best and a confusing failure at worst.
+  report:
+    needs: [test, build-api]
+    if: ${{ always() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Report test health
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build-api.result }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+
+          jobs = {"the test matrix (3.9, 3.11, 3.12)": os.environ["TEST_RESULT"],
+                  "the API build from the real catalog": os.environ["BUILD_RESULT"]}
+          # "skipped" is not a failure; "cancelled" is not worth waking anyone.
+          bad = {n: r for n, r in jobs.items() if r not in ("success", "skipped", "cancelled")}
+
+          report = {
+              "ok": not bad,
+              "errors": [f"{n} {r}" for n, r in sorted(bad.items())],
+              "warnings": [],
+              "subject": "Test suite",
+              "on_error_note": ("`main` does not pass its own tests. Whatever is "
+                                "on the branch now is not known-good, and the "
+                                "next ingest or deploy will build on it anyway."),
+          }
+          pathlib.Path("/tmp/tests-health.json").write_text(json.dumps(report))
+          print("ok" if report["ok"] else "failing: " + "; ".join(report["errors"]))
+          PY
+          python scripts/report_health.py \
+            --report /tmp/tests-health.json --label tests-health

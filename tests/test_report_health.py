@@ -285,3 +285,38 @@ def test_the_error_note_comes_from_the_report():
     body = gh.created[0]["body"]
     assert "previous build" in body
     assert "was not committed" not in body
+
+
+# --------------------------------------------------------------------------- #
+# Three concerns now: the ingest, the deploy and the test suite
+# --------------------------------------------------------------------------- #
+def test_the_test_suite_has_its_own_topic():
+    assert "tests-health" in rh.TOPICS
+    assert len({v for v in rh.TOPICS.values()}) == len(rh.TOPICS), \
+        "each topic needs its own colour and description"
+
+
+def test_the_footer_does_not_promise_an_ingest():
+    """One reporter serves three concerns. Telling someone watching a red test
+    run to wait for a healthy ingest would be nonsense."""
+    gh = FakeGitHub()
+    rh.run(report(errors=["boom"], subject="Test suite"), gh)
+    body = gh.created[0]["body"]
+    assert "healthy run" in body
+    assert "healthy ingest" not in body
+
+
+def test_the_fingerprint_marker_is_not_tied_to_one_topic():
+    gh = FakeGitHub()
+    rh.run(report(errors=["boom"], subject="Test suite"), gh)
+    assert "catalog-health-fingerprint" not in gh.created[0]["body"]
+    assert "ost-health-fingerprint" in gh.created[0]["body"]
+
+
+def test_a_red_test_run_opens_an_issue_naming_the_suite():
+    gh = FakeGitHub(existing=None)
+    rh.run(report(errors=["the test matrix (3.9, 3.11, 3.12) failure"],
+                  subject="Test suite",
+                  on_error_note="`main` does not pass its own tests."), gh)
+    assert gh.created[0]["title"].startswith("Test suite failing")
+    assert "does not pass its own tests" in gh.created[0]["body"]

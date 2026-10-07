@@ -56,12 +56,13 @@ API = "https://api.github.com"
 TOPICS = {
     "catalog-health": ("d93f0b", "Automated: the weekly catalog ingest needs attention"),
     "site-health": ("b60205", "Automated: the deployed site does not match the repository"),
+    "tests-health": ("5319e7", "Automated: main does not pass its own tests"),
 }
 DEFAULT_LABEL = "catalog-health"
 
 #: Embedded in the issue body so a later run can tell whether the problems are
 #: the same ones, without re-parsing prose.
-FINGERPRINT = "<!-- catalog-health-fingerprint: {} -->"
+FINGERPRINT = "<!-- ost-health-fingerprint: {} -->"
 
 
 class GitHub:
@@ -188,7 +189,8 @@ def build_body(report: dict, items: list[str]) -> str:
     lines += ["",
               "_This issue is opened and closed automatically by "
               "`scripts/report_health.py`. It will close itself on the next "
-              "healthy ingest._",
+              "healthy run._",   # not "ingest": one reporter serves the
+                                 # ingest, the deploy and the test suite
               "", FINGERPRINT.format(fingerprint(items))]
     return "\n".join(lines)
 

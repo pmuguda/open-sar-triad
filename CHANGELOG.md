@@ -6,6 +6,23 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **The test workflow reports its own health**, under a third `tests-health`
+  label, closing the last gap: the ingest and the deploy both told you when they
+  broke, but `tests.yml` went red for two days and only a human noticed. A single
+  `report` job waits on every other job in the workflow, so three matrix legs do
+  not fight over one issue, and it is excluded on pull requests — a contributor's
+  failing PR is not a problem with `main`, and a fork's token has no
+  `issues: write` anyway.
+
+  `tests/test_workflows.py` guards the wiring across all three workflows: a
+  reporter that is deleted, pointed at the wrong label, stops running on failure,
+  or stops waiting on a job now fails the build.
+
+  Two wording bugs the dry run caught before they shipped: the issue footer
+  promised to close "on the next healthy ingest" regardless of topic, and the
+  fingerprint marker was hardcoded to `catalog-health`. Both are topic-neutral.
+
 ### Fixed
 - **The Tests workflow had been failing on every push for two commits, with
   every test reported as failing when only one import was at fault.**
