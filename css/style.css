@@ -26,6 +26,15 @@
   --rail: 368px;
   --chrome: 1;
   --amber: oklch(0.75 0.16 70);
+  /* Map-overlay button cluster, laid out from the right edge. These live here
+     rather than on .helpbtn because the map legend has to reserve room for the
+     cluster, and the two drifting apart is a real bug: `right: 50px` on the
+     legend reserved space for one button, so when the visitors and API buttons
+     were added the legend covered them and swallowed their taps. */
+  --hb-edge: 14px;
+  --hb-step: 38px;
+  --hb-api-w: 50px;                                    /* the widest, "API" */
+  --hb-reserve: calc(var(--hb-edge) + var(--hb-step) * 2 + var(--hb-api-w));
   /* Text sitting on an --accent fill. Hardcoding a near-black failed AA in the
      paper theme (3.69:1); per-theme it measures 11.50:1 dark / 5.12:1 paper. */
   --on-accent: oklch(0.12 0.006 250);
@@ -447,7 +456,7 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
    --hb-edge so the narrow-screen override changes one number rather than
    restating each button: that restating is what previously dropped the
    visitors button underneath the help button below 860px. */
-.helpbtn { --hb-edge: 14px; --hb-step: 38px; right: var(--hb-edge); }
+.helpbtn { right: var(--hb-edge); }
 .usagebtn { right: calc(var(--hb-edge) + var(--hb-step)); }
 .apibtn {
   right: calc(var(--hb-edge) + var(--hb-step) * 2);
@@ -1155,11 +1164,25 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   .mark { width: 32px; height: 32px; }
   .wordmark { font-size: 18px; white-space: nowrap; }
   .brand-sub { font-size: 8.5px; }
-  .theme-toggle { height: 22px; font-size: 8px; }
+  .theme-toggle { height: 26px; font-size: 8px; }
   .theme-toggle button { padding: 0 7px; }
   .mod { padding: 12px 14px 14px; }
-  .mod-h { margin-bottom: 11px; gap: 8px; letter-spacing: .16em; }
+  /* Touch targets. Several controls are sized by their text alone and land
+     well under the 24px floor the rest of the UI keeps: the tray headers are
+     the tap area for collapsing a whole section and render at 11px, and the
+     theme, basemap and provider toggles at 18-21px. Padding rather than fixed
+     height, so nothing above or below shifts. */
+  .mod-h {
+    margin-bottom: 8px; gap: 8px; letter-spacing: .16em;
+    min-height: 30px;
+  }
   .mod-h .meta { font-size: 8.5px; }
+  .seg button { min-height: 26px; }
+  .recent-tab { min-height: 26px; }
+  .fmt-more { min-height: 26px; padding-block: 6px; }
+  /* The basemap switch is a Leaflet control built in JS, so it is not .seg.
+     The theme switch is .theme-toggle and is raised at its own rule above. */
+  .basemap-toggle button { min-height: 26px; }
   .cov .cell { padding: 9px 12px 10px; }
   .cov .num { font-size: 15px; }
   .cov .lab { font-size: 8.5px; }
@@ -1180,7 +1203,8 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
     bottom: min(58svh, 470px);
     transform: translate(-50%, 50%) rotate(90deg);
     z-index: 1050;
-    width: 36px; height: 22px;
+    /* Rotated, so `height` is the thickness of the bar you actually press. */
+    width: 40px; height: 26px;
     border-color: var(--line-2);
     transition: bottom .28s cubic-bezier(.4,0,.1,1), color .15s, border-color .15s;
   }
@@ -1205,7 +1229,10 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   .coordbar .seg-c:nth-child(5) { display: none; }
   .leaflet-control-home { margin: 12px 0 0 12px !important; }
   .maplegend {
-    top: 12px; left: 54px; right: 50px;
+    /* Derived, not a literal: the legend must stop where the button cluster
+       starts. A fixed 50px here is what put the legend on top of the API and
+       visitors buttons, so a tap on either toggled a provider instead. */
+    top: 12px; left: 54px; right: var(--hb-reserve);
     height: 30px; overflow: hidden;
   }
   .maplegend .lg {
@@ -1214,14 +1241,19 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   }
   .maplegend .lg .d { width: 6px; height: 6px; }
   /* Shifts the whole cluster, keeping the buttons apart. Setting `right`
-     directly here would collapse all three onto the same spot. */
-  .helpbtn { top: 12px; --hb-edge: 12px; --hb-step: 34px; }
+     directly here would collapse all three onto the same spot. The variables
+     go on :root so the legend's reservation below moves with them. */
+  :root { --hb-edge: 12px; --hb-step: 34px; }
+  .helpbtn { top: 12px; }
   #aoi-toolbar {
+    /* Above the attribution row, not across it. The toolbar is 180px wide from
+       left:62, so it reached into the attribution control and made the Leaflet
+       and Esri credits unreadable — which they are required to be. */
     left: 62px;
-    bottom: calc(min(58svh, 470px) + 144px);
+    bottom: calc(min(58svh, 470px) + 180px);
     z-index: 720;
   }
-  .app.collapsed #aoi-toolbar { bottom: 218px; }
+  .app.collapsed #aoi-toolbar { bottom: 254px; }
   .leaflet-bottom.leaflet-left { bottom: calc(min(58svh, 470px) + 168px); }
   .app.collapsed .leaflet-bottom.leaflet-left { bottom: 244px; }
   .leaflet-bottom.leaflet-right { bottom: calc(min(58svh, 470px) + 142px); }
@@ -1301,7 +1333,7 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   #detail-toggle {
     right: 14px; top: auto;
     bottom: min(78svh, 660px);
-    width: 40px; height: 20px;
+    width: 44px; height: 26px;
     border: 1px solid var(--line); border-bottom: 0;
     z-index: 1410; transform: none;
   }
@@ -1316,7 +1348,11 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   .app.collapsed .console { transform: translateY(calc(100% - 68px)); }
   .collapse,
   .timeline { bottom: min(54svh, 430px); }
-  #aoi-toolbar { bottom: calc(min(54svh, 430px) + 144px); }
+  /* +180, not +144: the toolbar is 180px wide from left:62 and at the lower
+     offset it reached across the attribution control, leaving the Leaflet and
+     Esri credits unreadable. This breakpoint overrides the 860px rule, so
+     raising it there alone changed nothing on a phone. */
+  #aoi-toolbar { bottom: calc(min(54svh, 430px) + 180px); }
   .leaflet-bottom.leaflet-left { bottom: calc(min(54svh, 430px) + 168px); }
   .leaflet-bottom.leaflet-right { bottom: calc(min(54svh, 430px) + 142px); }
   .toast { bottom: calc(min(54svh, 430px) + 144px); }
@@ -1333,7 +1369,8 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
 .lu-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .lu-chip {
   font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em;
-  padding: 4px 7px; min-height: 22px; cursor: pointer; color: var(--ink-2);
+  /* 24px is the floor the rest of the controls use and the README claims. */
+  padding: 5px 8px; min-height: 24px; cursor: pointer; color: var(--ink-2);
   background: var(--bg); border: 1px solid var(--line);
   display: inline-flex; align-items: center; gap: 5px;
   transition: color .12s, background-color .12s, border-color .12s;

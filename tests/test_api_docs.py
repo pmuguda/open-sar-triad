@@ -205,7 +205,9 @@ def test_the_narrow_screen_block_moves_the_cluster_without_flattening_it():
         "setting `right` on .helpbtn here overrides .usagebtn and .apibtn, "
         "which both have equal specificity and come earlier in the file"
     )
-    assert "--hb-edge" in body, "the cluster should move via the edge variable"
+    # The variables moved to :root so the map legend can reserve room for the
+    # cluster; the invariant is unchanged, only where it is declared.
+    assert "--hb-edge" in narrow, "the cluster should move via the edge variable"
 
 
 def test_the_api_button_is_a_link_not_a_button():

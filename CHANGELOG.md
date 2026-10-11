@@ -7,6 +7,27 @@ All notable changes to open-sar-triad are documented here. The format is based o
 ## [Unreleased]
 
 ### Fixed
+- **The API and visitors buttons were unreachable on a phone.** The map legend
+  reserved `right: 50px`, which was enough clearance when `?` was the only
+  button there; adding the visitors and then the API button never widened it, so
+  the legend sat on top of both. `elementFromPoint` at the centre of either
+  returned a legend chip, meaning a tap toggled a provider instead. The
+  reservation is now derived from the cluster's own metrics, which moved to
+  `:root` so the legend and the buttons cannot drift apart again.
+- **The AOI toolbar sat across the Leaflet and Esri attribution**, which has to
+  stay legible. Raising it at the 860px breakpoint alone changed nothing,
+  because the 430px breakpoint re-set the same property; both are fixed and both
+  are tested.
+- **Touch targets below the 24px floor the README claims.** Land-use chips were
+  22px, the tray headers that collapse each section were 11px, and the theme,
+  basemap, provider-tab and edge handles were 18-22px. Fourteen controls were
+  under the floor on a 390px viewport; none are now.
+
+  `tests/test_mobile_layout.py` pins the couplings rather than the appearance.
+  CI has no browser, so it cannot prove the layout looks right — the rendering
+  was checked at a phone viewport — but a literal reservation on the legend, a
+  toolbar back across the attribution, or a chip under the floor each fail it.
+
 - **`airport` and `port` reached 5 km beyond the footprint**, which made about a
   third of those tags near-misses rather than overlaps: a scene over central
   Venice came out `airport` because Marco Polo is 8 km away, and Munich and
