@@ -16,8 +16,15 @@ ROOT = Path(__file__).parent.parent
 #: test. Tests that care about staleness pass first_seen explicitly.
 RECENTLY = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 
+#: Default acquisition date, also relative. A fixed one drifts past the
+#: acquisition-recency threshold as the calendar moves, so the "healthy catalog"
+#: fixture would start reporting a provider drought for no reason connected to
+#: the test — the same way a fixed first_seen did. Tests that care about
+#: recency pass a date explicitly.
+ACQUIRED = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
 
-def make_scene(sid, provider="umbra", date="2025-06-01", mode="spotlight",
+
+def make_scene(sid, provider="umbra", date=ACQUIRED, mode="spotlight",
                lon=10.0, lat=50.0, products=None, first_seen=RECENTLY):
     """One well-formed feature, shaped exactly like fetch_catalog.py emits."""
     host = {

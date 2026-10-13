@@ -549,6 +549,12 @@ Step 5 above runs `scripts/validate_catalog.py` **before** the commit. The catal
 - no provider may fall more than 15%, or disappear entirely
 - an *identical* scene set raises a warning, because that is what a silent fallback looks like — the failure that once froze the catalog at 14,733 for weeks while every run reported success
 
+**Acquisition recency** (per provider, from the scene dates):
+
+- how old the newest *imagery* is, which is a different question from how recently we took a record in. They come apart on a backfill: in October 2026 ICEYE and Capella both ingested records overnight, so every ingestion check read healthy, while the newest acquisition in the catalog was 30 to 42 days old and nothing had actually been published for a month
+- warns past 35 days. That figure is measured rather than guessed: over the preceding year the median gap between active acquisition days was 1 day for all three providers and the 90th percentile 3 to 6 days, while the longest genuine droughts were 47, 49 and 59 days
+- a drought across all three providers is reported as one observation, not three. Three providers going quiet together is the upstream feed, and saying it three times buries that
+
 **Freshness checks** (per provider, from `first_seen`):
 
 - each provider's newest ingestion is dated, and a provider that has taken nothing for more than 21 days (three missed weekly runs) raises a warning

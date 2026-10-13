@@ -176,12 +176,21 @@ def build_body(report: dict, items: list[str]) -> str:
         lines += ["### Catalog", *facts]
 
     freshness = report.get("provider_freshness") or {}
+    acq = report.get("acquisition_recency") or {}
     if freshness:
-        lines += ["", "| provider | last ingest | age |", "|---|---|---|"]
+        # Two different ages. "Last ingest" is when we took a record in, which
+        # moves on a backfill; "newest image" is how recent the imagery is,
+        # which is what someone looking for data actually wants.
+        lines += ["", "| provider | last ingest | newest image |", "|---|---|---|"]
         for prov, fr in sorted(freshness.items()):
             stale = fr.get("age_days", 0) > 21
+            a = acq.get(prov) or {}
+            cell = (f"{a.get('newest_acquisition')} ({a.get('age_days')}d)"
+                    + (" **stale**" if (a.get("age_days") or 0) > 35 else "")
+                    ) if a else "—"
             lines.append(f"| {prov} | {fr.get('newest_first_seen', '?')} "
-                         f"| {fr.get('age_days', '?')}d{' **stale**' if stale else ''} |")
+                         f"({fr.get('age_days', '?')}d){' **stale**' if stale else ''} "
+                         f"| {cell} |")
 
     link = _run_link()
     if link:

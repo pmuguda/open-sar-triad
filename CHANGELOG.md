@@ -6,7 +6,31 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **Acquisition-recency check.** Every existing check measured when a record was
+  *ingested*; none measured how old the *imagery* was. The two come apart on a
+  backfill, and in October 2026 they did: ICEYE and Capella both took in records
+  overnight, so the catalog grew and every freshness check read healthy, while
+  the newest acquisition was 30 to 42 days old and no provider had published
+  anything genuinely new for a month. The catalog was growing entirely from
+  backfill of 2024-2026 scenes.
+
+  `check_acquisition_recency` reports the age of the newest scene per provider
+  and warns past 35 days — measured, not guessed: over the preceding year the
+  median gap between active acquisition days was 1 day and the 90th percentile
+  3 to 6 days, while the longest real droughts were 47, 49 and 59 days. A
+  drought across all three is reported as one observation rather than three,
+  because three providers going quiet together is the upstream feed. It warns
+  and never fails; nothing here can make a provider publish.
+
+  The health issue now shows both ages side by side, so "ingested yesterday,
+  newest image 42 days old" is visible at a glance.
+
 ### Fixed
+- The shared test fixture's acquisition date was a fixed `2025-06-01`, so it
+  drifted past the new threshold and made the healthy-catalog fixture report a
+  drought. It is relative now, as `first_seen` already was.
+
 - **The API and visitors buttons were unreachable on a phone.** The map legend
   reserved `right: 50px`, which was enough clearance when `?` was the only
   button there; adding the visitors and then the API button never widened it, so

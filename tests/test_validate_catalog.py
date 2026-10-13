@@ -34,6 +34,7 @@ def run(doc, baseline=None):
         vc.check_features(feats, rep)
         vc.check_ingestion_freshness(feats, rep)
         vc.check_provider_freshness(feats, rep)
+        vc.check_acquisition_recency(feats, rep)
         vc.check_regression(feats, baseline, rep)
     return rep
 
@@ -398,3 +399,84 @@ def test_step_summary_is_skipped_outside_actions(catalog, write_catalog):
     r = subprocess.run([sys.executable, str(SCRIPT), "--catalog", str(p)],
                        capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+# --------------------------------------------------------------------------- #
+# Acquisition recency
+#
+# A different question from ingestion recency, and the one a user of a SAR
+# catalog actually asks. In October 2026 ICEYE and Capella both ingested records
+# the previous day — so every freshness check read healthy — while the newest
+# imagery in the catalog was 30 to 42 days old and nothing had been published
+# for a month. The catalog was growing entirely from backfill.
+# --------------------------------------------------------------------------- #
+def _acq(ages):
+    """One scene per provider, acquired this many days ago."""
+    return {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene(f"{p}-1", provider=p, date=_ago(d), first_seen=_ago(0))
+        for p, d in ages.items()
+    ]}
+
+
+def test_recency_is_measured_from_the_acquisition_not_the_ingestion():
+    """The two come apart on a backfill, which is the whole point."""
+    doc = {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene(f"{p}-1", provider=p, date=_ago(60), first_seen=_ago(0))
+        for p in ("iceye", "umbra", "capella")
+    ]}
+    rep = run(doc)
+    # ingested today, so the ingestion check is content
+    assert not any("ingested nothing" in w for w in rep.warnings)
+    # but nothing new has been imaged
+    assert any("published new imagery" in w or "published no imagery" in w
+               for w in rep.warnings), rep.warnings
+
+
+def test_a_single_quiet_provider_is_named():
+    rep = run(_acq({"iceye": 60, "umbra": 2, "capella": 2}))
+    named = [w for w in rep.warnings if "iceye" in w and "no imagery newer" in w]
+    assert named, rep.warnings
+    assert not any("umbra" in w or "capella" in w for w in rep.warnings)
+
+
+def test_an_across_the_board_drought_is_one_observation_not_three():
+    """Three providers going quiet at once is the upstream feed, and saying it
+    three times buries that."""
+    rep = run(_acq({"iceye": 60, "umbra": 55, "capella": 50}))
+    combined = [w for w in rep.warnings if "no provider has published" in w]
+    assert len(combined) == 1, rep.warnings
+    assert not any("no imagery newer" in w for w in rep.warnings)
+
+
+def test_recent_imagery_raises_nothing():
+    rep = run(_acq({"iceye": 1, "umbra": 3, "capella": 5}))
+    assert not any("imagery" in w for w in rep.warnings), rep.warnings
+
+
+def test_recency_is_reported_per_provider():
+    rep = run(_acq({"iceye": 42, "umbra": 2, "capella": 2}))
+    acq = rep.info["acquisition_recency"]
+    assert set(acq) == {"iceye", "umbra", "capella"}
+    assert acq["iceye"]["age_days"] == 42
+    assert acq["iceye"]["newest_acquisition"] == _ago(42)
+
+
+def test_the_newest_scene_wins_not_the_oldest():
+    """A provider with one recent scene is not stale, however much history it
+    is backfilling at the same time."""
+    doc = {"type": "FeatureCollection", "generated_at": "x", "features": [
+        make_scene("umbra-old", provider="umbra", date=_ago(900), first_seen=_ago(0)),
+        make_scene("umbra-new", provider="umbra", date=_ago(2), first_seen=_ago(0)),
+        make_scene("iceye-1", provider="iceye", date=_ago(2), first_seen=_ago(0)),
+        make_scene("capella-1", provider="capella", date=_ago(2), first_seen=_ago(0)),
+    ]}
+    rep = run(doc)
+    assert rep.info["acquisition_recency"]["umbra"]["age_days"] == 2
+    assert not any("imagery" in w for w in rep.warnings)
+
+
+def test_a_drought_warns_rather_than_fails():
+    """Nothing here can make a provider publish, and failing the run would
+    withhold whatever backfill did arrive."""
+    rep = run(_acq({"iceye": 400, "umbra": 400, "capella": 400}))
+    assert rep.ok, rep.errors

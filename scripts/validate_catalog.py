@@ -80,6 +80,22 @@ STALE_INGEST_WARN_DAYS = 35
 #: scenes over a provider that is merely quiet.
 STALE_PROVIDER_WARN_DAYS = 21
 
+#: Acquisition recency, which is a different question from ingestion recency and
+#: the one a user of a SAR catalog actually asks. The checks above track when we
+#: last *took in* a record; this tracks how old the newest *imagery* is. They
+#: come apart whenever upstream backfills: in October 2026 ICEYE and Capella both
+#: ingested new records on the 12th, so every freshness check read healthy, while
+#: the newest acquisition in the catalog was 30 to 42 days old and nothing had
+#: actually been published for a month.
+#:
+#: 35 days is measured, not guessed. Over the preceding year the median gap
+#: between active acquisition days was 1 day for all three providers and the 90th
+#: percentile was 3 to 6 days; the longest genuine droughts were 47, 49 and 59
+#: days. So 35 sits far above routine cadence and inside the range of real
+#: droughts — it will sometimes fire during one, which is correct rather than a
+#: false alarm, and the issue closes itself when publishing resumes.
+STALE_ACQUISITION_WARN_DAYS = 35
+
 
 class Report:
     def __init__(self) -> None:
@@ -316,6 +332,59 @@ def check_provider_freshness(feats: list[dict], rep: Report) -> None:
     rep.info["provider_freshness"] = freshness
 
 
+def check_acquisition_recency(feats: list[dict], rep: Report) -> None:
+    """How old is the newest imagery, per provider.
+
+    Reports an across-the-board drought as one observation rather than three
+    complaints. Three providers going quiet at once is almost never three
+    independent failures; it is the upstream feed, and saying it three times
+    buries that.
+    """
+    today = date.today()
+    newest: dict[str, str] = {}
+    for f in feats:
+        p = f.get("properties") or {}
+        prov, d = p.get("provider"), p.get("date")
+        if prov in PROVIDERS and isinstance(d, str) and DATE_RE.match(d):
+            if d > newest.get(prov, ""):
+                newest[prov] = d
+
+    ages: dict[str, dict] = {}
+    for prov in sorted(PROVIDERS):
+        d = newest.get(prov)
+        if d is None:
+            continue
+        try:
+            age = (today - datetime.strptime(d, "%Y-%m-%d").date()).days
+        except ValueError:
+            continue
+        ages[prov] = {"newest_acquisition": d, "age_days": age}
+
+    rep.info["acquisition_recency"] = ages
+    if not ages:
+        return
+
+    stale = {p: v for p, v in ages.items()
+             if v["age_days"] > STALE_ACQUISITION_WARN_DAYS}
+    if not stale:
+        return
+
+    if len(stale) == len(ages):
+        oldest = max(v["age_days"] for v in stale.values())
+        detail = ", ".join(f"{p} {v['newest_acquisition']}"
+                           for p, v in sorted(stale.items()))
+        rep.warn(f"no provider has published new imagery for over "
+                 f"{STALE_ACQUISITION_WARN_DAYS} days (newest is {oldest} days "
+                 f"old: {detail}). The catalog may still be growing from "
+                 "backfill, so the ingestion checks above can read healthy "
+                 "while there is nothing genuinely new to see.")
+    else:
+        for prov, v in sorted(stale.items()):
+            rep.warn(f"provider {prov!r} has published no imagery newer than "
+                     f"{v['newest_acquisition']}, {v['age_days']} days ago, "
+                     "though it may still be backfilling older scenes.")
+
+
 # --------------------------------------------------------------------------- #
 # Regression against the previous catalog
 # --------------------------------------------------------------------------- #
@@ -437,6 +506,7 @@ def main() -> int:
         check_features(feats, rep)
         check_ingestion_freshness(feats, rep)
         check_provider_freshness(feats, rep)
+        check_acquisition_recency(feats, rep)
         baseline = _load(args.baseline) if args.baseline else _git_baseline(args.catalog)
         check_regression(feats, baseline, rep)
 
@@ -450,10 +520,15 @@ def main() -> int:
               f"-{rep.info.get('removed', 0)} gone)")
     if "newest_first_seen" in rep.info:
         print(f"  last ingest  : {rep.info['newest_first_seen']}")
+    acq = rep.info.get("acquisition_recency", {})
     for prov, fr in sorted(rep.info.get("provider_freshness", {}).items()):
         flag = "  STALE" if fr["age_days"] > STALE_PROVIDER_WARN_DAYS else ""
+        a = acq.get(prov)
+        tail = (f" | newest image {a['newest_acquisition']} ({a['age_days']}d)"
+                + ("  STALE" if a["age_days"] > STALE_ACQUISITION_WARN_DAYS else "")
+                ) if a else ""
         print(f"    {prov:8} last ingest {fr['newest_first_seen']} "
-              f"({fr['age_days']}d ago){flag}")
+              f"({fr['age_days']}d ago){flag}{tail}")
 
     for w in rep.warnings:
         print(f"  WARNING: {w}")
