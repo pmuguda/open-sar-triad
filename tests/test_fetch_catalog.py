@@ -180,7 +180,15 @@ def test_a_partial_capella_fetch_falls_back_whole(run):
 
 
 def test_a_file_that_is_not_parquet_is_a_fetch_error(monkeypatch):
-    """read_parquet used to return None here, the same silent path."""
+    """read_parquet used to return None here, the same silent path.
+
+    The reader is stubbed because the CI test job has no pyarrow; what is
+    under test is that a parse failure becomes a FetchError, not pyarrow."""
+    class Reader:
+        @staticmethod
+        def read_table(buf):
+            raise ValueError("Parquet magic bytes not found")
+    monkeypatch.setattr(fc, "_parquet", lambda: Reader)
     monkeypatch.setattr(fc, "fetch_bytes", lambda url, **k: b"<html>rate limited</html>")
     with pytest.raises(fc.FetchError) as e:
         fc.read_parquet("https://x/iceye.parquet")
