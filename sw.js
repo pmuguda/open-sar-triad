@@ -1,4 +1,4 @@
-const CACHE_NAME = 'open-sar-triad-v61';
+const CACHE_NAME = 'open-sar-triad-v62';
 const APP_SHELL = [
   './',
   './index.html',

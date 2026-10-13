@@ -150,3 +150,30 @@ def test_the_edge_handles_are_thick_enough_to_grab():
     assert collapse and int(collapse.group(1)) >= TAP_FLOOR, "console handle"
     detail = re.search(r"#detail-toggle\s*\{[^}]*height:\s*(\d+)px", MOBILE)
     assert detail and int(detail.group(1)) >= TAP_FLOOR, "detail sheet handle"
+
+
+# --------------------------------------------------------------------------- #
+# The acquisition-window axis
+# --------------------------------------------------------------------------- #
+# layoutTimelineLabels() in app.js measures which tick labels fit and nudges
+# the end labels and handle grips back inside the timeline. The CSS has to
+# consume what it sets, or the grips go back to hanging off the phone's edges.
+JS = (ROOT / "js" / "app.js").read_text()
+
+
+def test_the_axis_labels_are_nudged_by_the_script_not_the_stylesheet():
+    assert "--nudge" in JS, "layoutTimelineLabels no longer sets --nudge"
+    assert "var(--nudge" in block(".tl-tick .tx"), "tick labels ignore --nudge"
+    assert "var(--nudge" in block(".tl-h .grip"), "handle grips ignore --nudge"
+
+
+def test_the_phone_no_longer_blanket_hides_interior_ticks():
+    """The old rule left two labels five years apart and nothing between. The
+    script now hides only the labels that would collide, so year ticks that
+    fit are shown."""
+    assert ".tl-tick:not(:first-child)" not in MOBILE
+
+
+def test_a_colliding_label_is_hidden_by_class():
+    assert "display: none" in block(".tl-tick.hid .tx")
+    assert "'hid'" in JS

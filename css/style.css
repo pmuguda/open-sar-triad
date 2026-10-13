@@ -591,10 +591,14 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
 .tl-hist .b.out { opacity: .24; }
 .tl-axis { position: absolute; left: 24px; right: 24px; bottom: 6px; height: 14px; }
 .tl-tick { position: absolute; top: 0; width: 1px; height: 4px; background: var(--line-2); }
+/* --nudge is set by layoutTimelineLabels() to pull a label that would hang
+   off the edge of the timeline back inside it; the mark stays where it is.
+   .hid is the same function hiding a label that would print over another. */
 .tl-tick .tx {
-  position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-size: 8.5px; color: var(--ink-3);
-  letter-spacing: .05em; white-space: nowrap;
+  position: absolute; top: 6px; left: 50%; transform: translateX(calc(-50% + var(--nudge, 0px)));
+  font-size: 8.5px; color: var(--ink-3); letter-spacing: .05em; white-space: nowrap;
 }
+.tl-tick.hid .tx { display: none; }
 .tl-track { position: absolute; left: 24px; right: 24px; top: 13px; bottom: 24px; }
 .tl-sel {
   position: absolute; top: 0; bottom: 0; background: var(--accent-2);
@@ -611,6 +615,7 @@ input:focus-visible, select:focus-visible, .lg:focus-visible {
 .tl-h .grip {
   margin-top: -1px; background: var(--accent); color: var(--on-accent); font-size: 8.5px; letter-spacing: .04em;
   padding: 2px 5px; font-family: var(--font-mono); font-weight: 600; white-space: nowrap;
+  transform: translateX(var(--nudge, 0px));   /* see .tl-tick .tx */
 }
 .tl-foot {
   display: flex; flex-direction: column; justify-content: center; gap: 4px;
@@ -1283,7 +1288,9 @@ body.mode-draw    .leaflet-container { cursor: crosshair !important; }
   }
   .tl-hist { left: 20px; right: 20px; top: 8px; bottom: 18px; gap: 1px; opacity: .68; }
   .tl-axis { left: 20px; right: 20px; bottom: 2px; }
-  .tl-axis .tl-tick:not(:first-child):not(:last-child) { display: none; }
+  /* Interior ticks are no longer blanket-hidden here: layoutTimelineLabels()
+     measures what fits, so a phone gets the year ticks that fit between the
+     ends instead of two labels and nothing in between. */
   .tl-tick .tx { font-size: 7.5px; top: 6px; }
   .tl-track { left: 20px; right: 20px; top: 8px; bottom: 18px; }
   .tl-h { width: 32px; touch-action: none; }

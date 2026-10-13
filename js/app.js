@@ -2511,6 +2511,14 @@ function initTimeline(features) {
   if (hFrom) hFrom.addEventListener('pointerdown', dragHandle('from'));
   if (hTo)   hTo.addEventListener('pointerdown',   dragHandle('to'));
 
+  // Which labels fit is a function of the axis width, so re-decide on resize
+  // and rotation. The timeline itself is laid out by then.
+  let relayout = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(relayout);
+    relayout = setTimeout(layoutTimelineLabels, 120);
+  });
+
   track.addEventListener('pointerdown', e => {
     if (e.target.closest('.tl-h')) return;
     const rect = track.getBoundingClientRect();
@@ -2575,6 +2583,7 @@ function setTimelineRange(from, to) {
   if (rDur)  { const d = tlTo - tlFrom + 1; rDur.textContent = d + ' month' + (d > 1 ? 's' : ''); }
 
   document.querySelectorAll('#hist .b').forEach((b, i) => b.classList.toggle('out', i < tlFrom || i > tlTo));
+  layoutTimelineLabels();
 }
 
 function buildTimelineHist(features) {
@@ -2614,17 +2623,75 @@ function buildTimelineAxis() {
   const axis = document.getElementById('axis');
   if (!axis || !MONTHS.length) return;
   axis.innerHTML = '';
-  const step = MONTHS.length > 24 ? 6 : MONTHS.length > 12 ? 3 : 1;
-  for (let i = 0; i < MONTHS.length; i += step) {
-    const t = document.createElement('div'); t.className = 'tl-tick';
+  const n = MONTHS.length;
+
+  // Ticks sit on calendar boundaries: Januaries over a span of years, quarter
+  // starts over a span of months, every month under a year. The previous
+  // axis stepped every k-th month from wherever the catalog happened to
+  // start, which labelled 2021-08, 2022-02, 2022-08 and so on, and put its
+  // last regular tick a month short of the end tick so the two labels
+  // printed on top of each other.
+  const span = n > 24 ? 12 : n > 12 ? 3 : 1;
+  const tick = (i, label, end) => {
+    const t = document.createElement('div');
+    t.className = 'tl-tick' + (end ? ' end' : '');
     t.style.left = pct(i) + '%';
-    t.innerHTML = `<span class="tx">${MONTHS[i]}</span>`;
+    t.innerHTML = `<span class="tx">${label}</span>`;
     axis.appendChild(t);
+  };
+  tick(0, MONTHS[0], true);
+  for (let i = 1; i < n - 1; i++) {
+    const month = +MONTHS[i].slice(5);
+    if ((month - 1) % span) continue;
+    tick(i, span === 12 ? MONTHS[i].slice(0, 4) : MONTHS[i], false);
   }
-  const last = document.createElement('div'); last.className = 'tl-tick';
-  last.style.left = '100%';
-  last.innerHTML = `<span class="tx">${MONTHS[MONTHS.length - 1]}</span>`;
-  axis.appendChild(last);
+  if (n > 1) tick(n - 1, MONTHS[n - 1], true);
+  layoutTimelineLabels();
+}
+
+// Keeps the axis legible at whatever width it is drawn. The end labels and
+// the handle grips are centred on the first and last month, which puts half
+// of each outside the timeline when a handle rests at an extreme: on a phone
+// they hung off both edges of the screen. Those are nudged back inside.
+// Interior labels that would print over a neighbour are hidden, ends first,
+// so a narrow axis degrades to fewer labels rather than to overlapping ones.
+// Measured, not computed from font sizes, so it stays right when the CSS
+// changes; re-run whenever something it measures moves.
+function layoutTimelineLabels() {
+  const tl = document.getElementById('timeline');
+  if (!tl) return;
+  const box = tl.getBoundingClientRect();
+  if (!box.width) return;                   // not laid out; nothing to measure
+  const PAD = 6, GAP = 4;
+
+  const keepInside = el => {
+    el.style.removeProperty('--nudge');     // measure at the natural position
+    const r = el.getBoundingClientRect();
+    const dx = r.left < box.left + PAD ? box.left + PAD - r.left
+             : r.right > box.right - PAD ? box.right - PAD - r.right : 0;
+    if (dx) el.style.setProperty('--nudge', dx + 'px');
+    return el.getBoundingClientRect();
+  };
+
+  const ticks = [...document.querySelectorAll('#axis .tl-tick')];
+  const kept = ticks.filter(t => t.classList.contains('end'))
+                    .map(t => keepInside(t.querySelector('.tx')));
+  // On a phone the drawer handle straddles the seam under the axis, right
+  // where the middle label prints. Anything sitting on the axis band counts
+  // as an already-placed label, so the tick under it hides like any other.
+  const axis = document.getElementById('axis').getBoundingClientRect();
+  document.querySelectorAll('.collapse').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (r.width && r.bottom > axis.top && r.top < axis.bottom) kept.push(r);
+  });
+  ticks.forEach(t => {
+    if (t.classList.contains('end')) return;
+    t.classList.remove('hid');
+    const r = t.querySelector('.tx').getBoundingClientRect();
+    if (kept.some(k => r.left < k.right + GAP && k.left < r.right + GAP)) t.classList.add('hid');
+    else kept.push(r);
+  });
+  document.querySelectorAll('.tl-h .grip').forEach(keepInside);
 }
 
 function updateTimelineHistogram() {
