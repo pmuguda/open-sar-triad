@@ -480,3 +480,35 @@ def test_a_drought_warns_rather_than_fails():
     withhold whatever backfill did arrive."""
     rep = run(_acq({"iceye": 400, "umbra": 400, "capella": 400}))
     assert rep.ok, rep.errors
+
+
+# --------------------------------------------------------------------------- #
+# A provider the fetch could not reach
+# --------------------------------------------------------------------------- #
+def test_a_fetch_failure_in_the_header_is_a_warning(catalog):
+    """fetch_catalog.py serves the cache and exits 0; this is where it becomes
+    visible on the day rather than when first_seen goes stale weeks later."""
+    catalog["fetch_failures"] = {
+        "capella": "capella_GEO.parquet: could not download (HTTP 502)"}
+    rep = run(catalog)
+    assert rep.ok, "serving the cache is the right behaviour; it must not fail"
+    w = [w for w in rep.warnings if "capella" in w]
+    assert w and "HTTP 502" in w[0] and "cached" in w[0]
+
+
+def test_a_clean_fetch_raises_no_fetch_warning(catalog):
+    catalog["fetch_failures"] = {}
+    rep = run(catalog)
+    assert not [w for w in rep.warnings if "not fetched" in w]
+
+
+def test_fetch_failures_are_reported_in_the_json(catalog):
+    catalog["fetch_failures"] = {"umbra": "umbra.parquet: could not download (timed out)"}
+    rep = run(catalog)
+    assert rep.info["fetch_failures"] == catalog["fetch_failures"]
+
+
+def test_each_failed_provider_gets_its_own_warning(catalog):
+    catalog["fetch_failures"] = {"umbra": "a", "iceye": "b"}
+    rep = run(catalog)
+    assert sum("not fetched" in w for w in rep.warnings) == 2

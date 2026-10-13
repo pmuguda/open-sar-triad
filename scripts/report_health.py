@@ -134,6 +134,11 @@ def build_title(report: dict, items: list[str]) -> str:
     n_err = len(report.get("errors") or [])
     if n_err:
         return f"{subject} failing: {n_err} error(s)"
+    # A provider served from the cache outranks a stale one: it is today's
+    # failure, with a reason attached, rather than a three-week-old symptom.
+    unfetched = sorted((report.get("fetch_failures") or {}).keys())
+    if unfetched:
+        return f"{subject}: {', '.join(unfetched)} could not be fetched"
     stale = [p for p, fr in (report.get("provider_freshness") or {}).items()
              if fr.get("age_days", 0) > 21]
     if stale:

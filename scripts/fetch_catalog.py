@@ -9,11 +9,14 @@ Credit: https://github.com/Jack-Hayes/commerical-sar-stac
 
 import io
 import json
+import math
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 warnings.filterwarnings("ignore")  # suppress numpy version warnings in some envs
@@ -131,21 +134,60 @@ PROVIDER_META = {
 }
 
 
-def fetch_bytes(url, timeout=60):
+class FetchError(RuntimeError):
+    """A parquet could not be downloaded or read. Carries the file name."""
+
+
+#: HTTP statuses worth a second attempt. Anything else in the 4xx range means
+#: the request itself is wrong (the file moved, say) and retrying is noise.
+_RETRY_STATUSES = {408, 429, 500, 502, 503, 504}
+
+
+def fetch_bytes(url, timeout=60, attempts=3, backoff=2.0):
+    """Download ``url``, retrying transient failures with exponential backoff.
+
+    The weekly run reads ten files from raw.githubusercontent.com. Before this
+    retried, one dropped connection on one of them meant the provider silently
+    served last week's cached scenes, and nothing in the run said so: a single
+    bad second cost a week of data with a green tick on it.
+    """
     req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in _RETRY_STATUSES:
+                raise
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last = e
+        if attempt < attempts:
+            wait = backoff * 2 ** (attempt - 1)
+            print(f"    retry {attempt}/{attempts - 1} in {wait:g}s: {last}", file=sys.stderr)
+            time.sleep(wait)
+    raise last
 
 
 def read_parquet(url):
-    """Download a parquet file and return a pandas DataFrame."""
+    """Download a parquet file and return a pandas DataFrame.
+
+    Raises FetchError rather than returning None. The None path let a provider
+    with several files (Capella has seven) carry on with whichever subset had
+    arrived, which produced a catalog missing the acquisitions that live only
+    in the failed file and missing that format from every other scene, and
+    recorded none of it. A provider is fetched whole or not at all.
+    """
+    fname = url.split("/")[-1]
     try:
         data = fetch_bytes(url)
-        tbl  = _parquet().read_table(io.BytesIO(data))
-        return tbl.to_pandas()
     except Exception as e:
-        print(f"  [WARN] Could not read {url.split('/')[-1]}: {e}", file=sys.stderr)
-        return None
+        raise FetchError(f"{fname}: could not download ({e})") from e
+    try:
+        return _parquet().read_table(io.BytesIO(data)).to_pandas()
+    except Exception as e:
+        raise FetchError(f"{fname}: could not read as parquet ({e})") from e
 
 
 def parse_assets(assets_val, provider_id=None):
@@ -219,6 +261,13 @@ def normalize_row(row, provider_id):
     """Convert a parquet row to a GeoJSON Feature."""
     info = PROVIDER_META[provider_id]
 
+    # Skip collection footprint entries (not real acquisitions). Checked before
+    # anything is parsed, so a footprint row costs nothing and cannot trip a
+    # parser on its odd shape.
+    item_id = str(row.get("id", ""))
+    if "footprint" in item_id.lower() or "collection" in item_id.lower():
+        return None
+
     # Geometry — new schema stores raw WKB bytes; old schema had geometry_geojson string
     geom_raw = row.get("geometry")
     geom_str = row.get("geometry_geojson")
@@ -251,9 +300,10 @@ def normalize_row(row, provider_id):
                 year = int(s[:4])
         except Exception:
             pass
-    # Reject clearly erroneous future dates (> 1 year ahead)
-    now = datetime.now(timezone.utc)
-    cutoff_future = now.replace(year=now.year + 1).strftime("%Y-%m-%d")
+    # Reject clearly erroneous future dates (> 1 year ahead). Umbra's parquet
+    # carries a handful of scenes dated 2035. Added as a timedelta: the earlier
+    # `now.replace(year=now.year + 1)` raises on 29 February.
+    cutoff_future = (datetime.now(timezone.utc) + timedelta(days=366)).strftime("%Y-%m-%d")
     if date_str and date_str > cutoff_future:
         return None
 
@@ -264,7 +314,6 @@ def normalize_row(row, provider_id):
 
     if resolution is not None:
         try:
-            import math
             f = float(resolution)
             resolution = round(f, 2) if math.isfinite(f) else None
         except Exception:
@@ -273,7 +322,6 @@ def normalize_row(row, provider_id):
     thumbnail, download, products = parse_assets(row.get("assets"), provider_id)
 
     # Incidence angle / off-nadir (ICEYE uses these instead of resolution)
-    import math
     def safe_float(v, decimals=1):
         if v is None: return None
         try:
@@ -283,11 +331,6 @@ def normalize_row(row, provider_id):
             return None
     incidence_angle = safe_float(row.get("view:incidence_angle"))
     off_nadir       = safe_float(row.get("view:off_nadir"))
-
-    # Skip collection footprint entries (not real acquisitions)
-    item_id = str(row.get("id", ""))
-    if "footprint" in item_id.lower() or "collection" in item_id.lower():
-        return None
 
     def clean_str(v):
         if v is None: return None
@@ -346,31 +389,37 @@ def fetch_provider(provider_id):
     info = PROVIDER_META[provider_id]
     all_rows = []
 
+    # Any file failing fails the provider (read_parquet raises), and main()
+    # then serves the cached copy whole. Merging the files that did arrive
+    # would quietly produce a smaller catalog.
     for url in info["parquets"]:
         fname = url.split("/")[-1]
         print(f"  [{info['label']}] Fetching {fname}…")
         df = read_parquet(url)
-        if df is not None:
-            print(f"    → {len(df)} rows")
-            all_rows.append(df)
-
-    if not all_rows:
-        return []
+        print(f"    → {len(df)} rows")
+        all_rows.append(df)
 
     import pandas as pd
     merged = pd.concat(all_rows, ignore_index=True)
 
-    # Deduplicate by id
+    # Deduplicate by id. Umbra lists a few hundred scenes twice, under two S3
+    # prefixes for the same objects (task-data/<id>/ and tasks/<name>/<id>/);
+    # both resolve, so keeping the first is fine.
     if "id" in merged.columns:
         merged = merged.drop_duplicates(subset=["id"])
 
     features = []
+    skipped = 0
     for _, row in merged.iterrows():
         feat = normalize_row(row, provider_id)
         if feat:
             features.append(feat)
+        else:
+            skipped += 1
 
-    print(f"  [{info['label']}] ✓ {len(features)} scenes")
+    print(f"  [{info['label']}] ✓ {len(features)} scenes"
+          + (f" ({skipped} rows skipped: collection footprints, "
+             "unparseable geometry or implausible dates)" if skipped else ""))
 
     # Fail loudly on a schema change: if the upstream parquet had rows but none
     # of them parsed into scenes, the fallback would silently freeze the catalog
@@ -447,12 +496,21 @@ def main():
                     if props.get("first_seen"):
                         prev_first_seen[fid] = props["first_seen"]
             print(f"Loaded {sum(len(v) for v in existing.values())} existing scenes as fallback.")
-        except Exception:
-            pass
+        except Exception as e:
+            # Not fatal, but not silent either: with no cache, a provider that
+            # fails to fetch below has nothing to fall back on.
+            print(f"  [WARN] could not load {OUT_PATH} as fallback: {e}", file=sys.stderr)
 
     all_features = {}
     schema_failures = []
+    # Providers that could not be fetched this run, with the reason. Written
+    # into the catalog header so the validator can warn and the health issue
+    # opens the same day. Before this the fallback was a line in a log nobody
+    # reads, and the first signal was the provider's first_seen going stale
+    # three weeks later.
+    fetch_failures = {}
     for pid in ("iceye", "umbra", "capella"):
+        reason = None
         try:
             all_features[pid] = fetch_provider(pid)
         except SchemaError as e:
@@ -460,13 +518,20 @@ def main():
             print(f"  [{pid}] SCHEMA ERROR: {e}", file=sys.stderr)
             schema_failures.append(pid)
             all_features[pid] = []
+            reason = str(e)
         except Exception as e:
             print(f"  [{pid}] ERROR: {e}", file=sys.stderr)
             all_features[pid] = []
+            reason = str(e)
 
-        if not all_features[pid] and existing.get(pid):
-            print(f"  [{pid}] Falling back to cached data ({len(existing[pid])} scenes).")
-            all_features[pid] = existing[pid]
+        if not all_features[pid]:
+            fetch_failures[pid] = reason or "fetched no scenes"
+            if existing.get(pid):
+                print(f"  [{pid}] Falling back to cached data ({len(existing[pid])} scenes).")
+                all_features[pid] = existing[pid]
+            else:
+                print(f"  [{pid}] No cached copy to fall back on; provider omitted.",
+                      file=sys.stderr)
 
     merged = []
     for pid, feats in all_features.items():
@@ -499,6 +564,10 @@ def main():
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "last_updated": run_date,
         "new_this_run": new_count,
+        # {provider: reason} for providers that were not fetched this run;
+        # their scenes, if any, are the previous run's cached copy. Empty on a
+        # clean run.
+        "fetch_failures": fetch_failures,
         "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
         "features": merged,
     }

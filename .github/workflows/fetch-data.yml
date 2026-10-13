@@ -73,6 +73,8 @@ jobs:
           if [ ! -f /tmp/validation.json ]; then
             if [ "${{ steps.fetch.outcome }}" != "success" ]; then
               reason="scripts/fetch_catalog.py failed, so no catalog was produced. Upstream may have changed shape again."
+            elif [ "${{ steps.classify.outcome }}" != "success" ]; then
+              reason="scripts/classify_scenes.py failed, so the catalog was never validated or committed."
             else
               reason="scripts/validate_catalog.py did not produce a report; it likely crashed before finishing."
             fi

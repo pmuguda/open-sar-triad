@@ -157,7 +157,25 @@ def check_structure(doc: dict, rep: Report) -> list[dict]:
     # reported success, because nothing ever read it.
     if "new_this_run" in doc:
         rep.info["new_this_run"] = doc["new_this_run"]
+    check_fetch_failures(doc, rep)
     return feats
+
+
+def check_fetch_failures(doc: dict, rep: Report) -> None:
+    """A provider the fetch could not reach is served from the previous catalog.
+
+    That is the right thing for the site, and the wrong thing to be quiet about.
+    fetch_catalog.py used to log the fallback and exit 0, so the run was green,
+    the scene counts for the other providers moved, and the first visible sign
+    was that provider's first_seen going stale three weeks later. Now the fetch
+    writes the failure into the header and this turns it into a warning on the
+    day it happens, which is what opens the health issue.
+    """
+    failures = doc.get("fetch_failures") or {}
+    rep.info["fetch_failures"] = dict(failures)
+    for prov, reason in sorted(failures.items()):
+        rep.warn(f"provider {prov!r} was not fetched this run ({reason}); "
+                 "its scenes are the previous catalog's cached copy")
 
 
 def _coords(geom: dict):

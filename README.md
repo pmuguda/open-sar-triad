@@ -549,6 +549,12 @@ Step 5 above runs `scripts/validate_catalog.py` **before** the commit. The catal
 - no provider may fall more than 15%, or disappear entirely
 - an *identical* scene set raises a warning, because that is what a silent fallback looks like — the failure that once froze the catalog at 14,733 for weeks while every run reported success
 
+**Fetch failures** (from the catalog header):
+
+- `fetch_catalog.py` retries a dropped connection or a 5xx three times with backoff, and if a provider still cannot be fetched it serves that provider's scenes from the previous catalog and records the provider and the reason under `fetch_failures` in the header. The validator turns each entry into a warning the same day, which is what opens the health issue. Before this the fallback was a line in the fetch log, the run stayed green, and the first visible sign was the provider's `first_seen` going stale three weeks later
+- a provider published as several files (Capella has seven) is fetched whole or not at all. Merging the files that did arrive produced a smaller catalog with nothing recording why: acquisitions that live only in the missing file vanished, and every other scene lost that format from its product list
+- serving the cache does not fail the run, because failing would block the commit and withhold the other providers' new scenes over one provider's bad minute. Recording it is what makes exiting zero acceptable
+
 **Acquisition recency** (per provider, from the scene dates):
 
 - how old the newest *imagery* is, which is a different question from how recently we took a record in. They come apart on a backfill: in October 2026 ICEYE and Capella both ingested records overnight, so every ingestion check read healthy, while the newest acquisition in the catalog was 30 to 42 days old and nothing had actually been published for a month

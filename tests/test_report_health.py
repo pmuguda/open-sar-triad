@@ -320,3 +320,37 @@ def test_a_red_test_run_opens_an_issue_naming_the_suite():
                   on_error_note="`main` does not pass its own tests."), gh)
     assert gh.created[0]["title"].startswith("Test suite failing")
     assert "does not pass its own tests" in gh.created[0]["body"]
+
+
+# --------------------------------------------------------------------------- #
+# A provider the fetch could not reach
+# --------------------------------------------------------------------------- #
+UNFETCHED = report(
+    warnings=["provider 'umbra' was not fetched this run (umbra.parquet: could "
+              "not download (timed out)); its scenes are the previous catalog's "
+              "cached copy"],
+    total=14951, by_provider={"umbra": 11904},
+    fetch_failures={"umbra": "umbra.parquet: could not download (timed out)"})
+
+
+def test_an_unfetched_provider_is_named_in_the_title():
+    gh = FakeGitHub()
+    rh.run(UNFETCHED, gh)
+    assert "umbra" in gh.created[0]["title"]
+    assert "could not be fetched" in gh.created[0]["title"]
+
+
+def test_a_fetch_failure_outranks_a_stale_provider():
+    """The failure is today's, with a reason; the stall is a three-week-old
+    symptom that may well be the same thing."""
+    both = {**UNFETCHED, "provider_freshness": STALE["provider_freshness"],
+            "warnings": UNFETCHED["warnings"] + STALE["warnings"]}
+    gh = FakeGitHub()
+    rh.run(both, gh)
+    assert "could not be fetched" in gh.created[0]["title"]
+
+
+def test_the_reason_reaches_the_body():
+    gh = FakeGitHub()
+    rh.run(UNFETCHED, gh)
+    assert "timed out" in gh.created[0]["body"]

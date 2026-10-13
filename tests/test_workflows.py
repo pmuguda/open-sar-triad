@@ -100,3 +100,13 @@ def test_the_reporting_job_watches_every_other_job():
         f"report waits on {doc['jobs']['report']['needs']} but the workflow "
         f"also has {sorted(others)}"
     )
+
+
+def test_the_ingest_names_the_step_that_died():
+    """The synthesised report, for a run that left no validation.json, must
+    blame the right script. It used to know fetch and validate; a crash in the
+    classify step in between was reported as a validator crash."""
+    text = (WF / "fetch-data.yml").read_text()
+    assert "steps.fetch.outcome" in text
+    assert "steps.classify.outcome" in text
+    assert "classify_scenes.py failed" in text
