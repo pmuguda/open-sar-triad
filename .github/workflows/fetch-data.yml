@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: write
       issues: write        # the health reporter opens and closes one issue
+      actions: write       # to dispatch the deploy after pushing the catalog
 
     steps:
       - uses: actions/checkout@v4
@@ -51,16 +52,33 @@ jobs:
           if-no-files-found: ignore
 
       - name: Commit updated data
+        id: commit
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/scenes.geojson
           if git diff --cached --quiet; then
             echo "No changes to commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: update SAR scene data [$(date -u '+%Y-%m-%d')]"
             git push
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # The push above does not deploy. GitHub never starts push-triggered
+      # workflows for commits made with the workflow's own GITHUB_TOKEN, so for
+      # as long as this job relied on deploy.yml "picking up the push", the new
+      # catalog only reached the site when a person happened to push code
+      # afterwards. The week nobody did, the site served the old count while
+      # the repository, the ingest and every check on it read healthy.
+      # workflow_dispatch is the one event that token may raise, so raise it.
+      - name: Deploy the new catalog
+        id: deploy
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main
 
       # The point of this job is that you never have to come and look at it.
       # It runs on success and on failure: a crash in fetch or validate leaves
@@ -83,6 +101,24 @@ jobs:
           pathlib.Path("/tmp/validation.json").write_text(json.dumps({
               "ok": False, "errors": [sys.argv[1]], "warnings": [],
           }))
+          PY
+          fi
+          # A catalog that was committed but never sent to the site is the
+          # failure above all over again, so a failed dispatch is an error in
+          # the report rather than only a red step.
+          if [ "${{ steps.deploy.outcome }}" = "failure" ]; then
+            python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("/tmp/validation.json")
+          rep = json.loads(p.read_text())
+          rep["ok"] = False
+          rep.setdefault("errors", []).append(
+              "the new catalog was pushed but dispatching deploy.yml failed, "
+              "so the site is still serving the previous catalog. Run the "
+              "Deploy workflow by hand.")
+          rep.setdefault("on_error_note",
+              "The catalog **was committed** but is not on the site yet.")
+          p.write_text(json.dumps(rep))
           PY
           fi
           python scripts/report_health.py --report /tmp/validation.json

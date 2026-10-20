@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write       # to dispatch the deploy after pushing usage.json
 
     steps:
       - uses: actions/checkout@v4
@@ -37,9 +38,11 @@ jobs:
         run: python scripts/fetch_gsc.py
 
       - name: Commit updated usage data
+        id: commit
         run: |
           if [ ! -f data/usage.json ]; then
             echo "No usage.json produced (not configured); nothing to commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
@@ -47,7 +50,18 @@ jobs:
           git add data/usage.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: update usage stats [$(date -u '+%Y-%m-%d')]"
             git push
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # Same reason as in fetch-data.yml: a push made with GITHUB_TOKEN starts
+      # no push-triggered workflow, so the site's visitor counts only moved when
+      # someone pushed code. Dispatch the deploy explicitly.
+      - name: Deploy the new usage data
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

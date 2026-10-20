@@ -110,3 +110,36 @@ def test_the_ingest_names_the_step_that_died():
     assert "steps.fetch.outcome" in text
     assert "steps.classify.outcome" in text
     assert "classify_scenes.py failed" in text
+
+
+# --------------------------------------------------------------------------- #
+# A push made with GITHUB_TOKEN deploys nothing
+# --------------------------------------------------------------------------- #
+# GitHub never starts push-triggered workflows for commits a workflow makes
+# with its own token. The weekly catalog was committed every Monday and reached
+# the site only when a person pushed code afterwards; the week nobody did, the
+# site served the old count while everything upstream of it read healthy. The
+# fetch workflows therefore dispatch the deploy themselves.
+@pytest.mark.parametrize("workflow", ["fetch-data.yml", "fetch-usage.yml"])
+def test_a_workflow_that_pushes_data_dispatches_the_deploy(workflow):
+    text = (WF / workflow).read_text()
+    assert "gh workflow run deploy.yml" in text, \
+        f"{workflow} pushes a commit the deploy will never see"
+
+
+@pytest.mark.parametrize("workflow", ["fetch-data.yml", "fetch-usage.yml"])
+def test_the_dispatching_job_may_dispatch(workflow):
+    doc = load(workflow)
+    perms = [(j.get("permissions") or {}) for j in doc["jobs"].values()]
+    assert any(p.get("actions") == "write" for p in perms), \
+        f"{workflow} cannot dispatch a workflow without actions: write"
+
+
+def test_the_deploy_accepts_a_dispatch():
+    assert "workflow_dispatch" in triggers(load("deploy.yml"))
+
+
+def test_a_failed_dispatch_reaches_the_ingest_report():
+    text = (WF / "fetch-data.yml").read_text()
+    assert "steps.deploy.outcome" in text
+    assert "dispatching deploy.yml failed" in text

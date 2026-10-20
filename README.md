@@ -528,7 +528,9 @@ Steps performed by the workflow:
 3. Install `requirements.txt`.
 4. Run `scripts/fetch_catalog.py`.
 5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
-6. The deploy workflow then picks up the push and publishes the updated catalog to GitHub Pages.
+6. Dispatch the deploy workflow, which publishes the updated catalog to GitHub Pages.
+
+Step 6 is explicit because the push alone does nothing: GitHub never starts push-triggered workflows for commits made with a workflow's own `GITHUB_TOKEN`. For as long as this job relied on the deploy "picking up the push", the new catalog only reached the site when a person pushed code afterwards. The week nobody did, the site kept serving the previous count while the repository, the ingest and every check on it read healthy. `workflow_dispatch` is the one event that token may raise, so both this workflow and the daily usage-stats workflow raise it after they push, and a dispatch that fails is reported as an ingest error rather than left as a red step.
 
 ### Validation gates the commit
 
