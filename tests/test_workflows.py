@@ -33,6 +33,7 @@ def triggers(doc):
 @pytest.mark.parametrize("workflow, label", [
     ("fetch-data.yml", "catalog-health"),
     ("deploy.yml", "site-health"),
+    ("site-check.yml", "site-health"),
     ("tests.yml", "tests-health"),
 ])
 def test_each_workflow_reports_its_health(workflow, label):
@@ -42,7 +43,7 @@ def test_each_workflow_reports_its_health(workflow, label):
         assert f"--label {label}" in text, f"{workflow} reports under the wrong label"
 
 
-@pytest.mark.parametrize("workflow", ["fetch-data.yml", "deploy.yml", "tests.yml"])
+@pytest.mark.parametrize("workflow", ["fetch-data.yml", "deploy.yml", "tests.yml", "site-check.yml"])
 def test_the_reporting_job_can_grant_itself_issue_write(workflow):
     doc = load(workflow)
     perms = [doc.get("permissions") or {}]
@@ -51,7 +52,7 @@ def test_the_reporting_job_can_grant_itself_issue_write(workflow):
         f"{workflow} cannot open an issue"
 
 
-@pytest.mark.parametrize("workflow", ["fetch-data.yml", "deploy.yml", "tests.yml"])
+@pytest.mark.parametrize("workflow", ["fetch-data.yml", "deploy.yml", "tests.yml", "site-check.yml"])
 def test_health_is_reported_even_when_the_run_failed(workflow):
     """A reporter that only runs on success cannot report a failure.
 
@@ -143,3 +144,16 @@ def test_a_failed_dispatch_reaches_the_ingest_report():
     text = (WF / "fetch-data.yml").read_text()
     assert "steps.deploy.outcome" in text
     assert "dispatching deploy.yml failed" in text
+
+
+def test_the_site_is_checked_against_main_on_a_schedule():
+    """The one check that does not depend on how a commit reached main.
+
+    Every other check stops at the commit; a commit that was never deployed is
+    invisible to all of them. This compares the published build with the tip of
+    main once a day, whatever did or did not trigger a deploy."""
+    doc = load("site-check.yml")
+    assert "schedule" in triggers(doc)
+    text = (WF / "site-check.yml").read_text()
+    assert "verify_deploy.py" in text
+    assert "--commit" in text, "without the commit the count alone cannot tell a stale build"

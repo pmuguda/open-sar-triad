@@ -1,0 +1,67 @@
+name: Check the site matches main
+
+# Every other check in this repository stops at the commit. The ingest verifies
+# the catalog it commits, the deploy verifies the build it publishes, and the
+# health reporter relays both. None of them can see a commit that was never
+# deployed, which is how the site served 14,951 scenes for a week while main
+# held 15,001: the Monday commit was made with the workflow's own token, which
+# starts no push-triggered workflow, and nobody pushed code that week.
+#
+# This is the check that does not depend on how the commit got there. Once a
+# day it asks the published site which commit it was built from and compares
+# that with the tip of main. A disagreement opens the site-health issue; the
+# next matching day closes it.
+#
+# Daily rather than hourly because the usage workflow commits every morning
+# and its deploy needs a few minutes to land; two hours later is comfortably
+# after that and well inside the same day.
+
+on:
+  schedule:
+    - cron: '23 6 * * *'    # daily, two hours after the usage commit at 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write        # the health reporter opens and closes one issue
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # GITHUB_SHA on a schedule is the tip of the default branch, which is what
+      # the site should have been built from.
+      - name: Compare the published build with main
+        id: verify
+        run: |
+          python scripts/verify_deploy.py \
+            --url https://pmuguda.github.io/open-sar-triad \
+            --cache-bust "${{ github.run_id }}" \
+            --commit "${{ github.sha }}" \
+            --json /tmp/site-health.json
+
+      - name: Report site health
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f /tmp/site-health.json ]; then
+            python - <<'PY'
+          import json, pathlib
+          pathlib.Path("/tmp/site-health.json").write_text(json.dumps({
+              "ok": False, "warnings": [],
+              "errors": ["scripts/verify_deploy.py did not produce a report; it likely crashed"],
+              "subject": "Site deploy",
+              "on_error_note": "The site could not be checked against the repository.",
+          }))
+          PY
+          fi
+          python scripts/report_health.py \
+            --report /tmp/site-health.json --label site-health

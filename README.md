@@ -530,6 +530,8 @@ Steps performed by the workflow:
 5. If `data/scenes.geojson` has changed, commit the file with the message `chore: update SAR scene data [YYYY-MM-DD]` and push to `main`.
 6. Dispatch the deploy workflow, which publishes the updated catalog to GitHub Pages.
 
+Independently of step 6, `.github/workflows/site-check.yml` asks the published site once a day which commit it was built from and compares that with the tip of `main`, reporting under the same `site-health` issue as the deploy. It is the one check that does not depend on how a commit reached `main` or on what did or did not trigger a deploy, so a repeat of the failure below is caught within a day whatever its cause.
+
 Step 6 is explicit because the push alone does nothing: GitHub never starts push-triggered workflows for commits made with a workflow's own `GITHUB_TOKEN`. For as long as this job relied on the deploy "picking up the push", the new catalog only reached the site when a person pushed code afterwards. The week nobody did, the site kept serving the previous count while the repository, the ingest and every check on it read healthy. `workflow_dispatch` is the one event that token may raise, so both this workflow and the daily usage-stats workflow raise it after they push, and a dispatch that fails is reported as an ingest error rather than left as a red step.
 
 ### Validation gates the commit
