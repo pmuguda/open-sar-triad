@@ -38,3 +38,5 @@ data/.ne-cache/
 # Elevation tiles, downloaded on demand by scripts/classify_scenes.py.
 data/.dem-cache/
 dist/
+# The plugin ships a synced copy of the Python client; it must be committed.
+!qgis/open_sar_triad/vendor/
