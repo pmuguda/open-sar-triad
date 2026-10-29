@@ -170,3 +170,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" dist/open_sar_triad-*.zip --clobber
+
+      # Publishing to plugins.qgis.org is what makes the plugin appear in the
+      # QGIS plugin manager's search. It needs an OSGeo account, stored as the
+      # OSGEO_USERNAME and OSGEO_PASSWORD repository secrets; without them the
+      # release still carries the ZIP and this step says what is missing
+      # instead of failing. The first upload of a new plugin waits for the
+      # repository's maintainers to approve it; later versions appear at once.
+      - name: Publish to the QGIS plugin repository
+        env:
+          OSGEO_USERNAME: ${{ secrets.OSGEO_USERNAME }}
+          OSGEO_PASSWORD: ${{ secrets.OSGEO_PASSWORD }}
+        run: |
+          python scripts/upload_qgis_plugin.py dist/open_sar_triad-*.zip --dry-run
+          if [ -z "$OSGEO_USERNAME" ] || [ -z "$OSGEO_PASSWORD" ]; then
+            echo "::notice::OSGEO_USERNAME/OSGEO_PASSWORD secrets are not set, so the plugin was not uploaded to plugins.qgis.org. Add them (an OSGeo user id from https://id.osgeo.org) and re-run this workflow, or upload dist/open_sar_triad-*.zip by hand at https://plugins.qgis.org/plugins/add/."
+            exit 0
+          fi
+          python scripts/upload_qgis_plugin.py dist/open_sar_triad-*.zip

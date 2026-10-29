@@ -388,3 +388,58 @@ def test_no_unscoped_qt_enums(path):
     code = "\n".join(line.split("#", 1)[0] for line in (ROOT / path).read_text().splitlines())
     hits = [m.group(0) for pat in UNSCOPED for m in re.finditer(pat, code)]
     assert not hits, f"{path}: Qt6 rejects unscoped enums: {hits}"
+
+
+# --------------------------------------------------------------------------- #
+# Publishing to plugins.qgis.org
+# --------------------------------------------------------------------------- #
+uspec = importlib.util.spec_from_file_location("upload_qgis_plugin", ROOT / "scripts" / "upload_qgis_plugin.py")
+uploader = importlib.util.module_from_spec(uspec)
+uspec.loader.exec_module(uploader)
+
+
+def test_the_package_carries_a_licence_as_the_repository_requires(tmp_path):
+    names = zipfile.ZipFile(build.build_zip(tmp_path)).namelist()
+    assert "open_sar_triad/LICENSE" in names
+    assert (PLUGIN / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes()
+
+
+def test_the_uploader_accepts_our_own_package(tmp_path):
+    assert uploader.check_zip(build.build_zip(tmp_path)) == "open_sar_triad"
+
+
+@pytest.mark.parametrize("missing", ["metadata.txt", "__init__.py", "LICENSE"])
+def test_the_uploader_refuses_a_package_missing_a_required_file(tmp_path, missing):
+    """Better to be refused here than by the repository after a release."""
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        for name in ("metadata.txt", "__init__.py", "LICENSE"):
+            if name != missing:
+                zf.writestr(f"open_sar_triad/{name}", "x")
+    with pytest.raises(SystemExit, match=missing):
+        uploader.check_zip(bad)
+
+
+def test_the_uploader_refuses_two_top_level_folders(tmp_path):
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("open_sar_triad/metadata.txt", "x")
+        zf.writestr("other/metadata.txt", "x")
+    with pytest.raises(SystemExit, match="one top-level folder"):
+        uploader.check_zip(bad)
+
+
+def test_the_uploader_takes_credentials_from_the_environment_only(tmp_path, monkeypatch, capsys):
+    """Never from arguments: those end up in shell history and workflow logs."""
+    monkeypatch.delenv("OSGEO_USERNAME", raising=False)
+    monkeypatch.delenv("OSGEO_PASSWORD", raising=False)
+    monkeypatch.setattr(sys, "argv", ["upload", str(build.build_zip(tmp_path))])
+    assert uploader.main() == 1
+    assert "OSGEO_USERNAME" in capsys.readouterr().err
+    assert "--user" not in (ROOT / "scripts" / "upload_qgis_plugin.py").read_text()
+
+
+def test_a_release_publishes_to_the_plugin_repository():
+    text = (ROOT / ".github" / "workflows" / "publish.yml").read_text()
+    assert "upload_qgis_plugin.py" in text
+    assert "secrets.OSGEO_USERNAME" in text and "secrets.OSGEO_PASSWORD" in text

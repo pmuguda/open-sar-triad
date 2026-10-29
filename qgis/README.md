@@ -65,6 +65,35 @@ family and resolves the format each scene actually publishes:
 | phase | CPHD |
 | visual | CSI or VID |
 
+## Publishing to the QGIS plugin repository
+
+Being listed at [plugins.qgis.org](https://plugins.qgis.org) is what makes the
+plugin appear when someone searches the QGIS plugin manager. Uploads there are
+tied to an OSGeo account, so this is the one step the repository cannot do on
+its own. Once:
+
+1. Create an OSGeo user id at https://id.osgeo.org if you do not have one.
+2. In this repository's settings, add two Actions secrets: `OSGEO_USERNAME`
+   and `OSGEO_PASSWORD`.
+
+Then every release tagged `qgis-v<version>` builds the ZIP, attaches it to
+the release, and uploads it to plugins.qgis.org (`publish.yml`, via
+`scripts/upload_qgis_plugin.py`). Without the secrets the release still
+carries the ZIP and the workflow says what is missing.
+
+The first upload of a new plugin is reviewed by the repository's maintainers
+before it is listed; that can take a few days. Later versions appear
+immediately. The version in `metadata.txt` must be new for every upload and
+must match the release tag, which the workflow checks.
+
+To upload by hand instead: https://plugins.qgis.org/plugins/add/ with
+`dist/open_sar_triad-<version>.zip`.
+
+The package meets the repository's requirements: `metadata.txt` with
+homepage, tracker and repository links, `LICENSE` inside the package (a copy
+of the repository's, kept in sync by the build script), no binaries, well
+under 20 MB, and `supportsQt6` declared and tested.
+
 ## How it is built
 
 `qgis/open_sar_triad/` is the plugin. `vendor/client.py` is a byte-for-byte

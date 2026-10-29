@@ -4,7 +4,9 @@ Packages the QGIS plugin.
 
 Two jobs:
 
-  sync   copy python/opensartriad/client.py into the plugin's vendor/ folder.
+  sync   copy python/opensartriad/client.py into the plugin's vendor/ folder,
+         and the repository LICENSE into the plugin (the plugin repository
+         requires one inside the package).
          QGIS plugins cannot pip-install, so the client ships inside the
          plugin, and the only sane way to keep two copies honest is to make
          one of them mechanically derived from the other. ``--check`` reports
@@ -32,6 +34,10 @@ ROOT = Path(__file__).parent.parent
 PLUGIN = ROOT / "qgis" / "open_sar_triad"
 SOURCE = ROOT / "python" / "opensartriad" / "client.py"
 VENDORED = PLUGIN / "vendor" / "client.py"
+#: plugins.qgis.org requires a LICENSE file inside the package, so the
+#: repository's licence is copied in alongside the client.
+LICENSE = ROOT / "LICENSE"
+PLUGIN_LICENSE = PLUGIN / "LICENSE"
 DIST = ROOT / "dist"
 
 #: Never shipped: caches, compiled files, editor leftovers.
@@ -46,11 +52,13 @@ def version() -> str:
 
 
 def vendor_is_current() -> bool:
-    return VENDORED.exists() and VENDORED.read_bytes() == SOURCE.read_bytes()
+    return (VENDORED.exists() and VENDORED.read_bytes() == SOURCE.read_bytes()
+            and PLUGIN_LICENSE.exists() and PLUGIN_LICENSE.read_bytes() == LICENSE.read_bytes())
 
 
 def sync() -> None:
     VENDORED.write_bytes(SOURCE.read_bytes())
+    PLUGIN_LICENSE.write_bytes(LICENSE.read_bytes())
 
 
 def plugin_files():
