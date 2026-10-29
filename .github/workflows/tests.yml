@@ -126,7 +126,13 @@ jobs:
   # ships Python with QGIS bindings and no pytest, hence the pip line.
   qgis-plugin:
     runs-on: ubuntu-latest
-    container: qgis/qgis:release-3_34
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the plugin declares, the current 3.x long-term release,
+        # and QGIS 4, which is Qt6-only and rejects unscoped Qt enums.
+        qgis: ["release-3_22", "3.44.15", "4.0.3", "4.2.3"]
+    container: qgis/qgis:${{ matrix.qgis }}
     env:
       QT_QPA_PLATFORM: offscreen
       OST_REQUIRE_QGIS: "1"    # a broken qgis import fails here rather than skips

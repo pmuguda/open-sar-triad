@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from qgis.core import (
+    Qgis,
     QgsAction,
     QgsCategorizedSymbolRenderer,
     QgsFeature,
@@ -15,14 +16,21 @@ from qgis.core import (
     QgsRendererCategory,
     QgsVectorLayer,
 )
-from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QColor
 
 from .records import FIELDS, PROVIDER_COLOURS, PROVIDER_LABELS
 
 LAYER_NAME = "Open SAR Triad scenes"
 
-_QT_TYPES = {"string": QVariant.String, "double": QVariant.Double}
+# Field types. QGIS 3.38 moved QgsField from QVariant.Type to QMetaType.Type,
+# and the Qt6 builds (QGIS 4) have no unscoped QVariant.String at all, so the
+# type is chosen by the running version rather than written once.
+if Qgis.QGIS_VERSION_INT >= 33800:
+    from qgis.PyQt.QtCore import QMetaType
+    _QT_TYPES = {"string": QMetaType.Type.QString, "double": QMetaType.Type.Double}
+else:
+    from qgis.PyQt.QtCore import QVariant
+    _QT_TYPES = {"string": QVariant.Type.String, "double": QVariant.Type.Double}
 
 
 def _fields() -> QgsFields:
@@ -39,7 +47,7 @@ def _renderer() -> QgsCategorizedSymbolRenderer:
         fill = QColor(colour)
         fill.setAlpha(40)
         symbol = QgsFillSymbol.createSimple({
-            "color": fill.name(QColor.HexArgb),
+            "color": fill.name(QColor.NameFormat.HexArgb),
             "outline_color": colour,
             "outline_width": "0.5",
         })
@@ -51,7 +59,8 @@ def _actions(layer: QgsVectorLayer) -> None:
     """Right-click actions on a feature: open it in the web app or its thumbnail."""
     mgr = layer.actions()
     for title, field in (("Open in the web app", "web_url"), ("Open thumbnail", "thumbnail")):
-        action = QgsAction(QgsAction.OpenUrl, title, f'[% "{field}" %]', "", False, "", {"Feature", "Canvas"})
+        action = QgsAction(QgsAction.ActionType.OpenUrl, title, f'[% "{field}" %]',
+                           "", False, "", {"Feature", "Canvas"})
         mgr.addAction(action)
 
 

@@ -26,7 +26,7 @@ class SearchTask(QgsTask):
     """Run a catalog search and resolve each hit to a full record."""
 
     def __init__(self, catalog: Catalog, filters: dict, on_done):
-        super().__init__("Open SAR Triad: searching the catalog", QgsTask.CanCancel)
+        super().__init__("Open SAR Triad: searching the catalog", QgsTask.Flag.CanCancel)
         self.catalog, self.filters, self.on_done = catalog, filters, on_done
         self.scenes = []
         self.records: list[dict] = []
@@ -60,7 +60,7 @@ class DownloadTask(QgsTask):
     """
 
     def __init__(self, jobs: list[dict], dest: Path, on_done):
-        super().__init__(f"Open SAR Triad: downloading {len(jobs)} file(s)", QgsTask.CanCancel)
+        super().__init__(f"Open SAR Triad: downloading {len(jobs)} file(s)", QgsTask.Flag.CanCancel)
         self.jobs, self.dest, self.on_done = jobs, Path(dest), on_done
         self.written: list[Path] = []
         self.failed: list[str] = []

@@ -363,3 +363,28 @@ def test_the_plugin_loads_toggles_and_unloads_cleanly(qgs):
     plugin.unload()
     assert not iface.toolbar and not iface.menu and not iface.docks
     assert plugin.dock is None and plugin.action is None
+
+
+# --------------------------------------------------------------------------- #
+# Qt6 readiness (QGIS 4 is Qt6-only, and PyQt6 accepts scoped enums only)
+# --------------------------------------------------------------------------- #
+#: Unscoped spellings that load fine on Qt5 and raise AttributeError on QGIS 4.
+#: The scoped forms work on both, so there is no reason to ever write these.
+UNSCOPED = [
+    r"\bQVariant\.(String|Double|Int|Bool)\b",
+    r"\bQMessageBox\.(Yes|No|Ok|Cancel)\b",
+    r"\bQt\.(Left|Right|Top|Bottom)DockWidgetArea\b",
+    r"\bQgsTask\.(CanCancel|CancelWithoutPrompt|Hidden)\b",
+    r"\bQgsAction\.(OpenUrl|GenericPython|Mac|Windows|Unix)\b",
+    r"\bQColor\.Hex(Rgb|Argb)\b",
+    r"\bQgis\.(Info|Warning|Critical|Success)\b",
+    r"pushMessage\([^)]*level=\d",          # ints no longer coerce to enums
+]
+
+
+@pytest.mark.parametrize("path", sorted(p.relative_to(ROOT) for p in PLUGIN.rglob("*.py")))
+def test_no_unscoped_qt_enums(path):
+    # Comments may name the unscoped form to explain why it is avoided.
+    code = "\n".join(line.split("#", 1)[0] for line in (ROOT / path).read_text().splitlines())
+    hits = [m.group(0) for pat in UNSCOPED for m in re.finditer(pat, code)]
+    assert not hits, f"{path}: Qt6 rejects unscoped enums: {hits}"

@@ -16,6 +16,7 @@ icon=icon.png
 experimental=False
 deprecated=False
 hasProcessingProvider=no
+supportsQt6=True
 
 changelog=
     1.0.0 First release: search, footprint layer, product download.

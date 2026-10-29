@@ -11,6 +11,7 @@ stand-in with those three.
 from __future__ import annotations
 
 from qgis.core import (
+    Qgis,
     QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
@@ -291,7 +292,7 @@ class OpenSarTriadDock(QDockWidget):
             f"{data_n} product file(s) plus {len(jobs) - data_n} metadata file(s) from "
             f"{len(chosen)} scene(s).\n\nSAR products are large; a single file can exceed "
             f"1 GB. Continue?")
-        if answer != QMessageBox.Yes:
+        if answer != QMessageBox.StandardButton.Yes:
             return
         dest = QFileDialog.getExistingDirectory(self, "Download into")
         if not dest:
@@ -314,6 +315,8 @@ class OpenSarTriadDock(QDockWidget):
     def _message(self, text: str, level: int = 0) -> None:
         bar = self.iface.messageBar() if self.iface else None
         if bar is not None:
-            bar.pushMessage("Open SAR Triad", text, level=level, duration=8)
+            # A real enum, not the integer: Qt6 builds no longer coerce ints.
+            levels = (Qgis.MessageLevel.Info, Qgis.MessageLevel.Warning, Qgis.MessageLevel.Critical)
+            bar.pushMessage("Open SAR Triad", text, level=levels[level], duration=8)
         else:
             self.result.setText(text)

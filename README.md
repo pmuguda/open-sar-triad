@@ -731,7 +731,7 @@ The same catalog inside QGIS: filter by provider, date, sensor mode, polarizatio
 
 <p align="center"><img src="assets/qgis-dock.png" alt="The Open SAR Triad dock panel in QGIS" width="420"></p>
 
-Install from a ZIP (Plugins › Manage and Install Plugins › Install from ZIP) using the `open_sar_triad-<version>.zip` attached to each `qgis-v*` release, or build one from a checkout with `python3 scripts/build_qgis_plugin.py`. Needs QGIS 3.22 or newer.
+Install from a ZIP (Plugins › Manage and Install Plugins › Install from ZIP) using the `open_sar_triad-<version>.zip` attached to each `qgis-v*` release, or build one from a checkout with `python3 scripts/build_qgis_plugin.py`. Needs QGIS 3.22 or newer, including QGIS 4; CI runs the plugin's tests inside 3.22, 3.44, 4.0 and 4.2.
 
 The plugin lives in `qgis/open_sar_triad/` and is documented in [qgis/README.md](qgis/README.md). Its `vendor/client.py` is a byte-for-byte copy of `python/opensartriad/client.py`, refreshed by the build script and checked by the test suite, so the plugin and the pip package can never disagree about what a search means. Network work runs in QGIS tasks so the window never freezes. The part that decides what the attribute table shows has no QGIS dependency and is tested on plain Python; the rest is tested headlessly inside a QGIS container in CI.
 

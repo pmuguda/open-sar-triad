@@ -24,8 +24,10 @@ same way.
 python3 scripts/build_qgis_plugin.py       # writes dist/open_sar_triad-<version>.zip
 ```
 
-Needs QGIS 3.22 or newer. Nothing else: the Python client the plugin uses ships
-inside it.
+Needs QGIS 3.22 or newer, including the Qt6-based QGIS 4. Nothing else: the
+Python client the plugin uses ships inside it. CI runs the plugin's tests
+inside QGIS 3.22, the 3.44 long-term release, 4.0 and 4.2, so a change that
+breaks one of them cannot land on main.
 
 ## Use
 

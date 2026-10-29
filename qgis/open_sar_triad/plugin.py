@@ -6,7 +6,11 @@ import os
 
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+
+try:                                    # Qt6 (QGIS 4) moved QAction to QtGui
+    from qgis.PyQt.QtGui import QAction
+except ImportError:                     # Qt5 (QGIS 3) has it in QtWidgets
+    from qgis.PyQt.QtWidgets import QAction
 
 from .dock import OpenSarTriadDock
 
@@ -41,6 +45,6 @@ class OpenSarTriadPlugin:
     def toggle(self, checked: bool) -> None:
         if self.dock is None:
             self.dock = OpenSarTriadDock(self.iface, self.iface.mainWindow())
-            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
             self.dock.visibilityChanged.connect(self.action.setChecked)
         self.dock.setVisible(checked)
