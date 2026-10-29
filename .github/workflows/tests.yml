@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/**'
       - 'python/**'
+      - 'qgis/**'
       - 'tests/**'
       - '.github/workflows/tests.yml'
   pull_request:
@@ -119,8 +120,29 @@ jobs:
   # Pull requests are excluded deliberately. A contributor's failing PR is not a
   # problem with main, and a fork's token has no issues:write anyway, so firing
   # here would be noise at best and a confusing failure at worst.
+  # The QGIS plugin, inside a real QGIS. The plain test job covers the plugin's
+  # packaging and record builder but skips everything that needs qgis.core;
+  # without this job that skip would be the plugin's only coverage. The image
+  # ships Python with QGIS bindings and no pytest, hence the pip line.
+  qgis-plugin:
+    runs-on: ubuntu-latest
+    container: qgis/qgis:release-3_34
+    env:
+      QT_QPA_PLATFORM: offscreen
+      OST_REQUIRE_QGIS: "1"    # a broken qgis import fails here rather than skips
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: python3 -m pip install --break-system-packages pytest
+
+      - name: Run the plugin tests inside QGIS
+        run: |
+          python3 -c "from qgis.core import Qgis; print('QGIS', Qgis.QGIS_VERSION)"
+          python3 -m pytest tests/test_qgis_plugin.py -q -p no:cacheprovider -rs
+
   report:
-    needs: [test, build-api]
+    needs: [test, build-api, qgis-plugin]
     if: ${{ always() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
@@ -139,12 +161,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build-api.result }}
+          QGIS_RESULT: ${{ needs.qgis-plugin.result }}
         run: |
           python - <<'PY'
           import json, os, pathlib
 
           jobs = {"the test matrix (3.9, 3.11, 3.12)": os.environ["TEST_RESULT"],
-                  "the API build from the real catalog": os.environ["BUILD_RESULT"]}
+                  "the API build from the real catalog": os.environ["BUILD_RESULT"],
+                  "the QGIS plugin tests": os.environ["QGIS_RESULT"]}
           # "skipped" is not a failure; "cancelled" is not worth waking anyone.
           bad = {n: r for n, r in jobs.items() if r not in ("success", "skipped", "cancelled")}
 

@@ -1,0 +1,21 @@
+[general]
+name=Open SAR Triad
+qgisMinimumVersion=3.22
+description=Search, map and download open SAR scenes from ICEYE, Umbra and Capella
+about=Brings the open-sar-triad catalog into QGIS. Filter 15,000 open synthetic aperture radar scenes by provider, date, sensor mode, polarization, orbit, look direction, land use and the current map extent; add the matching footprints as a styled layer; download the products you select straight from the providers' own storage. The catalog is a static STAC API rebuilt weekly from the providers' open data programs, so the plugin needs no account and no key. Scene metadata is CC-BY 4.0; imagery stays on the providers' storage under their terms.
+version=1.0.0
+author=Pavan Muguda Sanjeevamurthy
+email=sunag.pavan23@gmail.com
+
+homepage=https://www.pmuguda.com/open-sar-triad/
+tracker=https://github.com/pmuguda/open-sar-triad/issues
+repository=https://github.com/pmuguda/open-sar-triad
+tags=sar,radar,satellite,iceye,umbra,capella,stac,open data,remote sensing,earth observation,download
+category=Web
+icon=icon.png
+experimental=False
+deprecated=False
+hasProcessingProvider=no
+
+changelog=
+    1.0.0 First release: search, footprint layer, product download.

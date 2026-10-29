@@ -54,6 +54,7 @@ open-sar-triad works on both desktop and mobile browsers. The desktop layout pro
 - [Security Notes](#security-notes)
 - [Automated Data Refresh](#automated-data-refresh)
 - [API and Python client](#api-and-python-client)
+- [QGIS plugin](#qgis-plugin)
 - [Visitor Map](#visitor-map)
 - [Dependencies](#dependencies)
 - [Citation](#citation)
@@ -208,8 +209,14 @@ open-sar-triad/
 ├── js/
 │   ├── app.js                  # Main application logic
 │   └── tour.js                 # Step-by-step onboarding tour
+├── python/
+│   └── opensartriad/           # Python client (published to PyPI as open-sar-triad)
+├── qgis/
+│   └── open_sar_triad/         # QGIS plugin; vendor/ holds a synced copy of the client
 ├── scripts/
-│   └── fetch_catalog.py        # Data pipeline: downloads Parquet, outputs GeoJSON
+│   ├── fetch_catalog.py        # Data pipeline: downloads Parquet, outputs GeoJSON
+│   ├── build_api.py            # Static STAC API under api/v1/ (built on deploy)
+│   └── build_qgis_plugin.py    # Syncs the vendored client and zips the plugin
 ├── index.html                  # Application shell and UI layout
 ├── manifest.json               # PWA install metadata
 ├── sw.js                       # Service worker for offline caching
@@ -715,6 +722,18 @@ Product families in the client resolve identically to the web app (`complex` giv
 ### Licence
 
 Scene metadata is **CC-BY 4.0**; every generated file carries its own licence, attribution, modification and disclaimer notice, since any of them can be fetched standalone. Imagery is never redistributed here: asset links point at each provider's own storage. Credit the originating provider when publishing derived work.
+
+---
+
+## QGIS plugin
+
+The same catalog inside QGIS: filter by provider, date, sensor mode, polarization, land use, orbit, look direction and the current map extent; add the matching footprints as a layer coloured by provider; select some and download the products straight from the providers' storage. No account, no key, nothing to install beyond the plugin itself, because the Python client ships inside it.
+
+<p align="center"><img src="assets/qgis-dock.png" alt="The Open SAR Triad dock panel in QGIS" width="420"></p>
+
+Install from a ZIP (Plugins › Manage and Install Plugins › Install from ZIP) using the `open_sar_triad-<version>.zip` attached to each `qgis-v*` release, or build one from a checkout with `python3 scripts/build_qgis_plugin.py`. Needs QGIS 3.22 or newer.
+
+The plugin lives in `qgis/open_sar_triad/` and is documented in [qgis/README.md](qgis/README.md). Its `vendor/client.py` is a byte-for-byte copy of `python/opensartriad/client.py`, refreshed by the build script and checked by the test suite, so the plugin and the pip package can never disagree about what a search means. Network work runs in QGIS tasks so the window never freezes. The part that decides what the attribute table shows has no QGIS dependency and is tested on plain Python; the rest is tested headlessly inside a QGIS container in CI.
 
 ---
 

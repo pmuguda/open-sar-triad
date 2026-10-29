@@ -129,3 +129,44 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # The QGIS plugin ships as a ZIP attached to a qgis-v* release. It versions
+  # on its own, like the client: the tag must match metadata.txt, or the file
+  # people download says one version and the plugin manager another.
+  qgis-plugin:
+    if: github.event_name == 'release' && startsWith(github.ref_name, 'qgis-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # to attach the ZIP to the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check the tag matches metadata.txt
+        run: |
+          VERSION=$(python -c "
+          import configparser
+          c = configparser.ConfigParser(); c.read('qgis/open_sar_triad/metadata.txt')
+          print(c['general']['version'])
+          ")
+          TAG="${GITHUB_REF_NAME#qgis-v}"
+          echo "metadata version: $VERSION"
+          echo "release tag     : $GITHUB_REF_NAME -> $TAG"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match plugin version '$VERSION'"
+            exit 1
+          fi
+
+      - name: Build the plugin ZIP
+        run: |
+          python scripts/build_qgis_plugin.py --check
+          python scripts/build_qgis_plugin.py
+          ls -l dist/
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/open_sar_triad-*.zip --clobber
