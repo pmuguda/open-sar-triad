@@ -133,8 +133,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The image's pip predates --break-system-packages, and a newer image
+      # would refuse without it. The env var is read by the pips that know it
+      # and ignored by the ones that do not.
       - name: Install pytest
-        run: python3 -m pip install --break-system-packages pytest
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: "1"
+        run: python3 -m pip install pytest
 
       - name: Run the plugin tests inside QGIS
         run: |
