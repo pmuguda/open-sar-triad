@@ -436,3 +436,30 @@ def test_the_iceye_pattern_matches_every_id_in_the_committed_catalog():
     assert len(ids) > 500
     unmatched = [i for i in ids if not pb.ICEYE_ID.match(i)]
     assert not unmatched, f"{len(unmatched)} ICEYE ids do not match, e.g. {unmatched[:3]}"
+
+
+# --------------------------------------------------------------------------- #
+# The command line: "has anything new landed?"
+# --------------------------------------------------------------------------- #
+def test_pending_names_what_the_catalog_lacks_without_fetching_it(s3):
+    have = umbra_scene(s3, "t1", "2026-09-13-00-00-00_UMBRA-05", "old")
+    umbra_scene(s3, "t2", "2026-11-10-04-16-54_UMBRA-09", "new", modified="2026-11-10T05:09:00.000Z")
+    features = [{"properties": {"id": "old", "provider": "umbra", "products": {
+        "GEC": pb.public_url("umbra", have.replace(".stac.v2.json", "_GEC.tif"))}}}]
+    result = pb.pending("umbra", features, get=s3, now=NOW)
+    assert result["listed"] == 2
+    assert [k.rpartition("/")[2] for k in result["missing"]] == ["2026-11-10-04-16-54_UMBRA-09.stac.v2.json"]
+    assert s3.object_gets() == [], "answering the question must not download any scene"
+
+
+def test_the_command_reports_per_provider(s3, tmp_path, monkeypatch, capsys):
+    umbra_scene(s3, "t2", "2026-11-10-04-16-54_UMBRA-09", "new")
+    catalog = tmp_path / "scenes.geojson"
+    catalog.write_text(json.dumps({"features": []}))
+    monkeypatch.setattr(pb, "_http_get", s3)
+    monkeypatch.setattr(pb.pending, "__defaults__", (s3, None))
+    monkeypatch.setattr("sys.argv", ["provider_buckets.py", "umbra", "--catalog", str(catalog)])
+    assert pb.main() == 0
+    out = capsys.readouterr().out
+    assert "umbra: 1 scenes in the bucket, 1 not in the catalog" in out
+    assert "2026-11-10-04-16-54_UMBRA-09" in out

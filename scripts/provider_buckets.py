@@ -395,3 +395,65 @@ def prune_missing_products(provider: str, features: list[dict], listing: set[str
             if p.get("download") not in kept.values():
                 p["download"] = next(iter(kept.values()))
     return removed
+
+
+# --------------------------------------------------------------------------- #
+# Command line: what is in the buckets that the catalog does not have?
+# --------------------------------------------------------------------------- #
+def _http_get(url: str, timeout: int = 60) -> bytes:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def pending(provider: str, features: list[dict], get=_http_get, now: datetime | None = None) -> dict:
+    """Scenes a provider's bucket holds that ``features`` does not, without
+    fetching any of them: just the listing and the comparison."""
+    listing = []
+    for prefix in PREFIXES[provider]:
+        listing += list_bucket(BUCKETS[provider], prefix, get)
+    found = discover(provider, listing, now)
+    known = known_keys(provider, features)
+    missing = sorted((k for k in found if k not in known),
+                     key=lambda k: found[k]["modified"], reverse=True)
+    return {"listed": len(found), "missing": missing,
+            "uploaded": {k: found[k]["modified"] for k in missing}}
+
+
+def main() -> int:
+    """Answers "has anything new landed?" without running the ingest."""
+    import argparse
+    from pathlib import Path
+
+    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap.add_argument("providers", nargs="*", default=sorted(BUCKETS), choices=sorted(BUCKETS) + [[]],
+                    help="which buckets to check (default: all three)")
+    ap.add_argument("--catalog", type=Path,
+                    default=Path(__file__).parent.parent / "data" / "scenes.geojson")
+    ap.add_argument("--show", type=int, default=10, help="how many pending scenes to name")
+    args = ap.parse_args()
+
+    feats = json.loads(args.catalog.read_text())["features"] if args.catalog.exists() else []
+    code = 0
+    for provider in args.providers:
+        own = [f for f in feats if (f.get("properties") or {}).get("provider") == provider]
+        try:
+            result = pending(provider, own)
+        except BucketError as e:
+            print(f"{provider}: {e}")
+            code = 1
+            continue
+        missing = result["missing"]
+        print(f"{provider}: {result['listed']:,} scenes in the bucket, "
+              f"{len(missing):,} not in the catalog")
+        for key in missing[:args.show]:
+            print(f"    uploaded {result['uploaded'][key][:16]}  {key.rpartition('/')[2]}")
+        if len(missing) > args.show:
+            print(f"    ... and {len(missing) - args.show:,} more")
+    return code
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
