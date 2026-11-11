@@ -593,7 +593,7 @@ If `fetch_catalog.py` or the validator crashes outright there is no report to re
 
 The property this buys is that **silence means working**, which the green tick never meant.
 
-The same reporter runs at the end of `deploy.yml` under a separate `site-health` label, because the two concerns are independent: a healthy deploy must not close an open ingest issue, and a broken ingest must not be overwritten by a deploy failure.
+The same reporter runs at the end of `deploy.yml` under a separate `site-health` label, because the two concerns are independent: a healthy deploy must not close an open ingest issue, and a broken ingest must not be overwritten by a deploy failure. The test workflow reports under `tests-health` and the daily usage statistics under `usage-health`, for the same reason.
 
 A green deploy only means the artifact uploaded. If Pages succeeds and the CDN keeps serving the old files, the site and the repository disagree and nothing else notices: the ingest is happy because the commit landed, the deploy is happy because it finished. `scripts/verify_deploy.py` closes that by fetching the published `api/v1/stats.json` and comparing it against what was just deployed. It compares the **build commit**, which `build_api.py` stamps into `stats.json` from `GITHUB_SHA`, falling back to the scene count when either side has no commit. The commit matters because the scene count only moves on ingest weeks: on a code-only deploy it is identical before and after, so it cannot tell a live build from a stale one still being served. The first live run of this check passed in under a second against a site that had not been redeployed, which is exactly that hole. Propagation is not instant, so a mismatch is retried for about three minutes before it is believed — reporting a site that was merely slow would be worse than not checking, because an alert that cries wolf gets muted and then the real one is missed too.
 
@@ -610,16 +610,51 @@ python3 scripts/validate_catalog.py --strict           # warnings become failure
 python3 scripts/validate_catalog.py --json report.json
 ```
 
+### What the workflows do when something goes wrong
+
+An audit in November 2026 went through every red run the repository has had. There were ten, and they fell into four causes, each of which now has a remedy that does not involve anyone noticing.
+
+| What went wrong | How often | What happens now |
+|---|---|---|
+| The test workflow failed minutes after a push that had passed locally | 5 runs | `scripts/preflight.sh` runs the suite in a virtualenv built from exactly what CI installs. Enable the hook once with `git config core.hooksPath .githooks` and a push to `main` that would turn CI red is stopped before it leaves |
+| GitHub Pages timed out mid-deployment and the site stayed a day behind `main` | 1 run, plus the site check it tripped | `deploy.yml` starts itself again in a fresh run, up to three attempts, and reports only if all three fail. The daily site check starts a deploy and compares again before it reports anything |
+| A push lost the race against another workflow's push | waiting to happen | Both data workflows push through `scripts/git_push_retry.sh`, which rebases onto the moved branch and retries. A real conflict is reported and never forced |
+| A manual or one-off run failed (PyPI publishing, a Search Console key) | 3 runs | The usage workflow now reports its own health under a `usage-health` label, like the other three |
+
+Two more things were wrong without ever having gone red, which is worse:
+
+- **Tests that never ran.** Every workflow test skipped itself on every CI run, because PyYAML was not in `requirements-dev.txt` and `pytest.importorskip` treats a missing package as a reason not to test. Nine terrain tests skipped because nothing fetched their elevation tiles. The run was green both times. CI now sets `OST_STRICT_SKIPS`, under which a skip for any reason not on a four-entry allow-list in `tests/conftest.py` is a failure, including a file that skips itself whole at import. `-rs` prints every skip and its reason
+- **Tests that were never triggered.** `tests.yml` only ran when a Python directory changed, but the suite also checks the stylesheet, the page and every workflow file. It now runs on every push
+
+The classifier was also holding the whole ingest hostage to an enrichment. It fetched roughly 1,700 elevation tiles on any week with a single new scene, with no retry and no cache, and a failed download failed the run, so a week of scenes could be lost over their tags. It now works only on new scenes, retries, validates and repairs its cache, and if the map layers still cannot be fetched it publishes the new scenes untagged, records why under `classify_failures`, and picks them up on the next run.
+
+**Upstream quiet, or pipeline broken?** This was the question behind most "did anything arrive this week" checks, and the validator could only guess at it. `fetch_catalog.py` now records, per provider, a digest of the upstream files, the rows they held, the scenes made of them, and the date since which the files have been byte-identical (`upstream` in the catalog header). When a provider brings nothing new and its files are provably unchanged, the validator says exactly that, with the date, and the issue is titled "nothing new upstream for umbra since 2026-09-27" rather than "umbra has stopped arriving". A week in which every provider's files are unchanged no longer raises the "identical scene set" warning at all. A jump in rows that did not become scenes is flagged, because new rows arriving in a shape the parser drops look, from outside, exactly like upstream publishing nothing.
+
 ### Tests
 
 ```bash
-pip install -r requirements-dev.txt
+scripts/preflight.sh          # what CI runs, in an environment built like CI's
+```
+
+or, in an environment you manage yourself:
+
+```bash
+pip install -r requirements-dev.txt && pip install -e python
 pytest
 ```
 
-80 tests covering the validator, the API builder and the Python client. The validator tests are **mutation tests**: each deliberately corrupts a healthy catalog in one specific way (duplicate ids, coordinates off the Earth, a provider vanishing, an uncollapsed Capella id, an asset URL drifting to an unexpected host) and asserts it is rejected. A validator that never fails would be worthless, so the suite proves it fails for the right reasons.
+About 540 tests. Beyond the validator, the API builder and the Python client, they cover the parts that used to be tested only by going wrong in production:
 
-CI (`.github/workflows/tests.yml`) runs the suite on Python 3.9, 3.11 and 3.12, checks the client still imports and resolves product families with **zero optional dependencies**, and separately validates the real committed catalog and builds the API from it.
+- **The validator tests are mutation tests**: each deliberately corrupts a healthy catalog in one specific way (duplicate ids, coordinates off the Earth, a provider vanishing, an uncollapsed Capella id, an asset URL drifting to an unexpected host) and asserts it is rejected
+- **`test_workflow_lint.py` lints every workflow file.** GitHub does not check most of what goes wrong in one: a step id spelled differently where it is read evaluates to an empty string, not an error. The linter checks that every `steps.`, `needs.`, `inputs.` and output reference resolves, that every script a step runs exists, that every `gh workflow run` targets a workflow that accepts it from a job allowed to send it, that nothing uses a bare `git push`, and that no action is on a deprecated runtime
+- **`test_workflow_scripts.py` runs the workflows' own shell.** It lifts each step's `run` block out of the YAML, fills in the `${{ }}` expressions, and executes it with bash against a stub `gh` and real temporary git repositories: the deploy's retry counter (including a malformed attempt number), which script a dead ingest blames, a catalog that validated but could not be pushed, the commit steps racing a moving `main`
+- **`test_git_push_retry.py`** races two clones against one remote
+- **`test_strict_skips.py`** runs a throwaway suite through the real `conftest.py` to prove an unexpected skip fails in CI
+- **`test_preflight.py`** fails if `scripts/preflight.sh` and `tests.yml` stop installing and running the same things
+
+The new tests were themselves mutation-tested: twenty deliberate breakages of the workflows and scripts (a typo in a step id, the retry cap off by one, the bare push restored, the allow-list widened) each had to turn at least one test red.
+
+CI (`.github/workflows/tests.yml`) runs the suite on Python 3.9, 3.11 and 3.12, checks the client still imports and resolves product families with **zero optional dependencies**, validates the real committed catalog and builds the API from it, and runs the QGIS plugin's tests inside QGIS 3.22, 3.44, 4.0 and 4.2.
 
 ---
 

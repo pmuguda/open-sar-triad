@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+#
+# Refuse to push to main anything that would turn CI red.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Skip for one push:       OST_SKIP_PREFLIGHT=1 git push
+#
+# Only pushes that update main are checked; a work-in-progress branch may be
+# as broken as it likes.
+
+set -euo pipefail
+
+if [ "${OST_SKIP_PREFLIGHT:-}" = "1" ]; then
+  echo "pre-push: preflight skipped (OST_SKIP_PREFLIGHT=1)" >&2
+  exit 0
+fi
+
+to_main=false
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    to_main=true
+  fi
+done
+
+if [ "$to_main" = true ]; then
+  root="$(git rev-parse --show-toplevel)"
+  if ! "$root/scripts/preflight.sh"; then
+    echo >&2
+    echo "pre-push: preflight failed, so the push was stopped. CI would have failed too." >&2
+    echo "pre-push: fix it, or push anyway with OST_SKIP_PREFLIGHT=1 git push" >&2
+    exit 1
+  fi
+fi

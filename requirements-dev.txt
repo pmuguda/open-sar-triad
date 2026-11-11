@@ -10,3 +10,7 @@ matplotlib>=3.7
 # the ones that check real places rather than fixtures. Without shapely here
 # those tests skip in CI and the coverage is imaginary.
 shapely>=2.0
+# The workflow tests parse the YAML. Without this they skipped themselves on
+# every CI run, because pytest.importorskip treats a missing parser as a
+# reason not to test rather than as a broken environment.
+pyyaml>=6.0

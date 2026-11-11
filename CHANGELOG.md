@@ -6,7 +6,46 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+- **A Pages timeout no longer leaves the site a day behind.** On 10 November
+  2026 a deployment sat in `syncing_files` for ten minutes and failed; the site
+  stayed stale until the next day's run. `deploy.yml` now starts itself again
+  in a fresh run, up to three attempts, and reports only if all fail. The daily
+  site check starts a deploy and compares again before it reports, and compares
+  against the live tip of `main` rather than the commit its run was queued on.
+- **A push that loses a race no longer loses the run's work.** Both data
+  workflows push through `scripts/git_push_retry.sh`, which rebases onto the
+  moved branch and retries; a real conflict is reported, never forced. A
+  catalog that validated but could not be pushed is now an error in the health
+  report instead of a red step beside a report that says healthy.
+- **Tests that never ran.** Every workflow test skipped itself on every CI run
+  because PyYAML was missing from `requirements-dev.txt`, and nine terrain
+  tests skipped for want of elevation tiles. CI now fails any skip whose reason
+  is not on a short allow-list (`OST_STRICT_SKIPS`), installs PyYAML, fetches
+  the tiles, and prints every skip.
+- **Tests that were never triggered.** `tests.yml` ran only when a Python
+  directory changed, though the suite also checks the stylesheet, the page and
+  the workflows. It runs on every push.
+- **The classifier held the ingest hostage to an enrichment.** It refetched
+  about 1,700 elevation tiles whenever one scene was new, with no retry or
+  cache, and a failed download failed the run. It now works only on new
+  scenes, retries, repairs a corrupt cache, and if the map layers cannot be
+  fetched publishes the new scenes untagged, records why, and retries them on
+  the next run.
+
 ### Added
+- **Upstream quiet, or pipeline broken, as a fact.** The fetch records per
+  provider a digest of the upstream files, their row and scene counts, and the
+  date since which they have been byte-identical. A stalled provider whose
+  files are provably unchanged is reported as "nothing new upstream since
+  <date>", not as a possible fault; a week in which nothing changed anywhere
+  raises nothing; a jump in rows that did not become scenes is flagged.
+- `scripts/preflight.sh` and a pre-push hook: the suite in an environment
+  built from exactly what CI installs. Five of the ten red runs this repository
+  has had were tests failing minutes after a push that had passed locally.
+- A linter for the workflow files and tests that execute the workflows' own
+  shell steps, a `usage-health` report for the daily statistics workflow, and
+  every action moved to a Node 24 major.
 - **Acquisition-recency check.** Every existing check measured when a record was
   *ingested*; none measured how old the *imagery* was. The two come apart on a
   backfill, and in October 2026 they did: ICEYE and Capella both took in records
