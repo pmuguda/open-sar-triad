@@ -117,20 +117,59 @@ LAYERS = {
 # --------------------------------------------------------------------------- #
 # Natural Earth
 # --------------------------------------------------------------------------- #
+#: HTTP statuses worth another attempt; anything else in the 4xx range means
+#: the request is wrong and repeating it is noise.
+_RETRY_STATUSES = {408, 429, 500, 502, 503, 504}
+
+
+def _download(url: str, timeout: int, attempts: int = 3, backoff: float = 2.0) -> bytes:
+    """GET a URL, retrying dropped connections and server errors."""
+    req = urllib.request.Request(url, headers={"User-Agent": "open-sar-triad-classifier"})
+    last = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in _RETRY_STATUSES:
+                raise
+        except (urllib.error.URLError, OSError) as e:
+            last = e
+        if attempt < attempts:
+            time.sleep(backoff * 2 ** (attempt - 1))
+    raise last
+
+
 def fetch_layers(cache: Path, timeout: int = 180) -> dict:
-    """Download the Natural Earth layers, reusing anything already cached."""
+    """Download the Natural Earth layers, reusing anything already cached.
+
+    A cached file is only trusted if it parses. The cache is restored between
+    weekly runs, so a truncated or corrupt file would otherwise fail every run
+    from then on with the same error and no way out but clearing the cache by
+    hand; here it is discarded and fetched again. Downloads land under a
+    temporary name and are renamed only once they parse, so an interrupted one
+    never becomes the cached copy.
+    """
     cache.mkdir(parents=True, exist_ok=True)
     out = {}
     for key, name in LAYERS.items():
         path = cache / f"{name}.geojson"
-        if not path.exists() or path.stat().st_size == 0:
-            url = f"{NE_BASE}/{name}.geojson"
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "open-sar-triad-classifier"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                path.write_bytes(resp.read())
+        features = None
+        if path.exists() and path.stat().st_size:
+            try:
+                features = json.loads(path.read_text())["features"]
+            except (ValueError, KeyError, OSError):
+                print(f"  cached {name} is unreadable; fetching it again")
+                path.unlink(missing_ok=True)
+        if features is None:
+            raw = _download(f"{NE_BASE}/{name}.geojson", timeout)
+            features = json.loads(raw)["features"]
+            tmp = path.with_suffix(".part")
+            tmp.write_bytes(raw)
+            tmp.replace(path)
             print(f"  downloaded {name} ({path.stat().st_size / 1e6:.1f} MB)")
-        out[key] = json.loads(path.read_text())["features"]
+        out[key] = features
     return out
 
 
@@ -262,10 +301,10 @@ def _tile_elevations(z: int, x: int, y: int, cache: Path, timeout: int = 60):
     if not path.exists():
         url = TERRAIN_TILES.format(z=z, x=x, y=y)
         try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "open-sar-triad-classifier"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                path.write_bytes(resp.read())
+            raw = _download(url, timeout, attempts=2, backoff=1.0)
+            tmp = path.with_suffix(".part")
+            tmp.write_bytes(raw)
+            tmp.replace(path)
         except (urllib.error.HTTPError, urllib.error.URLError, OSError):
             return None
     try:
@@ -542,17 +581,38 @@ def main() -> int:
             (f.get("properties") or {}).pop("landuse", None)
     else:
         carry_forward(feats, args.catalog)
-    todo = sum(1 for f in feats if "landuse" not in (f.get("properties") or {}))
-    print(f"  {todo:,} scene(s) need classifying")
+    # Only these are worked on. Everything else already carries the answer, and
+    # running the terrain pass over the whole catalog, as this used to, fetched
+    # some 1,700 elevation tiles on any week with a single new scene to re-add
+    # tags that were already there.
+    new = [f for f in feats if "landuse" not in (f.get("properties") or {})]
+    print(f"  {len(new):,} scene(s) need classifying")
 
-    if todo:
-        layers = fetch_layers(args.cache)
-        classify_natural_earth(feats, layers)
-    if todo:
-        print("Terrain from measured elevation:")
-        rstats = classify_relief(feats)
-        print(f"  tiles {rstats['fetched']:,} fetched, {rstats['missing']:,} missing; "
-              f"mountain {rstats['mountain']:,}, hilly {rstats['hilly']:,}")
+    # What could not be classified this run and why, written into the catalog
+    # header for the validator. Classification is an enrichment: when the map
+    # layers cannot be fetched, the new scenes are still published, untagged,
+    # and picked up again next run, because holding back a week of scenes over
+    # their tags is the worse failure.
+    failures = {}
+    if new:
+        try:
+            layers = fetch_layers(args.cache)
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+            failures["natural_earth"] = (
+                f"{len(new)} new scene(s) left untagged: the map layers could "
+                f"not be fetched ({e})")
+            print(f"  WARNING: {failures['natural_earth']}", file=sys.stderr)
+        else:
+            classify_natural_earth(new, layers)
+            print("Terrain from measured elevation:")
+            rstats = classify_relief(new)
+            print(f"  tiles {rstats['fetched']:,} fetched, {rstats['missing']:,} missing; "
+                  f"mountain {rstats['mountain']:,}, hilly {rstats['hilly']:,}")
+            if rstats["missing"]:
+                failures["relief"] = (
+                    f"{rstats['missing']} of {rstats['tiles']} elevation tile(s) "
+                    "unavailable, so some new scenes may lack a mountain or hilly "
+                    "tag; re-run with --all to redo them")
     ne_counts = summarise(feats)
 
     if args.osm:
@@ -582,6 +642,7 @@ def main() -> int:
         return 0
 
     doc["landuse_tags"] = TAGS
+    doc["classify_failures"] = failures
     args.catalog.write_text(json.dumps(doc, separators=(",", ":")))
     print(f"\nWrote {args.catalog} ({args.catalog.stat().st_size / 1e6:.1f} MB)")
     return 0

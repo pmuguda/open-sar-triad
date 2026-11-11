@@ -294,3 +294,159 @@ def test_a_scene_dated_years_ahead_is_dropped():
 def test_a_collection_footprint_is_not_a_scene():
     row = rows("iceye", ["000-iceye-sar-collection-footprints"]).iloc[0]
     assert fc.normalize_row(row, "iceye") is None
+
+
+# --------------------------------------------------------------------------- #
+# The record of what upstream handed over
+# --------------------------------------------------------------------------- #
+import hashlib  # noqa: E402
+
+
+def digesting_upstream(table):
+    """Like fake_upstream, and records a digest per file as read_parquet does."""
+    inner = fake_upstream(table)
+
+    def _read(url):
+        df = inner(url)
+        fc.FILE_DIGESTS[url.split("/")[-1]] = hashlib.sha256(
+            df.to_json(date_format="iso").encode()).hexdigest()
+        return df
+    return _read
+
+
+@pytest.fixture
+def run_tracked(tmp_path, monkeypatch, capsys):
+    """Run main() repeatedly against one catalog file, with digests recorded."""
+    out = tmp_path / "scenes.geojson"
+    monkeypatch.setattr(fc, "OUT_PATH", out)
+
+    def _run(table):
+        monkeypatch.setattr(fc, "read_parquet", digesting_upstream(table))
+        fc.main()
+        capsys.readouterr()
+        return json.loads(out.read_text())
+    _run.path = out
+    return _run
+
+
+def rewrite(path, fn):
+    doc = json.loads(path.read_text())
+    fn(doc)
+    path.write_text(json.dumps(doc))
+
+
+TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def test_the_header_records_what_each_provider_amounted_to(run_tracked):
+    up = run_tracked(healthy_upstream())["upstream"]
+    assert set(up) == {"iceye", "umbra", "capella"}
+    assert up["umbra"]["rows"] == 1 and up["umbra"]["scenes"] == 1
+    assert up["capella"]["rows"] == 7, "seven format files, one row each"
+    assert up["umbra"]["skipped"] == 0
+    assert len(up["umbra"]["digest"]) == 64
+    assert up["umbra"]["checked"] == TODAY
+
+
+def test_identical_files_keep_the_date_they_were_last_seen_to_change(run_tracked):
+    run_tracked(healthy_upstream())
+    rewrite(run_tracked.path, lambda d: [
+        r.update(unchanged_since="2026-09-27", checked="2026-11-02")
+        for r in d["upstream"].values()])
+    up = run_tracked(healthy_upstream())["upstream"]
+    assert up["umbra"]["unchanged_since"] == "2026-09-27", "the date must carry forward"
+    assert up["umbra"]["checked"] == TODAY, "and the check must be today's"
+
+
+def test_a_changed_file_resets_the_date(run_tracked):
+    run_tracked(healthy_upstream())
+    rewrite(run_tracked.path, lambda d: [
+        r.update(unchanged_since="2026-09-27", checked="2026-11-02")
+        for r in d["upstream"].values()])
+    t = healthy_upstream()
+    t["umbra.parquet"] = rows("umbra", ["0000-umbra-1", "0000-umbra-2"])
+    up = run_tracked(t)["upstream"]
+    assert up["umbra"]["unchanged_since"] == TODAY
+    assert up["iceye"]["unchanged_since"] == "2026-09-27", "only the provider that changed"
+
+
+def test_a_provider_that_failed_keeps_its_previous_record(run_tracked):
+    """Nothing was learned about upstream, so nothing may be claimed. In
+    particular `checked` must not move, or the validator would read a failed
+    fetch as proof that upstream was unchanged."""
+    run_tracked(healthy_upstream())
+    rewrite(run_tracked.path, lambda d: [
+        r.update(unchanged_since="2026-09-27", checked="2026-11-02")
+        for r in d["upstream"].values()])
+    t = healthy_upstream()
+    t["umbra.parquet"] = fc.FetchError("umbra.parquet: could not download (503)")
+    doc = run_tracked(t)
+    assert "umbra" in doc["fetch_failures"]
+    assert doc["upstream"]["umbra"]["checked"] == "2026-11-02"
+    assert doc["upstream"]["iceye"]["checked"] == TODAY
+
+
+def test_the_first_tracked_run_dates_an_unchanged_provider_from_its_scenes(run_tracked):
+    """Deploying this must not make every provider look freshly changed. With
+    no earlier digest, a provider whose ids are exactly last run's has not
+    changed since at least its newest first_seen."""
+    run_tracked(healthy_upstream())
+
+    def strip(d):
+        d.pop("upstream")
+        for f in d["features"]:
+            if f["properties"]["provider"] == "umbra":
+                f["properties"]["first_seen"] = "2026-09-28"
+    rewrite(run_tracked.path, strip)
+    up = run_tracked(healthy_upstream())["upstream"]
+    assert up["umbra"]["unchanged_since"] == "2026-09-28"
+
+
+def test_the_first_tracked_run_does_not_backdate_a_provider_that_changed(run_tracked):
+    run_tracked(healthy_upstream())
+    rewrite(run_tracked.path, lambda d: d.pop("upstream"))
+    t = healthy_upstream()
+    t["umbra.parquet"] = rows("umbra", ["0000-umbra-1", "0000-umbra-2"])
+    assert run_tracked(t)["upstream"]["umbra"]["unchanged_since"] == TODAY
+
+
+def test_no_digest_no_claim(run):
+    """The plain fake records no digests, as a reader that could not hash the
+    file would. The record must then carry none rather than invent one."""
+    up = run(healthy_upstream())["upstream"]
+    assert up["umbra"]["digest"] is None
+
+
+def test_read_parquet_records_the_digest_of_the_bytes_it_read(monkeypatch):
+    class Reader:
+        @staticmethod
+        def read_table(buf):
+            class T:
+                @staticmethod
+                def to_pandas():
+                    return rows("iceye", ["a"])
+            return T
+    monkeypatch.setattr(fc, "_parquet", lambda: Reader)
+    monkeypatch.setattr(fc, "fetch_bytes", lambda url, **k: b"parquet bytes")
+    fc.FILE_DIGESTS.clear()
+    fc.read_parquet("https://x/iceye.parquet")
+    assert fc.FILE_DIGESTS["iceye.parquet"] == hashlib.sha256(b"parquet bytes").hexdigest()
+    assert fc.provider_digest("iceye") is not None
+    assert fc.provider_digest("capella") is None, "six of its seven files are unknown"
+
+
+def test_an_empty_upstream_file_does_not_overwrite_the_record(run_tracked):
+    """A file that downloads and parses but holds no rows raises nothing: the
+    provider is served from the cache as "fetched no scenes". Its record must
+    stay the previous one, or an upstream that briefly published an empty file
+    would be written down as a real change of content."""
+    run_tracked(healthy_upstream())
+    rewrite(run_tracked.path, lambda d: [
+        r.update(unchanged_since="2026-09-27", checked="2026-11-02")
+        for r in d["upstream"].values()])
+    t = healthy_upstream()
+    t["umbra.parquet"] = pd.DataFrame()
+    doc = run_tracked(t)
+    assert doc["fetch_failures"]["umbra"] == "fetched no scenes"
+    assert doc["upstream"]["umbra"]["rows"] == 1, "the empty file replaced the record"
+    assert doc["upstream"]["umbra"]["checked"] == "2026-11-02"

@@ -158,7 +158,48 @@ def check_structure(doc: dict, rep: Report) -> list[dict]:
     if "new_this_run" in doc:
         rep.info["new_this_run"] = doc["new_this_run"]
     check_fetch_failures(doc, rep)
+    # What upstream handed over, as fetch_catalog.py recorded it. Used below to
+    # tell "upstream published nothing" from "this pipeline lost something".
+    rep.info["upstream"] = doc.get("upstream") or {}
+    rep.info["run_date"] = doc.get("last_updated")
+    check_classification(doc, feats, rep)
     return feats
+
+
+def check_classification(doc: dict, feats: list[dict], rep: Report) -> None:
+    """Land-use tagging that could not be completed.
+
+    classify_scenes.py publishes new scenes untagged rather than failing the
+    ingest when its map layers cannot be fetched, and retries them on the next
+    run. That is only acceptable if it is said out loud.
+    """
+    failures = doc.get("classify_failures") or {}
+    rep.info["classify_failures"] = dict(failures)
+    untagged = sum(1 for f in feats if "landuse" not in (f.get("properties") or {}))
+    if untagged:
+        rep.info["unclassified"] = untagged
+    for what, reason in sorted(failures.items()):
+        rep.warn(f"land-use classification incomplete ({what}): {reason}. "
+                 "The scenes themselves are in the catalog.")
+
+
+def upstream_unchanged_since(info: dict, prov: str) -> str | None:
+    """The date since which a provider's upstream files are provably unchanged.
+
+    Proven means three things at once. The fetch recorded a digest. It checked
+    on the run that wrote this catalog: a provider served from the cache keeps
+    its previous record, which says nothing about upstream today. And the
+    digest matched an earlier run's, so ``unchanged_since`` is earlier than
+    ``checked``; on the run where the files did change the two are equal.
+    """
+    rec = (info.get("upstream") or {}).get(prov) or {}
+    since, checked = rec.get("unchanged_since"), rec.get("checked")
+    if not (rec.get("digest") and isinstance(since, str) and isinstance(checked, str)
+            and DATE_RE.match(since) and DATE_RE.match(checked)):
+        return None
+    if checked != info.get("run_date") or prov in (info.get("fetch_failures") or {}):
+        return None
+    return since if since < checked else None
 
 
 def check_fetch_failures(doc: dict, rep: Report) -> None:
@@ -341,11 +382,28 @@ def check_provider_freshness(feats: list[dict], rep: Report) -> None:
             rep.error(f"provider {prov!r}: first_seen {newest!r} is not a valid date")
             continue
         freshness[prov] = {"newest_first_seen": newest, "age_days": age}
+        quiet_since = upstream_unchanged_since(rep.info, prov)
+        if quiet_since:
+            freshness[prov]["upstream_unchanged_since"] = quiet_since
         if age > STALE_PROVIDER_WARN_DAYS:
-            rep.warn(f"provider {prov!r} has ingested nothing for {age} days "
-                     f"(newest first_seen {newest}), while the catalog as a whole "
-                     "kept moving. Upstream may be quiet, or this provider's feed "
-                     "may have broken without anything else noticing.")
+            if quiet_since:
+                # Not a guess any more: the files this provider's scenes come
+                # from are byte-identical to what they were on that date, and
+                # the fetch read and parsed them this run. Still reported,
+                # because a provider going quiet is worth knowing, but as what
+                # it is rather than as a possible fault here.
+                up = rep.info["upstream"][prov]
+                rep.warn(f"provider {prov!r}: nothing new upstream. Its upstream "
+                         f"files have not changed since {quiet_since}, so there has "
+                         f"been nothing to ingest for {age} days. The pipeline read "
+                         f"them correctly this run ({up.get('rows')} rows, "
+                         f"{up.get('scenes')} scenes); the provider or the upstream "
+                         "catalog is quiet.")
+            else:
+                rep.warn(f"provider {prov!r} has ingested nothing for {age} days "
+                         f"(newest first_seen {newest}), while the catalog as a whole "
+                         "kept moving. Upstream may be quiet, or this provider's feed "
+                         "may have broken without anything else noticing.")
 
     rep.info["provider_freshness"] = freshness
 
@@ -458,9 +516,43 @@ def check_regression(feats: list[dict], baseline: dict | None, rep: Report) -> N
     # set never changed, because the parser silently fell back to cached data.
     if new_ids == old_ids:
         rep.info["identical_to_baseline"] = True
-        rep.warn("scene set is byte-identical to the previous catalog. That is "
-                 "normal when upstream published nothing, but it is also what a "
-                 "silent fallback looks like. Check the fetch log for parsed counts.")
+        if all(upstream_unchanged_since(rep.info, p) for p in PROVIDERS):
+            # Every provider's upstream files are byte-identical to the last
+            # run's and were read this run, so an unchanged scene set is the
+            # correct result, not a suspicious one. Nothing to raise.
+            rep.info["upstream_quiet"] = True
+        else:
+            rep.warn("scene set is byte-identical to the previous catalog. That is "
+                     "normal when upstream published nothing, but it is also what a "
+                     "silent fallback looks like. Check the fetch log for parsed counts.")
+
+    check_skipped_rows(rep.info.get("upstream") or {}, baseline.get("upstream") or {}, rep)
+
+
+#: A jump in rows that did not become scenes, beyond this many and this share
+#: of the provider's rows, is worth a look.
+SKIPPED_JUMP_ROWS = 5
+SKIPPED_JUMP_PCT = 1.0
+
+
+def check_skipped_rows(upstream: dict, previous: dict, rep: Report) -> None:
+    """Rows upstream handed over that did not become scenes.
+
+    A few always are skipped: collection footprints, a handful of Umbra scenes
+    dated 2035. The count is steady from week to week, so a jump means new rows
+    arrived in a shape the parser dropped, which from the outside looks exactly
+    like upstream publishing nothing new.
+    """
+    for prov in sorted(PROVIDERS):
+        now, was = (upstream.get(prov) or {}), (previous.get(prov) or {})
+        if "skipped" not in now or "skipped" not in was:
+            continue
+        jump = now["skipped"] - was["skipped"]
+        rows = now.get("rows") or 0
+        if jump > SKIPPED_JUMP_ROWS and rows and jump / rows * 100 > SKIPPED_JUMP_PCT:
+            rep.warn(f"provider {prov!r}: {now['skipped']} of upstream's {rows} rows "
+                     f"were not turned into scenes, up from {was['skipped']} last run. "
+                     "New rows may be arriving in a shape the parser drops.")
 
 
 # --------------------------------------------------------------------------- #

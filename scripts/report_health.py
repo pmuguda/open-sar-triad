@@ -57,6 +57,7 @@ TOPICS = {
     "catalog-health": ("d93f0b", "Automated: the weekly catalog ingest needs attention"),
     "site-health": ("b60205", "Automated: the deployed site does not match the repository"),
     "tests-health": ("5319e7", "Automated: main does not pass its own tests"),
+    "usage-health": ("0e8a16", "Automated: the daily usage statistics are not updating"),
 }
 DEFAULT_LABEL = "catalog-health"
 
@@ -139,10 +140,15 @@ def build_title(report: dict, items: list[str]) -> str:
     unfetched = sorted((report.get("fetch_failures") or {}).keys())
     if unfetched:
         return f"{subject}: {', '.join(unfetched)} could not be fetched"
-    stale = [p for p, fr in (report.get("provider_freshness") or {}).items()
-             if fr.get("age_days", 0) > 21]
+    freshness = report.get("provider_freshness") or {}
+    stale = sorted(p for p, fr in freshness.items() if fr.get("age_days", 0) > 21)
     if stale:
-        return f"{subject}: {', '.join(sorted(stale))} has stopped arriving"
+        # When the fetch has proven the upstream files unchanged, say that:
+        # "has stopped arriving" reads as a fault here, and it is not one.
+        if all(freshness[p].get("upstream_unchanged_since") for p in stale):
+            since = min(freshness[p]["upstream_unchanged_since"] for p in stale)
+            return f"{subject}: nothing new upstream for {', '.join(stale)} since {since}"
+        return f"{subject}: {', '.join(stale)} has stopped arriving"
     return f"{subject} needs attention: {len(items)} warning(s)"
 
 
@@ -217,7 +223,7 @@ def run(report: dict, gh: GitHub, dry_run: bool = False) -> int:
         if existing:
             if not dry_run:
                 gh.comment(existing["number"],
-                           "Ingest is healthy again"
+                           f"{report.get('subject') or 'Catalog ingest'} is healthy again"
                            + (f" ([run]({_run_link()}))" if _run_link() else "")
                            + ". Closing.")
                 gh.update(existing["number"], state="closed",

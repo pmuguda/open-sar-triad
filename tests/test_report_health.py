@@ -354,3 +354,30 @@ def test_the_reason_reaches_the_body():
     gh = FakeGitHub()
     rh.run(UNFETCHED, gh)
     assert "timed out" in gh.created[0]["body"]
+
+
+# --------------------------------------------------------------------------- #
+# Upstream proven quiet
+# --------------------------------------------------------------------------- #
+def test_a_proven_quiet_provider_is_not_titled_as_a_fault():
+    """"has stopped arriving" reads as something broken here. When the fetch
+    has proven the upstream files unchanged, the title says that instead."""
+    r = report(warnings=["provider 'umbra': nothing new upstream."],
+               provider_freshness={"umbra": {"newest_first_seen": "2026-09-28",
+                                             "age_days": 44,
+                                             "upstream_unchanged_since": "2026-09-27"}})
+    gh = FakeGitHub()
+    rh.run(r, gh)
+    title = gh.created[0]["title"]
+    assert "nothing new upstream for umbra since 2026-09-27" in title
+    assert "stopped arriving" not in title
+
+
+def test_one_unproven_stale_provider_keeps_the_cautious_title():
+    r = report(warnings=["x"], provider_freshness={
+        "umbra": {"newest_first_seen": "2026-09-28", "age_days": 44,
+                  "upstream_unchanged_since": "2026-09-27"},
+        "capella": {"newest_first_seen": "2026-09-20", "age_days": 52}})
+    gh = FakeGitHub()
+    rh.run(r, gh)
+    assert "stopped arriving" in gh.created[0]["title"]

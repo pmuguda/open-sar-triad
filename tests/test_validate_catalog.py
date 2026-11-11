@@ -512,3 +512,135 @@ def test_each_failed_provider_gets_its_own_warning(catalog):
     catalog["fetch_failures"] = {"umbra": "a", "iceye": "b"}
     rep = run(catalog)
     assert sum("not fetched" in w for w in rep.warnings) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Upstream quiet, or pipeline broken? The digest record settles it.
+# --------------------------------------------------------------------------- #
+TODAY = date.today().isoformat()
+LONG_AGO = (date.today() - timedelta(days=45)).isoformat()
+
+
+def quiet(since=LONG_AGO, checked=TODAY, **extra):
+    return {"rows": 12551, "scenes": 11904, "skipped": 8, "digest": "abc",
+            "unchanged_since": since, "checked": checked, **extra}
+
+
+def stalled_umbra(upstream=None, **header):
+    """A catalog whose Umbra scenes were all first seen 45 days ago."""
+    doc = make_catalog()
+    for f in doc["features"]:
+        if f["properties"]["provider"] == "umbra":
+            f["properties"]["first_seen"] = LONG_AGO
+    doc["last_updated"] = TODAY
+    if upstream is not None:
+        doc["upstream"] = upstream
+    doc.update(header)
+    return doc
+
+
+def test_a_stall_proven_to_be_upstream_says_so():
+    rep = run(stalled_umbra({"umbra": quiet()}))
+    w = [w for w in rep.warnings if "umbra" in w]
+    assert len(w) == 1
+    assert "nothing new upstream" in w[0] and LONG_AGO in w[0]
+    assert "may have broken" not in w[0], "it is no longer a guess"
+    assert "12551 rows" in w[0], "and it says the file was read"
+
+
+def test_without_a_digest_record_the_stall_is_still_a_question():
+    rep = run(stalled_umbra())
+    w = [w for w in rep.warnings if "umbra" in w]
+    assert "may have broken" in w[0]
+
+
+def test_files_that_changed_this_run_prove_nothing():
+    """unchanged_since == checked means the digest was new today."""
+    rep = run(stalled_umbra({"umbra": quiet(since=TODAY)}))
+    assert "may have broken" in [w for w in rep.warnings if "umbra" in w][0]
+
+
+def test_a_record_from_an_earlier_run_proves_nothing_about_today():
+    """A provider served from the cache keeps its old record. Trusting it would
+    report "upstream unchanged" on exactly the run that could not look."""
+    stale_record = quiet(checked=(date.today() - timedelta(days=7)).isoformat())
+    rep = run(stalled_umbra({"umbra": stale_record}))
+    assert "may have broken" in [w for w in rep.warnings if "has ingested nothing" in w][0]
+
+
+def test_a_provider_that_failed_to_fetch_is_never_proven_quiet():
+    rep = run(stalled_umbra({"umbra": quiet()}, fetch_failures={"umbra": "timed out"}))
+    assert not [w for w in rep.warnings if "nothing new upstream" in w]
+
+
+def test_the_proof_is_reported_per_provider():
+    rep = run(stalled_umbra({"umbra": quiet()}))
+    assert rep.info["provider_freshness"]["umbra"]["upstream_unchanged_since"] == LONG_AGO
+    assert "upstream_unchanged_since" not in rep.info["provider_freshness"]["iceye"]
+
+
+def test_an_unchanged_catalog_is_not_suspicious_when_upstream_is_proven_unchanged():
+    """The "identical scene set" warning exists because a silent fallback looks
+    the same. With every provider's files proven identical it is simply a week
+    in which nothing was published, and raising it every such week is noise."""
+    doc = make_catalog()
+    doc["last_updated"] = TODAY
+    doc["upstream"] = {p: quiet() for p in ("iceye", "umbra", "capella")}
+    rep = run(doc, baseline=make_catalog())
+    assert rep.info["identical_to_baseline"] and rep.info["upstream_quiet"]
+    assert not [w for w in rep.warnings if "byte-identical" in w]
+
+
+def test_an_unchanged_catalog_stays_suspicious_if_any_provider_is_unproven():
+    doc = make_catalog()
+    doc["last_updated"] = TODAY
+    doc["upstream"] = {p: quiet() for p in ("iceye", "umbra")}      # no capella record
+    rep = run(doc, baseline=make_catalog())
+    assert [w for w in rep.warnings if "byte-identical" in w]
+
+
+def test_a_jump_in_skipped_rows_is_flagged():
+    """New rows arriving in a shape the parser drops look, from outside, exactly
+    like upstream publishing nothing."""
+    base = make_catalog()
+    base["upstream"] = {"umbra": quiet(skipped=8)}
+    doc = make_catalog()
+    doc["upstream"] = {"umbra": quiet(skipped=400)}
+    rep = run(doc, baseline=base)
+    w = [w for w in rep.warnings if "not turned into scenes" in w]
+    assert w and "400" in w[0] and "8" in w[0]
+
+
+def test_a_steady_skipped_count_is_not_flagged():
+    base = make_catalog()
+    base["upstream"] = {"umbra": quiet(skipped=8)}
+    doc = make_catalog()
+    doc["upstream"] = {"umbra": quiet(skipped=9)}
+    assert not [w for w in run(doc, baseline=base).warnings if "not turned into" in w]
+
+
+# --------------------------------------------------------------------------- #
+# Land-use tagging that could not be completed
+# --------------------------------------------------------------------------- #
+def test_an_incomplete_classification_is_a_warning_not_an_error(catalog):
+    """New scenes published untagged is the right trade; saying nothing about
+    it would not be."""
+    catalog["classify_failures"] = {
+        "natural_earth": "3 new scene(s) left untagged: the map layers could not be fetched"}
+    rep = run(catalog)
+    assert rep.ok
+    w = [w for w in rep.warnings if "classification incomplete" in w]
+    assert w and "3 new scene(s)" in w[0]
+
+
+def test_a_complete_classification_raises_nothing(catalog):
+    catalog["classify_failures"] = {}
+    assert not [w for w in run(catalog).warnings if "classification" in w]
+
+
+def test_untagged_scenes_are_counted(catalog):
+    for f in catalog["features"][:2]:
+        f["properties"].pop("landuse", None)
+    for f in catalog["features"][2:]:
+        f["properties"]["landuse"] = []
+    assert run(catalog).info["unclassified"] == 2

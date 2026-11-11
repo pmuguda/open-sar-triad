@@ -369,6 +369,25 @@ DEM = ROOT / "data" / ".dem-cache"
 have_dem = DEM.exists() and any(DEM.glob("*.png"))
 needs_dem = pytest.mark.skipif(not have_dem, reason="elevation tiles not cached")
 
+MOUNTAINS = [
+    ("Swiss Alps", 7.95, 46.55),
+    ("Nepal Himalaya", 86.9, 27.9),
+    ("Norway fjords", 7.0, 61.0),
+]
+FLAT = [
+    ("Netherlands", 5.0, 52.2),
+    ("Berlin", 13.4, 52.5),
+    ("Rotterdam", 4.10, 51.95),
+    ("Amazon Basin", -60.0, -3.0),
+    ("flat Sahara", 15.0, 25.0),
+]
+PO_VALLEY = (10.5, 45.1)
+
+#: Every place these tests measure. The test workflow fetches exactly these
+#: tiles before the suite runs; without that the tests below skip, which is
+#: what they did on every CI run until the list existed.
+DEM_TEST_POINTS = [(lon, lat) for _, lon, lat in MOUNTAINS + FLAT] + [PO_VALLEY]
+
 
 def relief_at(lon, lat):
     tx, ty = cs._tile_xy(lon, lat, cs.DEM_ZOOM)
@@ -380,23 +399,13 @@ def relief_at(lon, lat):
 
 
 @needs_dem
-@pytest.mark.parametrize("place, lon, lat", [
-    ("Swiss Alps", 7.95, 46.55),
-    ("Nepal Himalaya", 86.9, 27.9),
-    ("Norway fjords", 7.0, 61.0),
-])
+@pytest.mark.parametrize("place, lon, lat", MOUNTAINS)
 def test_real_mountains_clear_the_threshold(place, lon, lat):
     assert relief_at(lon, lat) >= cs.RELIEF_MOUNTAIN_M, place
 
 
 @needs_dem
-@pytest.mark.parametrize("place, lon, lat", [
-    ("Netherlands", 5.0, 52.2),
-    ("Berlin", 13.4, 52.5),
-    ("Rotterdam", 4.10, 51.95),
-    ("Amazon Basin", -60.0, -3.0),
-    ("flat Sahara", 15.0, 25.0),
-])
+@pytest.mark.parametrize("place, lon, lat", FLAT)
 def test_flat_ground_is_neither_mountain_nor_hilly(place, lon, lat):
     assert relief_at(lon, lat) < cs.RELIEF_HILLY_M, place
 
@@ -406,7 +415,7 @@ def test_relief_is_measured_locally_not_across_the_tile():
     """The Po Valley reads 1011 m across its tile, because the Alps are in
     frame, and 12 m around the footprint. Measuring the tile is what called the
     Amazon Basin hilly."""
-    lon, lat = 10.5, 45.1
+    lon, lat = PO_VALLEY
     tx, ty = cs._tile_xy(lon, lat, cs.DEM_ZOOM)
     grid = cs._tile_elevations(cs.DEM_ZOOM, tx, ty, DEM)
     if grid is None:
@@ -428,6 +437,7 @@ def test_an_unreachable_tile_leaves_other_tags_alone(tmp_path, monkeypatch):
         raise urllib.error.URLError("blocked")
 
     monkeypatch.setattr(cs.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(cs.time, "sleep", lambda s: None)
     f = box(7.95, 46.55)
     f["properties"]["landuse"] = ["urban"]
     stats = cs.classify_relief([f], cache=tmp_path / "dem", log=lambda *a: None)
@@ -435,12 +445,180 @@ def test_an_unreachable_tile_leaves_other_tags_alone(tmp_path, monkeypatch):
     assert f["properties"]["landuse"] == ["urban"]
 
 
-def test_reclassifying_everything_clears_the_old_tags_first():
+# --------------------------------------------------------------------------- #
+# main(): what a weekly run does, including when the network lets it down
+# --------------------------------------------------------------------------- #
+def run_main(tmp_path, monkeypatch, feats, *args, layers=None, known=None, relief=None):
+    """Run the classifier's main() on a small catalog, with the network and
+    git replaced. Returns (exit code, catalog as written, relief call log)."""
+    catalog = tmp_path / "scenes.geojson"
+    catalog.write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+
+    def carry(fs, _catalog, log=print):
+        n = 0
+        for f in fs:
+            p = f["properties"]
+            if "landuse" not in p and p.get("id") in (known or {}):
+                p["landuse"] = known[p["id"]]
+                n += 1
+        return n
+
+    def fetch(cache, timeout=180):
+        if isinstance(layers, Exception):
+            raise layers
+        return {k: [] for k in cs.LAYERS}
+
+    seen = []
+
+    def fake_relief(fs, cache=None, log=print):
+        seen.append([f["properties"]["id"] for f in fs])
+        return relief or {"tiles": len(fs), "fetched": len(fs), "missing": 0,
+                          "mountain": 0, "hilly": 0}
+
+    monkeypatch.setattr(cs, "carry_forward", carry)
+    monkeypatch.setattr(cs, "fetch_layers", fetch)
+    monkeypatch.setattr(cs, "classify_relief", fake_relief)
+    monkeypatch.setattr(sys, "argv", ["classify", "--catalog", str(catalog), *args])
+    code = cs.main()
+    return code, json.loads(catalog.read_text()), seen
+
+
+def scene(sid, lon=10.0, lat=50.0, **props):
+    f = box(lon, lat)
+    f["properties"] = {"id": sid, **props}
+    return f
+
+
+def test_only_new_scenes_are_worked_on(tmp_path, monkeypatch, capsys):
+    """The terrain pass used to run over the whole catalog whenever one scene
+    was new: about 1,700 tile downloads to re-add tags that were already there."""
+    feats = [scene("old-1"), scene("old-2"), scene("new-1")]
+    code, doc, seen = run_main(tmp_path, monkeypatch, feats,
+                               known={"old-1": ["urban"], "old-2": []})
+    assert code == 0
+    assert seen == [["new-1"]], f"relief ran over {seen}"
+    assert doc["features"][0]["properties"]["landuse"] == ["urban"]
+    assert doc["classify_failures"] == {}
+
+
+def test_a_week_with_nothing_new_touches_no_network(tmp_path, monkeypatch, capsys):
+    feats = [scene("old-1")]
+    code, doc, seen = run_main(tmp_path, monkeypatch, feats, known={"old-1": ["port"]},
+                               layers=AssertionError("fetch_layers must not be called"))
+    assert code == 0 and seen == []
+
+
+def test_unreachable_map_layers_do_not_cost_the_week_its_scenes(tmp_path, monkeypatch, capsys):
+    """Classification is an enrichment. The catalog is still written, the new
+    scene is in it, and the failure is recorded for the validator."""
+    import urllib.error
+    feats = [scene("old-1"), scene("new-1")]
+    code, doc, seen = run_main(tmp_path, monkeypatch, feats, known={"old-1": ["urban"]},
+                               layers=urllib.error.URLError("timed out"))
+    assert code == 0, "the ingest must carry on"
+    assert [f["properties"]["id"] for f in doc["features"]] == ["old-1", "new-1"]
+    assert "natural_earth" in doc["classify_failures"]
+    assert "timed out" in doc["classify_failures"]["natural_earth"]
+    assert seen == [], "terrain is skipped too, so the scene is retried whole"
+
+
+def test_a_scene_left_untagged_is_picked_up_by_the_next_run(tmp_path, monkeypatch, capsys):
+    """It must have no landuse key at all: an empty list would read as
+    "classified, nothing found" and carry forward for ever."""
+    import urllib.error
+    _, doc, _ = run_main(tmp_path, monkeypatch, [scene("new-1")],
+                         layers=urllib.error.URLError("timed out"))
+    assert "landuse" not in doc["features"][0]["properties"]
+
+
+def test_missing_elevation_tiles_are_recorded(tmp_path, monkeypatch, capsys):
+    _, doc, _ = run_main(tmp_path, monkeypatch, [scene("new-1")],
+                         relief={"tiles": 3, "fetched": 2, "missing": 1,
+                                 "mountain": 0, "hilly": 0})
+    assert "1 of 3" in doc["classify_failures"]["relief"]
+
+
+def test_reclassifying_everything_clears_the_old_tags_first(tmp_path, monkeypatch, capsys):
     """`--all` skipping carry-forward was not enough: the tags are already in
     the file the fetch wrote, so the run silently rewrote the old answers."""
-    src = (ROOT / "scripts" / "classify_scenes.py").read_text()
-    main = src[src.index("if args.all:"):src.index("todo = sum(")]
-    assert 'pop("landuse"' in main, "--all must clear existing tags"
+    feats = [scene("a", landuse=["plain"]), scene("b", landuse=["urban"])]
+    _, doc, seen = run_main(tmp_path, monkeypatch, feats, "--all")
+    assert seen == [["a", "b"]], "every scene must be reclassified"
+    assert all(f["properties"]["landuse"] == [] for f in doc["features"]), \
+        "the old tags survived --all"
+
+
+# --------------------------------------------------------------------------- #
+# The layer cache
+# --------------------------------------------------------------------------- #
+class _Resp:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self.body
+
+
+LAYER = json.dumps({"type": "FeatureCollection", "features": [{"x": 1}]}).encode()
+
+
+def test_a_corrupt_cached_layer_is_fetched_again(tmp_path, monkeypatch, capsys):
+    """The cache is restored between weekly runs. A truncated file in it would
+    otherwise fail every run from then on, until someone cleared it by hand."""
+    for name in cs.LAYERS.values():
+        (tmp_path / f"{name}.geojson").write_bytes(LAYER)
+    bad = tmp_path / f"{cs.LAYERS['ports']}.geojson"
+    bad.write_text('{"type": "FeatureCollection", "features": [')
+    calls = []
+    monkeypatch.setattr(cs.urllib.request, "urlopen",
+                        lambda req, timeout=None: calls.append(req.full_url) or _Resp(LAYER))
+    out = cs.fetch_layers(tmp_path)
+    assert len(calls) == 1 and "ports" in calls[0]
+    assert out["ports"] == [{"x": 1}]
+    assert json.loads(bad.read_text())["features"] == [{"x": 1}], "the cache was not repaired"
+
+
+def test_a_download_that_does_not_parse_never_becomes_the_cached_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(cs.urllib.request, "urlopen",
+                        lambda req, timeout=None: _Resp(b"<html>rate limited</html>"))
+    with pytest.raises(ValueError):
+        cs.fetch_layers(tmp_path)
+    assert not list(tmp_path.glob("*.geojson")), "a bad download was cached"
+
+
+def test_layer_downloads_are_retried(tmp_path, monkeypatch):
+    import urllib.error
+    waits, calls = [], []
+    monkeypatch.setattr(cs.time, "sleep", waits.append)
+
+    def flaky(req, timeout=None):
+        calls.append(req.full_url)
+        if len(calls) == 1:
+            raise urllib.error.URLError("connection reset")
+        return _Resp(LAYER)
+    monkeypatch.setattr(cs.urllib.request, "urlopen", flaky)
+    assert cs._download("https://x/layer.geojson", 10) == LAYER
+    assert len(calls) == 2 and waits == [2.0]
+
+
+def test_a_missing_file_is_not_retried(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def gone(req, timeout=None):
+        calls.append(1)
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, None)
+    monkeypatch.setattr(cs.urllib.request, "urlopen", gone)
+    monkeypatch.setattr(cs.time, "sleep", lambda s: None)
+    with pytest.raises(urllib.error.HTTPError):
+        cs._download("https://x/layer.geojson", 10)
+    assert calls == [1]
 
 
 def test_the_summary_reports_tags_it_no_longer_declares():

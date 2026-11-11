@@ -7,6 +7,7 @@ data/scenes.geojson.
 Credit: https://github.com/Jack-Hayes/commerical-sar-stac
 """
 
+import hashlib
 import io
 import json
 import math
@@ -170,6 +171,24 @@ def fetch_bytes(url, timeout=60, attempts=3, backoff=2.0):
     raise last
 
 
+#: sha256 of every upstream file read this run, by file name, and what each
+#: provider's files amounted to. Together they answer the question that kept
+#: needing a person: when a provider brings nothing new, is that because
+#: upstream published nothing, or because this pipeline lost it? A file that is
+#: byte-identical to last week's settles it without anyone having to look.
+FILE_DIGESTS = {}
+UPSTREAM_STATS = {}
+
+
+def provider_digest(provider_id):
+    """One digest for all of a provider's files, or None if any is unknown."""
+    names = [u.split("/")[-1] for u in PROVIDER_META[provider_id]["parquets"]]
+    if not all(n in FILE_DIGESTS for n in names):
+        return None
+    joined = "\n".join(f"{n}:{FILE_DIGESTS[n]}" for n in sorted(names))
+    return hashlib.sha256(joined.encode()).hexdigest()
+
+
 def read_parquet(url):
     """Download a parquet file and return a pandas DataFrame.
 
@@ -184,6 +203,7 @@ def read_parquet(url):
         data = fetch_bytes(url)
     except Exception as e:
         raise FetchError(f"{fname}: could not download ({e})") from e
+    FILE_DIGESTS[fname] = hashlib.sha256(data).hexdigest()
     try:
         return _parquet().read_table(io.BytesIO(data)).to_pandas()
     except Exception as e:
@@ -420,6 +440,10 @@ def fetch_provider(provider_id):
     print(f"  [{info['label']}] ✓ {len(features)} scenes"
           + (f" ({skipped} rows skipped: collection footprints, "
              "unparseable geometry or implausible dates)" if skipped else ""))
+    UPSTREAM_STATS[provider_id] = {
+        "rows": int(len(merged)), "scenes": len(features), "skipped": skipped,
+        "digest": provider_digest(provider_id),
+    }
 
     # Fail loudly on a schema change: if the upstream parquet had rows but none
     # of them parsed into scenes, the fallback would silently freeze the catalog
@@ -475,17 +499,57 @@ def collapse_capella_products(features):
     return passthrough + collapsed
 
 
+def upstream_record(run_date, prev_upstream, fetch_failures, new_ids, old_ids,
+                    newest_first_seen):
+    """What upstream handed over this run, and since when it has not changed.
+
+    ``unchanged_since`` is carried forward for as long as a provider's files
+    are byte-identical to the previous run's, and reset to today when they are
+    not. The first run that records a digest has no previous one to compare
+    with, so it falls back on the scenes: if the provider's ids are exactly
+    last run's, nothing has changed since at least the last time a scene of
+    that provider was first seen, which is a later and therefore safe bound.
+
+    A provider that could not be fetched keeps its previous record untouched:
+    nothing was learned about upstream this run.
+    """
+    out = {}
+    for pid in PROVIDER_META:
+        prev = (prev_upstream or {}).get(pid) or {}
+        if pid in fetch_failures or pid not in UPSTREAM_STATS:
+            if prev:
+                out[pid] = prev
+            continue
+        st = dict(UPSTREAM_STATS[pid])
+        digest = st.get("digest")
+        if digest and prev.get("digest") == digest and prev.get("unchanged_since"):
+            since = prev["unchanged_since"]
+        elif digest and not prev.get("digest") and new_ids.get(pid) == old_ids.get(pid) \
+                and newest_first_seen.get(pid):
+            since = newest_first_seen[pid]
+        else:
+            since = run_date
+        st["unchanged_since"] = since
+        st["checked"] = run_date
+        out[pid] = st
+    return out
+
+
 def main():
     run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    FILE_DIGESTS.clear()
+    UPSTREAM_STATS.clear()
 
     # Load existing data — used both as a fetch fallback and to preserve the
     # first_seen date of scenes we've already catalogued.
     existing = {}
     prev_ids = set()            # every id present in the previous run
     prev_first_seen = {}        # id -> first_seen date, when already known
+    prev_upstream = {}          # the previous run's record of upstream's files
     if OUT_PATH.exists():
         try:
             old = json.loads(OUT_PATH.read_text())
+            prev_upstream = old.get("upstream") or {}
             for f in old.get("features", []):
                 props = f["properties"]
                 p = props["provider"]
@@ -559,6 +623,19 @@ def main():
             new_count += 1
     print(f"\n  New scenes this run: {new_count}")
 
+    new_ids, old_ids, newest_seen = {}, {}, {}
+    for feat in merged:
+        new_ids.setdefault(feat["properties"]["provider"], set()).add(feat["properties"].get("id"))
+    for pid, feats in existing.items():
+        old_ids[pid] = {f["properties"].get("id") for f in feats}
+        seen = [f["properties"].get("first_seen") for f in feats if f["properties"].get("first_seen")]
+        if seen:
+            newest_seen[pid] = max(seen)
+    upstream = upstream_record(run_date, prev_upstream, fetch_failures,
+                               new_ids, old_ids, newest_seen)
+    for pid, rec in sorted(upstream.items()):
+        print(f"  upstream {pid}: {rec.get('rows')} rows, unchanged since {rec.get('unchanged_since')}")
+
     geojson = {
         "type": "FeatureCollection",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -568,6 +645,11 @@ def main():
         # their scenes, if any, are the previous run's cached copy. Empty on a
         # clean run.
         "fetch_failures": fetch_failures,
+        # Per provider: rows upstream handed over, scenes made of them, rows
+        # skipped, a digest of the files, and the date since which those files
+        # have been byte-identical. Lets the validator say "upstream published
+        # nothing" as a fact rather than a guess.
+        "upstream": upstream,
         "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
         "features": merged,
     }
