@@ -370,3 +370,56 @@ def test_ci_installs_what_the_workflow_tests_need():
 def test_ci_fetches_the_data_the_terrain_tests_measure():
     text = (WF / "tests.yml").read_text()
     assert "DEM_TEST_POINTS" in text and "data/.dem-cache" in text
+
+
+# --------------------------------------------------------------------------- #
+# Pythons and the runner images they exist on
+# --------------------------------------------------------------------------- #
+#: The newest Ubuntu image each end-of-life Python was built for. `ubuntu-latest`
+#: is whatever GitHub currently means by it, which stopped including these.
+LAST_IMAGE_FOR = {"3.8": "ubuntu-24.04", "3.9": "ubuntu-24.04"}
+
+
+def python_legs():
+    """(workflow, job, python version, runner) for every job that sets up Python."""
+    out = []
+    for name in FILES:
+        for job_id, job in jobs(name):
+            for s in steps(job):
+                if not str(s.get("uses", "")).startswith("actions/setup-python@"):
+                    continue
+                version = str((s.get("with") or {}).get("python-version", ""))
+                runner = str(job.get("runs-on", ""))
+                if "matrix." in version or "matrix." in runner:
+                    legs = (job.get("strategy") or {}).get("matrix", {}).get("include", [])
+                    assert legs, (f"{name}:{job_id} builds its matrix without `include`, so a "
+                                  "Python cannot be paired with the runner it needs")
+                    for leg in legs:
+                        out.append((name, job_id, str(leg.get("python-version", version)),
+                                    str(leg.get("os", runner))))
+                else:
+                    out.append((name, job_id, version, runner))
+    return out
+
+
+def test_the_python_matrix_is_read():
+    legs = [l for l in python_legs() if l[0] == "tests.yml" and l[1] == "test"]
+    assert {l[2] for l in legs} == {"3.9", "3.11", "3.12"}, legs
+
+
+@pytest.mark.parametrize("name, job_id, version, runner", python_legs())
+def test_an_end_of_life_python_is_pinned_to_an_image_that_has_it(name, job_id, version, runner):
+    """Python 3.9 was never built for Ubuntu 26.04. When `ubuntu-latest` moved
+    there the 3.9 leg failed in setup-python before any test ran."""
+    if version in LAST_IMAGE_FOR:
+        assert runner == LAST_IMAGE_FOR[version], \
+            f"{name}:{job_id} runs Python {version} on {runner}; it needs {LAST_IMAGE_FOR[version]}"
+
+
+def test_the_oldest_python_tested_is_the_oldest_the_client_claims():
+    """Dropping the 3.9 leg to make CI green would leave `requires-python`
+    promising something nothing checks."""
+    pyproject = (ROOT / "python" / "pyproject.toml").read_text()
+    floor = re.search(r'requires-python\s*=\s*">=\s*([0-9.]+)"', pyproject).group(1)
+    tested = {l[2] for l in python_legs() if l[0] == "tests.yml" and l[1] == "test"}
+    assert floor in tested, f"the client supports {floor} but CI tests only {sorted(tested)}"

@@ -12,11 +12,23 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.11', '3.12']
+        # Each Python is paired with a runner image it exists on. `ubuntu-latest`
+        # moved to Ubuntu 26.04 in late 2026, and Python 3.9, which the client
+        # still supports, was never built for it: the 3.9 leg began failing in
+        # setup-python, before a single test ran, on whichever runs happened to
+        # land on a new runner. Pinning that leg to 24.04 keeps 3.9 tested for as
+        # long as the client claims to support it.
+        include:
+          - python-version: '3.9'
+            os: ubuntu-24.04
+          - python-version: '3.11'
+            os: ubuntu-latest
+          - python-version: '3.12'
+            os: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
