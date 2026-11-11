@@ -4,16 +4,26 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      attempt:
+        description: 'Set by the workflow when it retries itself. Leave at 1.'
+        required: false
+        default: '1'
 
 permissions:
   contents: read
   pages: write
   id-token: write
   issues: write        # the health reporter opens and closes one issue
+  actions: write       # to start a fresh run of this workflow when Pages fails
 
 concurrency:
   group: pages
   cancel-in-progress: true
+
+env:
+  # A failed deployment is retried in a fresh run this many times in all.
+  MAX_ATTEMPTS: 3
 
 jobs:
   deploy:
@@ -23,9 +33,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -36,14 +46,14 @@ jobs:
       - name: Build static API
         run: python scripts/build_api.py
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: '.'
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       # A green deploy means the artifact uploaded, not that anyone can read it.
       # If Pages succeeds and the CDN keeps serving the old files, the site and
@@ -61,16 +71,47 @@ jobs:
             --commit "${{ github.sha }}" \
             --json /tmp/deploy-health.json
 
+      # Pages itself fails now and then: on 10 November 2026 a deployment sat in
+      # "syncing_files" for ten minutes and timed out, the site stayed a day
+      # behind main, and what fixed it was simply the next run. So do that at
+      # once instead of a day later. A fresh run, rather than a second
+      # deploy-pages step here, because it rebuilds and re-uploads the artifact
+      # and so does not depend on whatever state the failed deployment left.
+      # Bounded by MAX_ATTEMPTS, and the attempt number travels as an input, so
+      # a Pages outage ends in one report rather than an endless loop.
+      - name: Retry a failed deployment in a fresh run
+        id: retry
+        if: ${{ !cancelled() && steps.deployment.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATTEMPT: ${{ inputs.attempt }}
+        run: |
+          case "$ATTEMPT" in ''|*[!0-9]*) ATTEMPT=1 ;; esac
+          if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+            next=$((ATTEMPT + 1))
+            gh workflow run deploy.yml --ref main -f attempt="$next"
+            echo "retrying=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pages deployment failed on attempt $ATTEMPT of $MAX_ATTEMPTS; started attempt $next in a fresh run."
+          else
+            echo "retrying=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Pages deployment failed on attempt $ATTEMPT of $MAX_ATTEMPTS; giving up and reporting it."
+          fi
+
+      # Not while a retry is on its way: that run reports for both. Opening an
+      # issue here only for the retry to close it a minute later is two
+      # notifications about something that fixed itself.
       - name: Report deploy health
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.retry.outputs.retrying != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ ! -f /tmp/deploy-health.json ]; then
             python - "${{ steps.deployment.outcome }}" <<'PY'
-          import json, sys, pathlib
+          import json, os, sys, pathlib
           outcome = sys.argv[1]
-          reason = ("the Pages deployment itself failed, so the site was not updated"
+          tries = os.environ.get("MAX_ATTEMPTS", "3")
+          reason = (f"the Pages deployment itself failed {tries} times in a row, "
+                    "so the site was not updated"
                     if outcome != "success" else
                     "scripts/verify_deploy.py did not produce a report; it likely crashed")
           pathlib.Path("/tmp/deploy-health.json").write_text(json.dumps({

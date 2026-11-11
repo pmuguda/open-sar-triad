@@ -14,9 +14,9 @@ jobs:
       actions: write       # to dispatch the deploy after pushing the catalog
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -31,6 +31,21 @@ jobs:
       # tags carry forward from the committed catalog, so only genuinely new
       # scenes are classified and a weekly run is seconds rather than minutes.
       # OSM enrichment is off here; see scripts/classify_scenes.py --osm.
+      # The classifier's map layers and elevation tiles. Without this every run
+      # with a new scene downloads them again, which is both slow and one more
+      # thing that can fail on the day. The key changes every run so the cache
+      # is saved again with whatever tiles were added; restore-keys picks up
+      # the most recent one.
+      - name: Restore the classifier's map and elevation cache
+        continue-on-error: true     # a cache outage must not cost the ingest
+        uses: actions/cache@v6
+        with:
+          path: |
+            data/.ne-cache
+            data/.dem-cache
+          key: classify-${{ github.run_id }}
+          restore-keys: classify-
+
       - name: Classify scene locations
         id: classify
         run: python scripts/classify_scenes.py
@@ -45,7 +60,7 @@ jobs:
 
       - name: Upload validation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: catalog-validation
           path: /tmp/validation.json
@@ -62,7 +77,9 @@ jobs:
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: update SAR scene data [$(date -u '+%Y-%m-%d')]"
-            git push
+            # Not a bare `git push`: the usage workflow and people push to main
+            # too, and losing that race used to throw the week's catalog away.
+            bash scripts/git_push_retry.sh origin main
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -93,6 +110,8 @@ jobs:
               reason="scripts/fetch_catalog.py failed, so no catalog was produced. Upstream may have changed shape again."
             elif [ "${{ steps.classify.outcome }}" != "success" ]; then
               reason="scripts/classify_scenes.py failed, so the catalog was never validated or committed."
+            elif [ "${{ steps.validate.outcome }}" = "skipped" ]; then
+              reason="the run stopped before the catalog could be validated, so nothing was committed."
             else
               reason="scripts/validate_catalog.py did not produce a report; it likely crashed before finishing."
             fi
@@ -101,6 +120,23 @@ jobs:
           pathlib.Path("/tmp/validation.json").write_text(json.dumps({
               "ok": False, "errors": [sys.argv[1]], "warnings": [],
           }))
+          PY
+          fi
+          # A catalog that passed validation but could not be pushed is lost
+          # unless someone hears about it: the report on disk says healthy.
+          if [ "${{ steps.commit.outcome }}" = "failure" ]; then
+            python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("/tmp/validation.json")
+          rep = json.loads(p.read_text())
+          rep["ok"] = False
+          rep.setdefault("errors", []).append(
+              "the catalog passed validation but could not be committed and "
+              "pushed to main, so this run's scenes were not published. "
+              "Re-run the Fetch SAR Catalog Data workflow.")
+          rep["on_error_note"] = ("The catalog **was not committed**. The site "
+                                  "is still serving the last good data.")
+          p.write_text(json.dumps(rep))
           PY
           fi
           # A catalog that was committed but never sent to the site is the

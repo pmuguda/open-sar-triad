@@ -14,8 +14,7 @@ only that they are still wired in; the running is proven elsewhere.
 from pathlib import Path
 
 import pytest
-
-yaml = pytest.importorskip("yaml")
+import yaml          # a hard import: skipping here hid this whole file from CI
 
 ROOT = Path(__file__).parent.parent
 WF = ROOT / ".github" / "workflows"

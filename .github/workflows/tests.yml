@@ -1,14 +1,12 @@
 name: Tests
 
+# Every push to main, with no path filter. There used to be one, listing the
+# Python directories, but the suite also checks the stylesheet, the page, the
+# service worker and every workflow file, so a change to any of those could
+# break a test without the tests ever running.
 on:
   push:
     branches: [main]
-    paths:
-      - 'scripts/**'
-      - 'python/**'
-      - 'qgis/**'
-      - 'tests/**'
-      - '.github/workflows/tests.yml'
   pull_request:
   workflow_dispatch:
 
@@ -21,9 +19,9 @@ jobs:
         python-version: ['3.9', '3.11', '3.12']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -38,11 +36,13 @@ jobs:
       # Without this they would skip in CI and the coverage would be imaginary.
       # The download is best-effort: if it fails the tests skip as before
       # rather than turning a Natural Earth outage into a red build.
-      - name: Cache Natural Earth layers
-        uses: actions/cache@v4
+      - name: Cache Natural Earth layers and elevation tiles
+        uses: actions/cache@v6
         with:
-          path: data/.ne-cache
-          key: ne-layers-${{ hashFiles('scripts/classify_scenes.py') }}
+          path: |
+            data/.ne-cache
+            data/.dem-cache
+          key: ne-dem-${{ hashFiles('scripts/classify_scenes.py', 'tests/test_landuse.py') }}
 
       - name: Warm the Natural Earth cache
         continue-on-error: true
@@ -55,8 +55,33 @@ jobs:
           print('layers ready')
           "
 
+      # The terrain tests measure real elevation at named places and skip when
+      # the tiles are absent. Nothing fetched them here, so in CI all nine
+      # skipped on every run and the terrain thresholds were never checked
+      # anywhere but on a developer's machine. Best-effort like the layers.
+      - name: Warm the elevation tile cache
+        continue-on-error: true
+        run: |
+          python -c "
+          import importlib.util, pathlib, sys
+          sys.path.insert(0, 'tests')
+          spec = importlib.util.spec_from_file_location('cs', 'scripts/classify_scenes.py')
+          cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
+          import test_landuse as t
+          for lon, lat in t.DEM_TEST_POINTS:
+              x, y = cs._tile_xy(lon, lat, cs.DEM_ZOOM)
+              ok = cs._tile_elevations(cs.DEM_ZOOM, x, y, pathlib.Path('data/.dem-cache')) is not None
+              print(lon, lat, 'ok' if ok else 'UNAVAILABLE')
+          "
+
+      # -rs names every skipped test and why. OST_STRICT_SKIPS turns a skip
+      # for any reason other than the two that are expected here (no QGIS in
+      # this job; map data that could not be downloaded) into a failure, so a
+      # missing dependency can no longer quietly switch a test file off.
       - name: Run tests
-        run: pytest tests/ -q
+        env:
+          OST_STRICT_SKIPS: "1"
+        run: pytest tests/ -q -rs
 
       # The client must keep working with no optional dependencies installed,
       # since that is how most people will install it.
@@ -84,9 +109,9 @@ jobs:
   build-api:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -137,7 +162,7 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       OST_REQUIRE_QGIS: "1"    # a broken qgis import fails here rather than skips
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The image's pip predates --break-system-packages, and a newer image
       # would refuse without it. The env var is read by the pips that know it
@@ -161,9 +186,9 @@ jobs:
       issues: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 

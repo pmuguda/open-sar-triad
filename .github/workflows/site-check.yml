@@ -9,8 +9,12 @@ name: Check the site matches main
 #
 # This is the check that does not depend on how the commit got there. Once a
 # day it asks the published site which commit it was built from and compares
-# that with the tip of main. A disagreement opens the site-health issue; the
-# next matching day closes it.
+# that with the tip of main.
+#
+# It repairs before it reports. A site that is behind main has one remedy, a
+# deploy, so when the first comparison fails this starts one and compares
+# again. Only a site that is still behind after that opens the site-health
+# issue; one that caught up leaves a notice on the run and nothing else.
 #
 # Daily rather than hourly because the usage workflow commits every morning
 # and its deploy needs a few minutes to land; two hours later is comfortably
@@ -24,28 +28,67 @@ on:
 permissions:
   contents: read
   issues: write        # the health reporter opens and closes one issue
+  actions: write       # to start a deploy when the site is behind main
+
+env:
+  SITE_URL: https://pmuguda.github.io/open-sar-triad
 
 jobs:
   check:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
-      # GITHUB_SHA on a schedule is the tip of the default branch, which is what
-      # the site should have been built from.
+      # The tip of main as it is now, asked of the remote. Not github.sha: on a
+      # schedule that is fixed when the run is queued, and GitHub starts these
+      # hours late, so a commit and its deploy can land in between and the site
+      # would be "wrong" for being newer than the commit it is compared with.
+      - name: Find the tip of main
+        id: tip
+        run: |
+          sha=$(git ls-remote origin refs/heads/main | cut -f1)
+          test -n "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Compare the published build with main
         id: verify
+        continue-on-error: true
         run: |
           python scripts/verify_deploy.py \
-            --url https://pmuguda.github.io/open-sar-triad \
+            --url "$SITE_URL" \
             --cache-bust "${{ github.run_id }}" \
-            --commit "${{ github.sha }}" \
+            --commit "${{ steps.tip.outputs.sha }}" \
             --json /tmp/site-health.json
+
+      - name: Redeploy, because the site is behind main
+        id: heal
+        if: ${{ steps.verify.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy.yml --ref main
+          echo "::notice::The site did not match main. Started a deploy and will compare again."
+
+      # The deploy takes about a minute and the CDN a little longer; this waits
+      # up to ten. main may have moved again since the first comparison, so the
+      # tip is asked for again rather than reused.
+      - name: Compare again after the redeploy
+        id: reverify
+        if: ${{ steps.heal.outcome == 'success' }}
+        run: |
+          sha=$(git ls-remote origin refs/heads/main | cut -f1)
+          python scripts/verify_deploy.py \
+            --url "$SITE_URL" \
+            --cache-bust "${{ github.run_id }}-2" \
+            --commit "$sha" \
+            --attempts 20 --wait 30 \
+            --json /tmp/site-health.json
+          echo "::notice::The site was behind main; a redeploy fixed it."
 
       - name: Report site health
         if: ${{ !cancelled() }}
@@ -65,3 +108,13 @@ jobs:
           fi
           python scripts/report_health.py \
             --report /tmp/site-health.json --label site-health
+
+      # continue-on-error keeps the first comparison from failing the job so
+      # the repair can run; this puts the failure back when the repair did not
+      # work or could not be started, so the run is red exactly when the site
+      # is still wrong.
+      - name: Fail the run if the site is still behind
+        if: ${{ !cancelled() && steps.verify.outcome == 'failure' && steps.reverify.outcome != 'success' }}
+        run: |
+          echo "::error::The site does not match main and a redeploy did not fix it."
+          exit 1

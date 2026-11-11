@@ -11,11 +11,12 @@ jobs:
     permissions:
       contents: write
       actions: write       # to dispatch the deploy after pushing usage.json
+      issues: write        # the health reporter opens and closes one issue
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -25,6 +26,7 @@ jobs:
       # Exits 0 with a notice when the secret is not configured yet, so this job
       # stays green until the one-time service-account setup is done.
       - name: Fetch Search Console stats
+        id: fetch
         env:
           GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
           # Comma-separated properties, merged. Each must match the Search Console
@@ -53,7 +55,8 @@ jobs:
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: update usage stats [$(date -u '+%Y-%m-%d')]"
-            git push
+            # Rebases and retries if main moved while this ran; see the script.
+            bash scripts/git_push_retry.sh origin main
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -61,7 +64,43 @@ jobs:
       # no push-triggered workflow, so the site's visitor counts only moved when
       # someone pushed code. Dispatch the deploy explicitly.
       - name: Deploy the new usage data
+        id: deploy
         if: steps.commit.outputs.pushed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run deploy.yml --ref main
+
+      # This was the one scheduled workflow that told nobody when it broke: an
+      # expired Search Console key would leave the visitor map frozen with a
+      # red run on a page nobody opens. Same reporter as the others, its own
+      # label, so it cannot close or overwrite their issues.
+      - name: Report usage health
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FETCH: ${{ steps.fetch.outcome }}
+          COMMIT: ${{ steps.commit.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          steps = {
+              "fetching the Search Console statistics (scripts/fetch_gsc.py)": os.environ["FETCH"],
+              "committing and pushing data/usage.json": os.environ["COMMIT"],
+              "starting the deploy for the new statistics": os.environ["DEPLOY"],
+          }
+          # "skipped" is a step that had nothing to do, not one that broke,
+          # unless it was skipped because an earlier one failed, which that
+          # earlier step already accounts for.
+          bad = [name for name, outcome in steps.items() if outcome == "failure"]
+          pathlib.Path("/tmp/usage-health.json").write_text(json.dumps({
+              "ok": not bad, "warnings": [],
+              "errors": [f"{name} failed" for name in bad],
+              "subject": "Usage statistics",
+              "on_error_note": ("The visitor map is showing the last statistics "
+                                "that were fetched successfully."),
+          }))
+          print("ok" if not bad else "failing: " + "; ".join(bad))
+          PY
+          python scripts/report_health.py \
+            --report /tmp/usage-health.json --label usage-health
