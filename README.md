@@ -630,6 +630,26 @@ The classifier was also holding the whole ingest hostage to an enrichment. It fe
 
 **Upstream quiet, or pipeline broken?** This was the question behind most "did anything arrive this week" checks, and the validator could only guess at it. `fetch_catalog.py` now records, per provider, a digest of the upstream files, the rows they held, the scenes made of them, and the date since which the files have been byte-identical (`upstream` in the catalog header). When a provider brings nothing new and its files are provably unchanged, the validator says exactly that, with the date, and the issue is titled "nothing new upstream for umbra since 2026-09-27" rather than "umbra has stopped arriving". A week in which every provider's files are unchanged no longer raises the "identical scene set" warning at all. A jump in rows that did not become scenes is flagged, because new rows arriving in a shape the parser drops look, from outside, exactly like upstream publishing nothing.
 
+### Reading the providers' own buckets
+
+The catalog is built from one upstream aggregator, which crawls the providers once a week, on Sundays. That put a floor under how fresh the catalog could be, and in November 2026 it showed: Umbra uploaded 19 scenes on a Tuesday and Wednesday that could not reach the site before the following Monday, and 25 ICEYE scenes had been sitting in ICEYE's bucket for weeks because ICEYE had not yet added them to its own catalogue, which is all the aggregator reads.
+
+`scripts/provider_buckets.py` removes the floor. On every run, after the aggregator's files are read, it lists each provider's public bucket, works out which scenes there the catalog does not already have, and fetches only those:
+
+| Provider | Where a scene is found | How the catalog recognises one it already has |
+|---|---|---|
+| Umbra | one `*.stac.v2.json` per scene under `sar-data/`, beside the product files | by the path of its files, since its id exists only inside the item |
+| ICEYE | an item under `stac-items/`, or, for scenes not yet catalogued, the product sidecar (`<id>_GRD.json`) in the scene's `data/` folder, which is itself a STAC Feature with the same footprint and time | by id |
+| Capella | one item per product under `stac/capella-open-data-by-datetime/` | product by product, by the folder each file sits in, because the catalog collapses a scene's products into one record |
+
+The aggregator stays the bulk source: it has already fetched and normalised fifteen thousand records, and re-reading them weekly would be wasteful and rude to the providers. In a normal week the supplement is a few dozen small requests on top of three listings, about a minute and a half in all.
+
+Scenes that came this way carry `source: bucket`. When the aggregator catches up, its record replaces the bucket's. An ICEYE folder is only read once it has been quiet for six hours, so a scene still being uploaded is not published with half its products. A bucket that cannot be listed, or an item that will not download, costs the supplement and nothing else, is recorded under `direct` in the catalog header, and becomes a validator warning; bucket-sourced scenes from the previous catalog are kept through such a week, and dropped only when a clean listing shows the provider has withdrawn them.
+
+**Dead download links.** Listing the buckets exposed a fault that had been in the catalog all along. The aggregator writes all five Umbra formats for every scene, derived from the item's name, whether or not Umbra published them. Checked against the bucket, 5,260 of 11,904 CSI links, 2,336 CPHD links and several hundred others pointed at nothing, so the site offered downloads that returned an error. Each Umbra link is now checked against the listing and dropped if the file is not there. 120 Umbra scenes have a metadata file and no product files at all; those are left as they are, since blanking a scene's downloads on the strength of one listing is the more destructive mistake.
+
+Set `OST_DIRECT_BUCKETS=0` to run the fetch from the aggregator alone.
+
 ### Tests
 
 ```bash
@@ -643,16 +663,17 @@ pip install -r requirements-dev.txt && pip install -e python
 pytest
 ```
 
-About 540 tests. Beyond the validator, the API builder and the Python client, they cover the parts that used to be tested only by going wrong in production:
+About 620 tests. Beyond the validator, the API builder and the Python client, they cover the parts that used to be tested only by going wrong in production:
 
 - **The validator tests are mutation tests**: each deliberately corrupts a healthy catalog in one specific way (duplicate ids, coordinates off the Earth, a provider vanishing, an uncollapsed Capella id, an asset URL drifting to an unexpected host) and asserts it is rejected
 - **`test_workflow_lint.py` lints every workflow file.** GitHub does not check most of what goes wrong in one: a step id spelled differently where it is read evaluates to an empty string, not an error. The linter checks that every `steps.`, `needs.`, `inputs.` and output reference resolves, that every script a step runs exists, that every `gh workflow run` targets a workflow that accepts it from a job allowed to send it, that nothing uses a bare `git push`, and that no action is on a deprecated runtime
 - **`test_workflow_scripts.py` runs the workflows' own shell.** It lifts each step's `run` block out of the YAML, fills in the `${{ }}` expressions, and executes it with bash against a stub `gh` and real temporary git repositories: the deploy's retry counter (including a malformed attempt number), which script a dead ingest blames, a catalog that validated but could not be pushed, the commit steps racing a moving `main`
+- **`test_provider_buckets.py`** runs the bucket reader against an in-memory S3 that speaks the real list protocol (prefixes, pages, continuation tokens) and serves the three providers' real layouts
 - **`test_git_push_retry.py`** races two clones against one remote
 - **`test_strict_skips.py`** runs a throwaway suite through the real `conftest.py` to prove an unexpected skip fails in CI
 - **`test_preflight.py`** fails if `scripts/preflight.sh` and `tests.yml` stop installing and running the same things
 
-The new tests were themselves mutation-tested: twenty deliberate breakages of the workflows and scripts (a typo in a step id, the retry cap off by one, the bare push restored, the allow-list widened) each had to turn at least one test red.
+The new tests were themselves mutation-tested: thirty-six deliberate breakages of the workflows and scripts (a typo in a step id, the retry cap off by one, the bare push restored, the allow-list widened) each had to turn at least one test red.
 
 CI (`.github/workflows/tests.yml`) runs the suite on Python 3.9, 3.11 and 3.12, checks the client still imports and resolves product families with **zero optional dependencies**, validates the real committed catalog and builds the API from it, and runs the QGIS plugin's tests inside QGIS 3.22, 3.44, 4.0 and 4.2.
 

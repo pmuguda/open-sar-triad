@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -21,6 +22,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 warnings.filterwarnings("ignore")  # suppress numpy version warnings in some envs
+
+# The sibling module that reads the providers' own buckets. Imported by path so
+# it resolves the same way whether this file is run as a script or loaded by a
+# test, which does not put scripts/ on sys.path.
+sys.path.insert(0, str(Path(__file__).parent))
+import provider_buckets  # noqa: E402
 
 
 #: Polarizations arrive in whatever shape the upstream parquet cell happened to
@@ -84,6 +91,10 @@ except ImportError:
     _HAS_SHAPELY = False
 
 OUT_PATH = Path(__file__).parent.parent / "data" / "scenes.geojson"
+
+#: Whether to read the providers' own buckets as well as the aggregator. On in
+#: production; `OST_DIRECT_BUCKETS=0` turns it off for an offline run.
+DIRECT_BUCKETS = os.environ.get("OST_DIRECT_BUCKETS", "1") != "0"
 
 BASE_URL = "https://raw.githubusercontent.com/Jack-Hayes/commerical-sar-stac/refs/heads/main/parquets"
 
@@ -178,6 +189,30 @@ def fetch_bytes(url, timeout=60, attempts=3, backoff=2.0):
 #: byte-identical to last week's settles it without anyone having to look.
 FILE_DIGESTS = {}
 UPSTREAM_STATS = {}
+#: For each provider, the bucket keys of every row the aggregator handed over,
+#: including the ones dropped as duplicates. Umbra lists some scenes under two
+#: paths; without the dropped ones the second path would look like a scene the
+#: catalog lacks and be fetched from the bucket again on every run.
+RAW_KEYS = {}
+
+
+def raw_keys(provider_id, frame):
+    """Bucket keys for the rows of a provider's merged frame, before dedup."""
+    if "id" not in frame.columns:
+        return set()
+    if provider_id != "umbra":
+        return {str(i) for i in frame["id"]}
+    out = set()
+    for assets in frame["assets"] if "assets" in frame.columns else []:
+        try:
+            assets = json.loads(assets) if isinstance(assets, str) else dict(assets)
+            hrefs = [v.get("href") for v in assets.values() if isinstance(v, dict)]
+        except Exception:
+            continue
+        key = provider_buckets.known_key("umbra", None, hrefs)
+        if key:
+            out.add(key)
+    return out
 
 
 def provider_digest(provider_id):
@@ -421,6 +456,7 @@ def fetch_provider(provider_id):
 
     import pandas as pd
     merged = pd.concat(all_rows, ignore_index=True)
+    RAW_KEYS[provider_id] = raw_keys(provider_id, merged)
 
     # Deduplicate by id. Umbra lists a few hundred scenes twice, under two S3
     # prefixes for the same objects (task-data/<id>/ and tasks/<name>/<id>/);
@@ -499,6 +535,50 @@ def collapse_capella_products(features):
     return passthrough + collapsed
 
 
+def direct_supplement(provider_id, features, previous):
+    """Scenes the provider's own bucket holds that ``features`` does not.
+
+    Returns ``(added, carried, stats)``. ``added`` are new features, marked
+    ``source: bucket``. ``carried`` is only non-empty when the bucket could not
+    be read properly this run: it is the bucket-sourced scenes from the
+    previous catalog, kept so that a bad listing does not make scenes that
+    were published last week disappear this week. On a clean run nothing is
+    carried, so a scene a provider withdraws does leave the catalog.
+
+    Never raises. The aggregator's scenes are the catalog; this adds to them.
+    """
+    known = set(RAW_KEYS.get(provider_id) or ()) | provider_buckets.known_keys(provider_id, features)
+    rows, stats = provider_buckets.supplement(provider_id, known, fetch_bytes)
+    listing = stats.pop("listing")
+
+    have = {f["properties"].get("id") for f in features}
+    added = []
+    for row in rows:
+        try:
+            feat = normalize_row(row, provider_id)
+        except Exception:
+            feat = None
+        if not feat:
+            stats["failed"] += 1
+            continue
+        if feat["properties"]["id"] in have:
+            continue                    # the same scene under a second path
+        feat["properties"]["source"] = "bucket"
+        have.add(feat["properties"]["id"])
+        added.append(feat)
+    stats["added"] = len(added)
+
+    carried = []
+    if stats["error"] or stats["failed"]:
+        carried = [f for f in previous if f["properties"].get("source") == "bucket"]
+
+    stats["pruned_links"] = 0
+    if provider_id == "umbra" and listing:
+        stats["pruned_links"] = provider_buckets.prune_missing_products(
+            provider_id, features + added, listing)
+    return added, carried, stats
+
+
 def upstream_record(run_date, prev_upstream, fetch_failures, new_ids, old_ids,
                     newest_first_seen):
     """What upstream handed over this run, and since when it has not changed.
@@ -539,6 +619,7 @@ def main():
     run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     FILE_DIGESTS.clear()
     UPSTREAM_STATS.clear()
+    RAW_KEYS.clear()
 
     # Load existing data — used both as a fetch fallback and to preserve the
     # first_seen date of scenes we've already catalogued.
@@ -597,6 +678,27 @@ def main():
                 print(f"  [{pid}] No cached copy to fall back on; provider omitted.",
                       file=sys.stderr)
 
+    # What the providers' own buckets hold beyond that. The aggregator crawls
+    # once a week and reads ICEYE's catalogue rather than its data, so scenes
+    # can sit in a bucket for days or weeks before it has them.
+    direct = {}
+    carried = []
+    if DIRECT_BUCKETS:
+        print("\nReading the providers' own buckets:")
+        for pid in list(all_features):
+            added, kept, stats = direct_supplement(pid, all_features[pid], existing.get(pid, []))
+            all_features[pid] = all_features[pid] + added
+            carried += kept
+            direct[pid] = stats
+            note = (f"could not be read ({stats['error']})" if stats["error"] else
+                    f"{stats['listed']} scenes listed, {stats['added']} the aggregator did not have"
+                    + (f" ({stats['from_folders']} not yet in the provider's own catalogue)"
+                       if stats["from_folders"] else "")
+                    + (f", {stats['failed']} could not be read" if stats["failed"] else "")
+                    + (f", {stats['pruned_links']} dead product links removed"
+                       if stats["pruned_links"] else ""))
+            print(f"  [{pid}] {note}")
+
     merged = []
     for pid, feats in all_features.items():
         merged.extend(feats)
@@ -604,6 +706,14 @@ def main():
 
     # Merge Capella's per-format duplicates into one scene per acquisition.
     merged = collapse_capella_products(merged)
+
+    # Bucket-sourced scenes kept from the previous catalog because their bucket
+    # could not be read this run; never in place of a scene fetched fresh.
+    present = {f["properties"].get("id") for f in merged}
+    for feat in carried:
+        if feat["properties"].get("id") not in present:
+            present.add(feat["properties"].get("id"))
+            merged.append(feat)
 
     # Stamp first_seen: preserve for known scenes, mark this run's date for new
     # ones. Scenes present before tracking began stay None (unknown ingest date).
@@ -650,6 +760,10 @@ def main():
         # have been byte-identical. Lets the validator say "upstream published
         # nothing" as a fact rather than a guess.
         "upstream": upstream,
+        # Per provider: what reading its own bucket found. `added` scenes came
+        # from there rather than the aggregator; `error` or `failed` mean the
+        # bucket could not be read fully this run.
+        "direct": direct,
         "source": "https://github.com/Jack-Hayes/commerical-sar-stac",
         "features": merged,
     }

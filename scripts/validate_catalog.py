@@ -163,7 +163,32 @@ def check_structure(doc: dict, rep: Report) -> list[dict]:
     rep.info["upstream"] = doc.get("upstream") or {}
     rep.info["run_date"] = doc.get("last_updated")
     check_classification(doc, feats, rep)
+    check_direct(doc, rep)
     return feats
+
+
+def check_direct(doc: dict, rep: Report) -> None:
+    """What reading the providers' own buckets found, and whether it could.
+
+    The aggregator is still the catalog's bulk source, so a bucket that could
+    not be read costs only the scenes the aggregator does not have yet. That is
+    exactly the kind of loss nobody would notice, hence a warning.
+    """
+    direct = doc.get("direct") or {}
+    rep.info["direct"] = {p: {k: v for k, v in s.items() if k != "listing"}
+                          for p, s in direct.items()}
+    for prov, s in sorted(direct.items()):
+        if s.get("error"):
+            rep.warn(f"provider {prov!r}: its own bucket could not be read this run "
+                     f"({s['error']}), so anything uploaded since the aggregator's last "
+                     "crawl is not in the catalog yet")
+        elif s.get("failed"):
+            rep.warn(f"provider {prov!r}: {s['failed']} scene(s) in its bucket could not "
+                     "be read this run and will be tried again on the next")
+        if s.get("truncated"):
+            rep.warn(f"provider {prov!r}: {s.get('missing')} scenes in its bucket are not "
+                     "in the aggregator's data, more than one run will fetch. The "
+                     "aggregator may have stopped updating this provider.")
 
 
 def check_classification(doc: dict, feats: list[dict], rep: Report) -> None:
@@ -393,12 +418,20 @@ def check_provider_freshness(feats: list[dict], rep: Report) -> None:
                 # because a provider going quiet is worth knowing, but as what
                 # it is rather than as a possible fault here.
                 up = rep.info["upstream"][prov]
+                # And the provider's own bucket, read this run, holds nothing
+                # the catalog lacks: then it is the provider, not the aggregator.
+                d = (rep.info.get("direct") or {}).get(prov) or {}
+                bucket_checked = bool(d) and not d.get("error") and not d.get("failed") \
+                    and not d.get("missing")
+                tail = ("its own bucket was read this run too and holds nothing the "
+                        "catalog lacks, so the provider has published nothing."
+                        if bucket_checked else
+                        "the provider or the upstream catalog is quiet.")
                 rep.warn(f"provider {prov!r}: nothing new upstream. Its upstream "
                          f"files have not changed since {quiet_since}, so there has "
                          f"been nothing to ingest for {age} days. The pipeline read "
                          f"them correctly this run ({up.get('rows')} rows, "
-                         f"{up.get('scenes')} scenes); the provider or the upstream "
-                         "catalog is quiet.")
+                         f"{up.get('scenes')} scenes); {tail}")
             else:
                 rep.warn(f"provider {prov!r} has ingested nothing for {age} days "
                          f"(newest first_seen {newest}), while the catalog as a whole "

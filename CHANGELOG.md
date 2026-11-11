@@ -6,7 +6,22 @@ All notable changes to open-sar-triad are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+- **The catalog reads the providers' own buckets.** It no longer waits on the
+  upstream aggregator's weekly crawl. After the aggregator's files are read,
+  `scripts/provider_buckets.py` lists each provider's bucket and fetches the
+  scenes the catalog lacks: new Umbra items, ICEYE scenes from their catalogue
+  or, where ICEYE has not catalogued them yet, from the product sidecars in
+  their data folders, and new Capella products. The first run brought in 19
+  Umbra scenes acquired 10 and 11 November 2026 and 25 ICEYE scenes from
+  September that had no catalogue record. Bucket failures cost only the
+  supplement and are reported.
+
 ### Fixed
+- **Umbra download links that led nowhere.** The aggregator writes all five
+  formats for every Umbra scene whether or not the file exists; 7,608 links in
+  the catalog pointed at nothing. Links are now checked against the bucket
+  listing and dropped when the file is absent.
 - **A Pages timeout no longer leaves the site a day behind.** On 10 November
   2026 a deployment sat in `syncing_files` for ten minutes and failed; the site
   stayed stale until the next day's run. `deploy.yml` now starts itself again

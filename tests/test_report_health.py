@@ -381,3 +381,13 @@ def test_one_unproven_stale_provider_keeps_the_cautious_title():
     gh = FakeGitHub()
     rh.run(r, gh)
     assert "stopped arriving" in gh.created[0]["title"]
+
+
+def test_the_body_says_what_came_straight_from_the_buckets():
+    r = report(warnings=["x"], total=15083, by_provider={"umbra": 11923},
+               direct={"umbra": {"added": 19}, "iceye": {"added": 24}, "capella": {"added": 0}})
+    gh = FakeGitHub()
+    rh.run(r, gh)
+    body = gh.created[0]["body"]
+    assert "providers' own buckets" in body and "umbra 19" in body and "iceye 24" in body
+    assert "capella" not in body.split("own buckets")[1].split("\n")[0]

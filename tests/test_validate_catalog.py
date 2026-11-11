@@ -644,3 +644,50 @@ def test_untagged_scenes_are_counted(catalog):
     for f in catalog["features"][2:]:
         f["properties"]["landuse"] = []
     assert run(catalog).info["unclassified"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# Reading the providers' own buckets
+# --------------------------------------------------------------------------- #
+def direct(**over):
+    return {"listed": 100, "missing": 0, "added": 0, "failed": 0, "from_folders": 0,
+            "error": None, "truncated": False, "pruned_links": 0, **over}
+
+
+def test_a_bucket_that_could_not_be_read_is_a_warning(catalog):
+    catalog["direct"] = {"umbra": direct(error="could not list sar-data/: timed out")}
+    rep = run(catalog)
+    assert rep.ok
+    w = [w for w in rep.warnings if "bucket could not be read" in w]
+    assert w and "umbra" in w[0] and "timed out" in w[0]
+
+
+def test_scenes_that_could_not_be_read_are_a_warning(catalog):
+    catalog["direct"] = {"iceye": direct(failed=3, added=20)}
+    assert [w for w in run(catalog).warnings if "3 scene(s) in its bucket could not be read" in w]
+
+
+def test_a_clean_bucket_read_raises_nothing(catalog):
+    catalog["direct"] = {p: direct(added=5) for p in ("iceye", "umbra", "capella")}
+    rep = run(catalog)
+    assert not [w for w in rep.warnings if "bucket" in w]
+    assert rep.info["direct"]["umbra"]["added"] == 5
+
+
+def test_an_aggregator_that_has_fallen_far_behind_is_flagged(catalog):
+    catalog["direct"] = {"umbra": direct(missing=4000, added=3000, truncated=True)}
+    assert [w for w in run(catalog).warnings if "aggregator may have stopped" in w]
+
+
+def test_a_quiet_provider_whose_bucket_was_also_read_is_named_as_the_cause():
+    """Unchanged aggregator files could mean the aggregator is stuck. With the
+    provider's own bucket read and holding nothing new, it is the provider."""
+    doc = stalled_umbra({"umbra": quiet()}, direct={"umbra": direct()})
+    w = [w for w in run(doc).warnings if "nothing new upstream" in w][0]
+    assert "the provider has published nothing" in w
+
+
+def test_a_quiet_aggregator_with_new_scenes_in_the_bucket_is_not_blamed_on_the_provider():
+    doc = stalled_umbra({"umbra": quiet()}, direct={"umbra": direct(missing=19, added=0, failed=19)})
+    w = [w for w in run(doc).warnings if "nothing new upstream" in w][0]
+    assert "the provider has published nothing" not in w

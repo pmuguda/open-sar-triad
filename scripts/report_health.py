@@ -183,6 +183,11 @@ def build_body(report: dict, items: list[str]) -> str:
                      f"-{report.get('removed', 0):,} gone)")
     if "new_this_run" in report:
         facts.append(f"- the fetch reported `new_this_run: {report['new_this_run']}`")
+    direct = report.get("direct") or {}
+    came = [f"{p} {s['added']:,}" for p, s in sorted(direct.items()) if s.get("added")]
+    if came:
+        facts.append("- read directly from the providers' own buckets, ahead of the "
+                     f"aggregator: {', '.join(came)}")
     if facts:
         lines += ["### Catalog", *facts]
 

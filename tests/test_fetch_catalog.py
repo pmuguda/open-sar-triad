@@ -32,6 +32,13 @@ fc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fc)
 
 
+@pytest.fixture(autouse=True)
+def no_bucket_reads(monkeypatch):
+    """main() reads the providers' buckets by default. Every test here that
+    does not ask for that gets it switched off, so none can reach the network."""
+    monkeypatch.setattr(fc, "DIRECT_BUCKETS", False)
+
+
 SQUARE = json.dumps({"type": "Polygon", "coordinates": [[
     [10, 50], [10.1, 50], [10.1, 50.1], [10, 50.1], [10, 50]]]})
 
@@ -450,3 +457,202 @@ def test_an_empty_upstream_file_does_not_overwrite_the_record(run_tracked):
     assert doc["fetch_failures"]["umbra"] == "fetched no scenes"
     assert doc["upstream"]["umbra"]["rows"] == 1, "the empty file replaced the record"
     assert doc["upstream"]["umbra"]["checked"] == "2026-11-02"
+
+
+# --------------------------------------------------------------------------- #
+# Reading the providers' own buckets, through main()
+# --------------------------------------------------------------------------- #
+from test_provider_buckets import (  # noqa: E402
+    CAP_GEC, CAP_SLC, ICEYE_B, FakeS3, capella_product, iceye_folder, pb, umbra_scene)
+
+STEM = "2026-11-10-04-16-54_UMBRA-09"
+
+
+@pytest.fixture
+def run_direct(tmp_path, monkeypatch, capsys):
+    """main() with the bucket reader on, against a fake aggregator and a fake S3."""
+    out = tmp_path / "scenes.geojson"
+    monkeypatch.setattr(fc, "OUT_PATH", out)
+    monkeypatch.setattr(fc, "DIRECT_BUCKETS", True)
+    # ICEYE folders are only read once they have been quiet for a few hours;
+    # the fixtures' upload times are fixed, so the clock is too.
+    monkeypatch.setattr(pb, "SETTLE_HOURS", 0)
+
+    def _run(table, s3):
+        monkeypatch.setattr(fc, "read_parquet", fake_upstream(table))
+        monkeypatch.setattr(fc, "fetch_bytes", s3)
+        fc.main()
+        capsys.readouterr()
+        return json.loads(out.read_text())
+    _run.path = out
+    return _run
+
+
+def by_id(doc):
+    return {f["properties"]["id"]: f["properties"] for f in doc["features"]}
+
+
+def test_a_scene_only_the_bucket_has_reaches_the_catalog(run_direct):
+    """Umbra uploaded on a Tuesday; the aggregator would not see it until
+    Sunday. It must be in the catalog the same run."""
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-new")
+    doc = run_direct(healthy_upstream(), s3)
+    scene = by_id(doc)["umbra-new"]
+    assert scene["source"] == "bucket"
+    assert scene["first_seen"] == TODAY
+    assert set(scene["products"]) == {"GEC", "SICD", "SIDD"}
+    assert doc["direct"]["umbra"]["added"] == 1
+    assert doc["new_this_run"] >= 1
+
+
+def test_the_aggregators_own_scenes_are_untouched(run_direct):
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-new")
+    scenes = by_id(run_direct(healthy_upstream(), s3))
+    assert "0000-umbra-1" in scenes and "source" not in scenes["0000-umbra-1"]
+
+
+def test_a_scene_in_both_appears_once_as_the_aggregators(run_direct):
+    s3 = FakeS3()
+    key = umbra_scene(s3, "4d0d855f", STEM, "umbra-both")
+    t = healthy_upstream()
+    df = rows("umbra", ["umbra-both"])
+    df["assets"] = json.dumps({"gec": {"href": pb.public_url(
+        "umbra", key.replace(".stac.v2.json", "_GEC.tif"))}})
+    t["umbra.parquet"] = df
+    doc = run_direct(t, s3)
+    assert [f for f in doc["features"] if f["properties"]["id"] == "umbra-both"].__len__() == 1
+    assert "source" not in by_id(doc)["umbra-both"]
+    assert doc["direct"]["umbra"]["missing"] == 0
+    assert s3.object_gets() == [], "a scene the aggregator already has was fetched again"
+
+
+def test_an_iceye_scene_not_yet_catalogued_reaches_the_catalog(run_direct):
+    s3 = FakeS3()
+    iceye_folder(s3, ICEYE_B)
+    doc = run_direct(healthy_upstream(), s3)
+    scene = by_id(doc)[ICEYE_B]
+    assert scene["source"] == "bucket" and scene["provider"] == "iceye"
+    assert set(scene["products"]) == {"GRD", "SLC"}
+    assert scene["incidence_angle"] == 31.2
+    assert doc["direct"]["iceye"]["from_folders"] == 1
+
+
+def test_a_new_capella_product_joins_its_scene(run_direct):
+    """The aggregator has the GEC; the bucket also has the SLC. One scene,
+    both formats."""
+    s3 = FakeS3()
+    capella_product(s3, CAP_SLC)
+    t = healthy_upstream()
+    gec = rows("capella", [CAP_GEC])
+    gec["assets"] = json.dumps({"HH": {"href":
+        f"https://capella-open-data.s3.amazonaws.com/data/2026/9/9/{CAP_GEC}/{CAP_GEC}.tif"}})
+    t["capella_GEC.parquet"] = gec
+    doc = run_direct(t, s3)
+    scene = by_id(doc)["CAPELLA_C13_SP_HH_20260909150138_20260909150146"]
+    assert scene["formats"] == ["GEC", "SLC"]
+
+
+def test_dead_umbra_links_do_not_reach_the_catalog(run_direct):
+    """The aggregator writes all five formats for every Umbra scene. Only the
+    files that are in the bucket are offered."""
+    s3 = FakeS3()
+    key = umbra_scene(s3, "4d0d855f", STEM, "umbra-both", products=("GEC", "SICD"))
+    t = healthy_upstream()
+    df = rows("umbra", ["umbra-both"])
+    base = pb.public_url("umbra", key).replace(".stac.v2.json", "")
+    df["assets"] = json.dumps({k: {"href": base + suffix} for k, suffix in pb.UMBRA_PRODUCTS.items()})
+    t["umbra.parquet"] = df
+    doc = run_direct(t, s3)
+    assert set(by_id(doc)["umbra-both"]["products"]) == {"GEC", "SICD"}
+    assert doc["direct"]["umbra"]["pruned_links"] == 3
+
+
+def test_a_bucket_that_is_down_costs_nothing_but_its_own_scenes(run_direct):
+    def down(url, **k):
+        raise OSError("connection timed out")
+    doc = run_direct(healthy_upstream(), down)
+    assert {f["properties"]["provider"] for f in doc["features"]} == {"iceye", "umbra", "capella"}
+    assert all("timed out" in doc["direct"][p]["error"] for p in ("iceye", "umbra", "capella"))
+    assert doc["fetch_failures"] == {}, "the aggregator was fine; this is a different failure"
+
+
+def test_scenes_read_from_a_bucket_survive_a_week_it_cannot_be_read(run_direct):
+    """Otherwise a scene published last week would vanish this week and come
+    back the next, for no reason a visitor could see."""
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-new")
+    run_direct(healthy_upstream(), s3)
+
+    def down(url, **k):
+        raise OSError("connection timed out")
+    doc = run_direct(healthy_upstream(), down)
+    scene = by_id(doc)["umbra-new"]
+    assert scene["source"] == "bucket"
+    assert scene["first_seen"] == TODAY
+
+
+def test_a_scene_the_provider_withdraws_leaves_the_catalog(run_direct):
+    """On a clean read, absence means gone."""
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-new")
+    run_direct(healthy_upstream(), s3)
+    doc = run_direct(healthy_upstream(), FakeS3())
+    assert "umbra-new" not in by_id(doc)
+    assert doc["direct"]["umbra"]["error"] is None
+
+
+def test_the_header_never_carries_the_bucket_listing(run_direct):
+    """Ninety-five thousand keys would more than double the catalog."""
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-new")
+    doc = run_direct(healthy_upstream(), s3)
+    assert all("listing" not in stats for stats in doc["direct"].values())
+
+
+def test_with_the_bucket_reader_off_nothing_is_requested(run, monkeypatch):
+    calls = []
+    monkeypatch.setattr(fc, "fetch_bytes", lambda url, **k: calls.append(url) or b"")
+    doc = run(healthy_upstream())
+    assert calls == [] and doc["direct"] == {}
+
+
+def test_raw_keys_include_the_rows_dropped_as_duplicates():
+    """Umbra lists some scenes under two paths with one id. The dropped path
+    must still count as known, or it is fetched from the bucket every run."""
+    a = "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/sar-data/task-data/x/s/s_GEC.tif"
+    b = "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/sar-data/tasks/Some Place/x/s/s_GEC.tif"
+    frame = pd.DataFrame([{"id": "same", "assets": json.dumps({"gec": {"href": a}})},
+                          {"id": "same", "assets": {"gec": {"href": b}}}])
+    assert fc.raw_keys("umbra", frame) == {
+        "sar-data/task-data/x/s/s.stac.v2.json", "sar-data/tasks/Some Place/x/s/s.stac.v2.json"}
+    assert fc.raw_keys("iceye", frame) == {"same"}
+
+
+def test_one_scene_under_two_bucket_paths_is_one_scene(run_direct):
+    """Umbra files some scenes under both task-data/<id>/ and tasks/<name>/<id>/.
+    Both items carry the same id; the catalog must carry it once."""
+    s3 = FakeS3()
+    umbra_scene(s3, "4d0d855f", STEM, "umbra-twice", root="task-data")
+    umbra_scene(s3, "Some Port/4d0d855f", STEM, "umbra-twice", root="tasks")
+    doc = run_direct(healthy_upstream(), s3)
+    assert sum(f["properties"]["id"] == "umbra-twice" for f in doc["features"]) == 1
+    assert doc["direct"]["umbra"]["added"] == 1
+
+
+def test_a_duplicate_the_aggregator_dropped_is_not_fetched_from_the_bucket(run_direct):
+    """The aggregator lists such a scene twice and one row is dropped as a
+    duplicate. Its path must still count as known: there are several hundred
+    of these, and each would otherwise be downloaded again on every run."""
+    s3 = FakeS3()
+    a = umbra_scene(s3, "4d0d855f", STEM, "umbra-twice", root="task-data")
+    b = umbra_scene(s3, "Some Port/4d0d855f", STEM, "umbra-twice", root="tasks")
+    df = pd.concat([rows("umbra", ["umbra-twice"]), rows("umbra", ["umbra-twice"])], ignore_index=True)
+    df["assets"] = [json.dumps({"gec": {"href": pb.public_url("umbra", k.replace(".stac.v2.json", "_GEC.tif"))}})
+                    for k in (a, b)]
+    t = healthy_upstream()
+    t["umbra.parquet"] = df
+    doc = run_direct(t, s3)
+    assert s3.object_gets() == []
+    assert doc["direct"]["umbra"]["missing"] == 0
